@@ -955,7 +955,7 @@ if (process.env.REAL_DB) {
     const box = await sw.boundingBox(), hb = await page.locator("header h1").boundingBox(); assert.ok(box.x + box.width / 2 < 150 && Math.abs(box.y + box.height / 2 - (hb.y + hb.height / 2)) < 30, "at the top left, level with the title: " + JSON.stringify([box, hb])); assert.equal(Math.round(box.height), 32, "a compact switch, not a tall button");
     assert.ok(box.width >= 56 && box.height >= 28, "big enough to tap"); const lightKnob = d.knobX; assert.ok(lightKnob < 8, "light: the knob is on the left (" + lightKnob + ")");
     assert.ok((await page.locator(".theme-switch .ts-sun").boundingBox()).x < (await page.locator(".theme-switch .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
-    await sw.click(); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);
+    await sw.click(); await page.waitForTimeout(450); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);
     assert.equal(await page.evaluate(() => localStorage.getItem("theme")), "dark");
     // 3. remembered after a reload, no flash (the script runs in <head> before the page is painted)
     assert.equal(await page.evaluate(() => { const s = document.querySelector('head script[src="/auth/theme.js"]'); return !!s && !s.async && !s.defer; }), true, "theme.js blocks painting so there is no light flash");
