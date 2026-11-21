@@ -55,7 +55,45 @@ const AccountArea = (() => {
     } catch (e) { note("profMsg", e.message, true); }
   }
 
-  // ---------- certifications ----------
+  // ---------- diver profile: name, DAN membership, latest certification (all shown on the Summary) ----------
+  let diverData = store.get("diver") || { fullName: "", dan: { number: "", plan: "", validUntil: "" }, latestCert: null };
+  const saveDiver = () => store.set("diver", diverData);
+  const fmtDay = (key) => { if (!key) return ""; const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); };
+  /** What the Summary shows: the saved name (else the Google name), DAN details and the latest certification. */
+  function diver() { return { name: diverData.fullName || (me && me.name) || "", dan: diverData.dan, latestCert: diverData.latestCert }; }
+  function renderDan() {
+    const d = diverData.dan, st = U.danStatus(d.validUntil, new Date());
+    for (const [id, v] of [["danNumber", d.number], ["danPlan", d.plan], ["danValid", d.validUntil]]) if (document.activeElement !== $(id)) $(id).value = v || "";
+    const badge = $("danBadge");
+    if (d.number) {
+      badge.textContent = st.state === "none" ? "Member" : st.state === "expired" ? "Expired" : st.state === "soon" ? U.danText(st.days) : "Valid";
+      badge.className = "regbadge " + (st.state === "expired" ? "expired" : st.state === "soon" ? "soon" : ""); badge.style.display = "";
+    } else badge.style.display = "none";
+    const line = $("danState");
+    line.textContent = !d.number ? "" : st.state === "none" ? "Add the date your membership is valid until to see when it needs renewing."
+      : st.state === "expired" ? `Expired ${fmtDay(d.validUntil)} \u00b7 ${st.days === -1 ? "yesterday" : -st.days + " days ago"}` : `Valid until ${fmtDay(d.validUntil)} \u00b7 ${U.danText(st.days)}`;
+    line.style.color = st.state === "expired" ? "#c92a2a" : st.state === "soon" ? "#d9480f" : st.state === "ok" ? "#2b8a3e" : "";
+    Dives.render();                                                              // refresh the Summary card
+  }
+  async function saveName() {
+    const v = $("fullName").value.trim();
+    try { await api("PUT", "/api/profile/name", { fullName: v }); diverData.fullName = v; saveDiver(); say(v ? "Name saved" : "Name removed"); note("profMsg", ""); Dives.render(); }
+    catch (e) { note("profMsg", e.message, true); }
+  }
+  async function saveDan() {
+    const number = $("danNumber").value.trim();
+    if (!number) return note("danState", "Enter your DAN member number.", true);
+    try {
+      const body = { number, plan: $("danPlan").value.trim(), validUntil: $("danValid").value };
+      await api("PUT", "/api/profile/dan", body); diverData.dan = body; saveDiver(); say("DAN details saved"); renderDan();
+    } catch (e) { note("danState", e.message, true); }
+  }
+  async function clearDan() {
+    try { await api("DELETE", "/api/profile/dan"); diverData.dan = { number: "", plan: "", validUntil: "" }; saveDiver(); say("DAN details removed"); renderDan(); }
+    catch (e) { note("danState", e.message, true); }
+  }
+
+  // ---------- files: dive certifications and DAN insurance documents (same mechanism, told apart by `kind`) ----------
   const fmtSize = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1000)) + " KB");
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function toBase64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
@@ -78,44 +116,55 @@ const AccountArea = (() => {
     return { mime: "image/jpeg", filename: file.name.replace(/\.[^.]*$/, "") + ".jpg", data: url.split(",")[1] };
   }
 
-  async function loadCerts() {
-    const box = $("certList"); if (!box) return;
-    try {
-      const { certs } = await api("GET", "/api/certs");
-      box.innerHTML = certs.length ? certs.map((c) => `<div class="cert" data-id="${esc(c.id)}"><div class="cert-top"><b>${esc(c.label)}</b>${c.number ? `<span class="muted">#${esc(c.number)}</span>` : ""}<span class="muted">${esc(c.filename)} · ${fmtSize(c.size)}</span></div>
-        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${c.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:#6c757d">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:#6c757d">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:#6c757d">Delete</button></div><div class="cert-preview"></div></div>`).join("")
-        : '<p class="muted" style="margin:0">No certifications yet.</p>';
-    } catch (e) { box.innerHTML = `<p class="muted">${e.status === 401 ? "Signed out: reload the page." : "Could not load: " + esc(e.message)}</p>`; }
+  let allFiles = [];
+  const FILE_KINDS = [
+    { kind: "cert", list: "certList", label: "certLabel", number: "certNumber", date: "certDate", file: "certFile", fileName: "certFileName", add: "certAdd", msg: "certMsg", none: "No certifications yet.", numberTag: "#", deleted: "Certification deleted", uploaded: "Certification uploaded" },
+    { kind: "dan", list: "danList", label: "danLabel", number: "danDocNumber", file: "danFile", fileName: "danFileName", add: "danAdd", msg: "danMsg", none: "No insurance documents yet.", numberTag: "policy #", deleted: "Document deleted", uploaded: "Insurance document uploaded", defaultLabel: "DAN insurance card" },
+  ];
+  function renderFiles() {
+    for (const c of FILE_KINDS) {
+      const box = $(c.list); if (!box) continue;
+      const mine = allFiles.filter((f) => (f.kind || "cert") === c.kind).sort((a, b) => (b.certifiedOn || "").localeCompare(a.certifiedOn || "") || String(b.createdAt).localeCompare(String(a.createdAt)));
+      box.innerHTML = mine.length ? mine.map((f) => `<div class="cert" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
+        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:#6c757d">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:#6c757d">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:#6c757d">Delete</button></div><div class="cert-preview"></div></div>`).join("")
+        : `<p class="muted" style="margin:0">${c.none}</p>`;
+    }
+    diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles) || {});
+    saveDiver(); Dives.render();
   }
-  async function fetchCert(id) { const { cert } = await api("GET", "/api/certs/" + id); return { cert, blob: new Blob([fromBase64(cert.data)], { type: cert.mime }) }; }
-  async function certAction(e) {
+  async function loadFiles() {
+    try { allFiles = (await api("GET", "/api/certs")).certs; renderFiles(); }
+    catch (e) { for (const c of FILE_KINDS) if ($(c.list)) $(c.list).innerHTML = `<p class="muted">${e.status === 401 ? "Signed out: reload the page." : "Could not load: " + esc(e.message)}</p>`; }
+  }
+  async function fetchFile(id) { const { cert } = await api("GET", "/api/certs/" + id); return { cert, blob: new Blob([fromBase64(cert.data)], { type: cert.mime }) }; }
+  async function fileAction(cfg, e) {
     const item = e.target.closest(".cert"); if (!item) return;
     const id = item.dataset.id, btn = e.target.closest("button"); if (!btn) return;
     try {
-      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); say("Certification deleted"); loadCerts(); });
-      const { cert, blob } = await fetchCert(id), url = URL.createObjectURL(blob);
+      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); say(cfg.deleted); loadFiles(); });
+      const { cert, blob } = await fetchFile(id), url = URL.createObjectURL(blob);
       if (btn.classList.contains("cert-view")) {
         if (cert.mime === "application/pdf") { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click(); }
         else { const p = item.querySelector(".cert-preview"); p.innerHTML = p.firstChild ? "" : `<img class="preview" alt="${esc(cert.label)}" src="${url}">`; }
       } else if (btn.classList.contains("cert-save")) { const a = document.createElement("a"); a.href = url; a.download = cert.filename; a.click(); }
       else if (btn.classList.contains("cert-share")) {
         const file = new File([blob], cert.filename, { type: cert.mime });
-        if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: cert.label }); else note("certMsg", "Sharing files is not supported here: use Save.", true);
+        if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: cert.label }); else note(cfg.msg, "Sharing files is not supported here: use Save.", true);
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) { if (err.name !== "AbortError") note("certMsg", err.message, true); }
+    } catch (err) { if (err.name !== "AbortError") note(cfg.msg, err.message, true); }
   }
-  async function addCert() {
-    const label = $("certLabel").value.trim(), file = $("certFile").files[0];
-    if (!label) return note("certMsg", "Give the certification a name.", true);
-    if (!file) return note("certMsg", "Choose a file first.", true);
-    const btn = $("certAdd"); btn.disabled = true; btn.textContent = "Uploading…"; note("certMsg", "");
+  async function addFile(cfg) {
+    const label = $(cfg.label).value.trim(), file = $(cfg.file).files[0];
+    if (!label) return note(cfg.msg, "Give it a name.", true);
+    if (!file) return note(cfg.msg, "Choose a file first.", true);
+    const btn = $(cfg.add); btn.disabled = true; btn.textContent = "Uploading\u2026"; note(cfg.msg, "");
     try {
       const f = await prepareFile(file);
-      await api("POST", "/api/certs", { label, number: $("certNumber").value.trim(), ...f });
-      $("certLabel").value = ""; $("certNumber").value = ""; $("certFile").value = ""; $("certFileName").textContent = "";
-      say("Certification uploaded"); note("certMsg", "Uploaded."); loadCerts();
-    } catch (e) { note("certMsg", e.message, true); }
+      await api("POST", "/api/certs", { kind: cfg.kind, label, number: $(cfg.number).value.trim(), certifiedOn: cfg.date ? $(cfg.date).value : "", ...f });
+      for (const id of [cfg.label, cfg.number, cfg.date, cfg.file]) if (id) $(id).value = "";
+      $(cfg.fileName).textContent = ""; say(cfg.uploaded); note(cfg.msg, "Uploaded."); loadFiles();
+    } catch (e) { note(cfg.msg, e.message, true); }
     finally { btn.disabled = false; btn.textContent = "Upload"; }
   }
 
@@ -177,13 +226,26 @@ const AccountArea = (() => {
     showVersions(); setAvatar(store.get("avatar"));
     fetch("/api/me", { credentials: "same-origin", redirect: "error" }).then((r) => (r.ok ? r.json() : null)).then((m) => {
       if (!m) return; me = m; $("who").textContent = m.email; showVersions();
+      if (!$("fullName").value && !diverData.fullName && m.name) $("fullName").value = m.name;   // suggest the Google name; saved only when you tap Save
+      Dives.render();
     }).catch(() => {});
-    api("GET", "/api/profile").then((p) => setAvatar(p.avatar)).catch(() => {});
+    api("GET", "/api/profile").then((p) => {
+      setAvatar(p.avatar); diverData.fullName = p.fullName || ""; diverData.dan = p.dan || diverData.dan; saveDiver();
+      if (document.activeElement !== $("fullName")) $("fullName").value = diverData.fullName || (me && me.name) || "";
+      renderDan();
+    }).catch(() => renderDan());
+    loadFiles();
     api("GET", "/api/regulator").then((r) => { setReg(r.regulator); renderRegulator(); }).catch(() => renderRegulator());
     $("avatarFile").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) pickAvatar(f); });
     $("avatarRemove").addEventListener("click", async () => { try { await api("DELETE", "/api/profile/avatar"); setAvatar(null); say("Profile picture removed"); note("profMsg", ""); } catch (e) { note("profMsg", e.message, true); } });
-    $("certFile").addEventListener("change", (e) => { const f = e.target.files[0]; $("certFileName").textContent = f ? f.name : ""; if (f && !$("certLabel").value) $("certLabel").value = f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
-    $("certAdd").addEventListener("click", addCert); $("certList").addEventListener("click", certAction);
+    for (const cfg of FILE_KINDS) {                                              // certifications and DAN documents share one mechanism
+      $(cfg.file).addEventListener("change", (e) => { const f = e.target.files[0]; $(cfg.fileName).textContent = f ? f.name : ""; if (f && !$(cfg.label).value) $(cfg.label).value = cfg.defaultLabel || f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
+      $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
+    }
+    $("nameSave").addEventListener("click", saveName); $("fullName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveName(); });
+    $("danSave").addEventListener("click", saveDan); $("danClear").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", clearDan));
+    const sum = $("sumDiver");                                                    // the Summary card leads to the matching Account section
+    if (sum) { const go = (e) => { window.showView("account"); open(e && e.target.closest("#sumDanRow") ? "dan" : e && e.target.closest(".diver-row") ? "certs" : "profile"); }; sum.addEventListener("click", go); }
     $("regAdd").addEventListener("click", () => openRegForm(null)); $("regEdit").addEventListener("click", () => openRegForm(regulator));
     $("regCancel").addEventListener("click", () => { $("regForm").style.display = "none"; note("regMsg", ""); renderRegulator(); });
     $("regSave").addEventListener("click", saveReg);
@@ -195,7 +257,7 @@ const AccountArea = (() => {
     const hint = $("sumRegHintLink"); if (hint) hint.addEventListener("click", (e) => { e.preventDefault(); window.showView("account"); open("regulator"); });
     const card = $("sumReg"); if (card) { const go = () => { window.showView("account"); open("regulator"); }; card.addEventListener("click", go); card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); }); }
   }
-  function show() { loadCerts(); renderRegulator(); showVersions(); }
+  function show() { loadFiles(); renderRegulator(); showVersions(); }
 
-  return { init, show, open, regulator: () => regulator, refresh: renderRegulator };
+  return { init, show, open, regulator: () => regulator, diver, refresh: renderRegulator };
 })();

@@ -378,7 +378,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
     await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
     await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
-    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "Regulator", "Help / app version"]);
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "Help / app version"]);
     await page.locator("details.acc[data-sec=help] > summary").click();
     assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
     assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
@@ -413,6 +413,81 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
     console.log("PASS account structure + regulator + month bulk");
   } catch (e) { failed++; console.log("FAIL account structure + regulator + month bulk\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-acct.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: Summary diver card (name, latest certification, DAN + validity) and the DAN section ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2025, 2, 17, 12, 0, 0) });
+  const profile = { avatar: null, fullName: "", dan: { number: "", plan: "", validUntil: "" } }, files = []; let seq = 0; const calls = [];
+  const PDFB = (n = 0) => Buffer.from("%PDF-1.4\n" + "x".repeat(n) + "\n%%EOF\n");
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Google Name", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [] } }) : r.fulfill({ json: { stored: 1 } })));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: profile }));
+  await page.route("**/api/profile/name", (r) => { const b = JSON.parse(r.request().postData()); calls.push(["name", b]); profile.fullName = b.fullName; return r.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/profile/dan", (r) => { const m = r.request().method();
+    if (m === "PUT") { const b = JSON.parse(r.request().postData()); calls.push(["dan", b]); profile.dan = { number: b.number, plan: b.plan || "", validUntil: b.validUntil || "" }; } else profile.dan = { number: "", plan: "", validUntil: "" };
+    return r.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/certs", (r) => { if (r.request().method() === "POST") { const b = JSON.parse(r.request().postData()); calls.push(["file", { ...b, data: undefined }]);
+      const f = { id: (++seq).toString(16).padStart(16, "0"), label: b.label, number: b.number, kind: b.kind, certifiedOn: b.certifiedOn, filename: b.filename, mime: b.mime, size: 100, createdAt: "2025-03-1" + seq, data: b.data }; files.push(f); return r.fulfill({ json: { id: f.id } }); }
+    return r.fulfill({ json: { certs: files.map(({ data, ...m }) => m) } }); });
+  await page.route(/\/api\/certs\/[0-9a-f]{16}$/, (r) => { const id = r.request().url().split("/").pop(), i = files.findIndex((f) => f.id === id);
+    if (r.request().method() === "DELETE") { if (i >= 0) files.splice(i, 1); return r.fulfill({ json: { deleted: 1 } }); } return r.fulfill({ json: { cert: files[i] } }); });
+  await page.goto(base);
+  const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
+  const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+  const diver = () => page.evaluate(() => ({ name: document.getElementById("sumName").textContent, cert: document.getElementById("sumCert").textContent, certSub: document.getElementById("sumCertSub").textContent,
+    danCls: document.getElementById("sumDanRow").className, dan: document.getElementById("sumDan").textContent, valid: document.getElementById("sumDanValid").textContent.replace(/\s+/g, " "),
+    validColor: getComputedStyle(document.getElementById("sumDanValid")).color, rowBorder: getComputedStyle(document.getElementById("sumDanRow")).borderLeftColor }));
+  const setDan = async (n, plan, valid) => { await page.fill("#danNumber", n); await page.fill("#danPlan", plan); await page.fill("#danValid", valid); await page.click("#danSave"); await toastIs(/DAN details saved/); };
+  try {
+    // 1. nothing entered yet: placeholders and hints; your Google name is the fallback for the name
+    await until(async () => (await diver()).name === "Google Name", "the Google name as a fallback");
+    let d = await diver(); assert.equal(d.cert, "None added yet"); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.match(d.certSub, /Add one in Account/);
+    // 2. name: the field is pre-filled with the Google name, saving stores YOUR name
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=profile] > summary").click();
+    assert.equal(await page.inputValue("#fullName"), "Google Name", "suggested, not yet saved"); assert.equal(profile.fullName, "");
+    await page.fill("#fullName", "  Togar Hugo "); await page.click("#nameSave"); await toastIs(/Name saved/); assert.equal(profile.fullName, "Togar Hugo");
+    await page.click("#navSummary"); await until(async () => (await diver()).name === "Togar Hugo", "the saved name");
+    // 3. DAN details: green when valid, orange within 60 days, red when expired (clock is 17 Mar 2025)
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=dan] > summary").click();
+    await page.fill("#danNumber", ""); await page.click("#danSave"); assert.match(await page.locator("#danState").innerText(), /Enter your DAN member number/); assert.equal(calls.filter((c) => c[0] === "dan").length, 0);
+    await setDan("4412 3399", "DAN Master", "2026-03-31");
+    assert.deepEqual(calls.at(-1), ["dan", { number: "4412 3399", plan: "DAN Master", validUntil: "2026-03-31" }]);
+    assert.match(await page.locator("#danState").innerText(), /Valid until .*2026 . 12 months left/); assert.equal(await page.locator("#danBadge").innerText(), "Valid");
+    await page.click("#navSummary"); d = await diver();
+    assert.match(d.danCls, /dan-ok/); assert.equal(d.dan, "#4412 3399 \u00b7 DAN Master"); assert.match(d.valid, /Valid until .*2026 . 12 months left/); assert.equal(d.rowBorder, "rgb(43, 138, 62)"); assert.equal(d.validColor, "rgb(43, 138, 62)");
+    await page.click("#acctBtn"); await setDan("4412 3399", "DAN Master", "2025-04-30"); await page.click("#navSummary"); d = await diver();
+    assert.match(d.danCls, /dan-soon/); assert.match(d.valid, /Valid until .*2025 . 44 days left/); assert.equal(d.rowBorder, "rgb(230, 119, 0)"); assert.equal(d.validColor, "rgb(217, 72, 15)");
+    await page.click("#acctBtn"); assert.equal(await page.locator("#danBadge").innerText(), "44 days left");
+    await setDan("4412 3399", "DAN Master", "2025-03-01"); await page.click("#navSummary"); d = await diver();
+    assert.match(d.danCls, /dan-expired/); assert.match(d.valid, /^Expired .*2025 . 16 days ago$/); assert.equal(d.rowBorder, "rgb(201, 42, 42)"); assert.equal(d.validColor, "rgb(201, 42, 42)");
+    await page.click("#acctBtn"); assert.equal(await page.locator("#danBadge").innerText(), "Expired");
+    // 4. files: a DAN document goes to the DAN list (named by default), certifications to theirs, never mixed
+    await page.setInputFiles("#danFile", { name: "dan-card.pdf", mimeType: "application/pdf", buffer: PDFB() });
+    assert.equal(await page.inputValue("#danLabel"), "DAN insurance card"); await page.fill("#danDocNumber", "POL-77"); await page.click("#danAdd"); await toastIs(/Insurance document uploaded/);
+    await until(async () => (await page.locator("#danList .cert").count()) === 1, "the DAN document"); assert.equal(await page.locator("#certList .cert").count(), 0, "not listed as a certification");
+    assert.equal(calls.at(-1)[1].kind, "dan"); assert.match(await page.locator("#danList .cert").innerText(), /DAN insurance card[\s\S]*policy #POL-77[\s\S]*dan-card\.pdf/);
+    // 5. latest certification = the newest date earned, not the newest upload
+    await page.locator("details.acc[data-sec=certs] > summary").click();
+    const addCert = async (label, num, date, name) => { const before = await page.locator("#certList .cert").count(); await page.fill("#certLabel", label); await page.fill("#certNumber", num); await page.fill("#certDate", date); await page.setInputFiles("#certFile", { name, mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
+      await until(async () => (await page.locator("#certList .cert").count()) === before + 1 && (await page.inputValue("#certLabel")) === "", "the upload to finish and the form to clear"); };
+    await addCert("PADI Open Water", "OW-1", "2019-05-04", "ow.pdf"); await addCert("PADI Advanced Open Water", "AOW-2", "2023-06-10", "aow.pdf");
+    await page.fill("#certLabel", "Old card, date unknown"); await page.setInputFiles("#certFile", { name: "old.pdf", mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
+    await until(async () => (await page.locator("#certList .cert").count()) === 3 && (await page.inputValue("#certLabel")) === "", "three certifications"); assert.equal(calls.at(-1)[1].certifiedOn, "", "date is optional");
+    assert.equal(await page.locator("#danList .cert").count(), 1);
+    await page.click("#navSummary"); d = await diver(); assert.equal(d.cert, "PADI Advanced Open Water"); assert.match(d.certSub, /#AOW-2 . Jun 10, 2023/, "newest date earned; the undated card uploaded last does not win");
+    await page.click("#acctBtn"); const del = page.locator("#certList .cert", { hasText: "PADI Advanced" }).locator(".cert-del"); await del.click(); await del.click(); await toastIs(/Certification deleted/);
+    await page.click("#navSummary"); await until(async () => (await diver()).cert === "PADI Open Water", "the latest certification to fall back to Open Water");
+    // 6. tapping the card leads to the right Account section; removing DAN resets its row
+    await page.locator("#sumDanRow").click(); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("details.acc[data-sec=dan]").evaluate((e) => e.open));
+    await page.locator("#danClear").click(); await page.locator("#danClear").click(); await toastIs(/DAN details removed/);
+    await page.click("#navSummary"); d = await diver(); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.equal(profile.dan.number, "");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    await page.screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png", fullPage: true });
+    console.log("PASS diver card + DAN");
+  } catch (e) { failed++; console.log("FAIL diver card + DAN\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-diver.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

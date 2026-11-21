@@ -91,3 +91,28 @@ test("regulatorLevel: green below 70, orange from 70, red from 90", () => {
   assert.deepEqual([0, 1, 69, 70, 71, 89, 90, 91, 200].map(U.regulatorLevel), ["ok", "ok", "ok", "orange", "orange", "orange", "red", "red", "red"]);
   assert.equal(U.REG_ORANGE, 70); assert.equal(U.REG_RED, 90);
 });
+
+test("latestCert: ranked by the date earned; dan documents are not certifications; undated ones only count when nothing is dated", () => {
+  const c = (id, label, certifiedOn, createdAt, kind) => ({ id, label, certifiedOn, createdAt, ...(kind ? { kind } : {}) });
+  assert.equal(U.latestCert([]), null); assert.equal(U.latestCert(null), null);
+  assert.equal(U.latestCert([c(1, "OW", "2019-03-01", "2026-11-01"), c(2, "AOW", "2023-06-10", "2026-11-02"), c(3, "Nitrox", "2021-01-01", "2026-11-03")]).label, "AOW", "the newest date earned, not the newest upload");
+  assert.equal(U.latestCert([c(1, "AOW", "2023-06-10", "2026-11-02"), c(2, "Old card, no date", "", "2026-11-20")]).label, "AOW", "an undated card uploaded today does not beat a dated one");
+  assert.equal(U.latestCert([c(1, "A", "", "2026-01-05"), c(2, "B", "", "2026-03-09")]).label, "B", "nothing dated: the latest upload");
+  assert.equal(U.latestCert([c(1, "DAN card", "2026-11-01", "2026-11-01", "dan"), c(2, "OW", "2019-03-01", "2019-03-01")]).label, "OW", "insurance documents are ignored");
+  assert.equal(U.latestCert([c(1, "DAN card", "", "2026-11-01", "dan")]), null, "only an insurance document: no certification");
+  assert.equal(U.latestCert([c(1, "X", "2024-01-01", "2024-02-01"), c(2, "Y", "2024-01-01", "2024-03-01")]).label, "Y", "same date: the later upload");
+});
+
+test("danStatus: ok / soon (within 60 days, including today) / expired; wording", () => {
+  const today = new Date(2026, 10, 21, 15, 0);                                  // 21 Nov 2026
+  assert.deepEqual(U.danStatus("", today), { state: "none", days: null }); assert.deepEqual(U.danStatus(null, today), { state: "none", days: null });
+  assert.deepEqual(U.danStatus("2027-03-31", today), { state: "ok", days: 130 });
+  assert.deepEqual(U.danStatus("2027-01-20", today), { state: "soon", days: 60 }, "exactly 60 days is already 'soon'");
+  assert.deepEqual(U.danStatus("2027-01-21", today), { state: "ok", days: 61 });
+  assert.deepEqual(U.danStatus("2026-11-21", today), { state: "soon", days: 0 }, "valid through the whole last day");
+  assert.deepEqual(U.danStatus("2026-11-20", today), { state: "expired", days: -1 });
+  assert.deepEqual(U.danStatus("2026-10-01", today), { state: "expired", days: -51 });
+  assert.equal(U.danStatus("2026-12-25", today, 30).state, "ok", "the threshold can be changed"); assert.equal(U.danStatus("2026-12-25", today, 40).state, "soon");
+  assert.deepEqual([null, -1, -51, 0, 1, 45, 130, 400].map(U.danText), ["", "expired yesterday", "expired 51 days ago", "expires today", "1 day left", "45 days left", "4 months left", "13 months left"]);
+  assert.equal(U.daysUntil("2027-02-28", new Date(2026, 1, 28)), 365); assert.equal(U.daysUntil("2024-03-01", new Date(2024, 1, 28)), 2, "leap year");
+});

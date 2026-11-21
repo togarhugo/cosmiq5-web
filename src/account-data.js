@@ -4,6 +4,14 @@ const json = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 const MAX_AVATAR_CHARS = 150_000;            // a 256x256 JPEG is ~15-40 KB
 const MAX_FILE_BYTES = 1_000_000, MAX_FILES = 12, MAX_BODY_CHARS = 1_500_000;
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+const KINDS = ["cert", "dan"];
+/** "" or a real calendar date YYYY-MM-DD between 1990 and 2100; false if invalid. */
+function dateOnly(v) {
+  if (v === undefined || v === null || v === "") return "";
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number), t = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1990 && y <= 2100 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? v : false;
+}
 
 /** Control characters out, whitespace collapsed, trimmed; false if too long. */
 function text(v, max) {
@@ -35,8 +43,28 @@ export async function handleAccountData(request, url, env, email) {
 
   // ---- profile picture -------------------------------------------------------------------------------------------
   if (path === "/api/profile" && m === "GET") {
-    const r = await env.DB.prepare("SELECT avatar FROM profiles WHERE user_email = ?").bind(email).first();
-    return json({ avatar: r ? r.avatar : null });
+    const r = await env.DB.prepare("SELECT avatar, full_name, dan_number, dan_plan, dan_valid_until FROM profiles WHERE user_email = ?").bind(email).first();
+    return json({ avatar: r ? r.avatar : null, fullName: r ? r.full_name : "", dan: { number: r ? r.dan_number : "", plan: r ? r.dan_plan : "", validUntil: r ? r.dan_valid_until : "" } });
+  }
+  if (path === "/api/profile/name" && m === "PUT") {
+    const { b, tooBig } = await body(request);
+    const name = b && typeof b.fullName === "string" ? text(b.fullName, 80) : false;
+    if (tooBig || name === false) return json({ error: "The name must be 80 characters or fewer." }, tooBig ? 413 : 400);
+    await env.DB.prepare("INSERT INTO profiles (user_email, full_name, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET full_name = excluded.full_name, updated_at = excluded.updated_at").bind(email, name).run();
+    return json({ ok: true });
+  }
+  if (path === "/api/profile/dan" && m === "PUT") {
+    const { b, tooBig } = await body(request);
+    if (tooBig || !b) return json({ error: "bad request" }, tooBig ? 413 : 400);
+    const number = text(b.number, 30), plan = text(b.plan, 60), validUntil = dateOnly(b.validUntil);
+    if (!number || !/^[A-Za-z0-9 \-/]+$/.test(number)) return json({ error: "Enter your DAN member number (letters, digits, spaces and dashes)." }, 400);
+    if (plan === false || validUntil === false) return json({ error: "invalid DAN details" }, 400);
+    await env.DB.prepare("INSERT INTO profiles (user_email, dan_number, dan_plan, dan_valid_until, updated_at) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET dan_number = excluded.dan_number, dan_plan = excluded.dan_plan, dan_valid_until = excluded.dan_valid_until, updated_at = excluded.updated_at").bind(email, number, plan, validUntil).run();
+    return json({ ok: true });
+  }
+  if (path === "/api/profile/dan" && m === "DELETE") {
+    await env.DB.prepare("UPDATE profiles SET dan_number = '', dan_plan = '', dan_valid_until = '', updated_at = datetime('now') WHERE user_email = ?").bind(email).run();
+    return json({ ok: true });
   }
   if (path === "/api/profile/avatar" && m === "PUT") {
     const { b, tooBig } = await body(request);
@@ -74,7 +102,7 @@ export async function handleAccountData(request, url, env, email) {
 
   // ---- certification files --------------------------------------------------------------------------------------------
   if (path === "/api/certs" && m === "GET") {
-    const { results } = await env.DB.prepare("SELECT id, label, number, filename, mime, size, created_at AS createdAt FROM certs WHERE user_email = ? ORDER BY created_at DESC, id").bind(email).all();
+    const { results } = await env.DB.prepare("SELECT id, label, number, kind, certified_on AS certifiedOn, filename, mime, size, created_at AS createdAt FROM certs WHERE user_email = ? ORDER BY created_at DESC, id").bind(email).all();
     return json({ certs: results });
   }
   if (path === "/api/certs" && m === "POST") {
@@ -82,21 +110,22 @@ export async function handleAccountData(request, url, env, email) {
     if (tooBig) return json({ error: "That file is too large (limit 1 MB)." }, 413);
     if (!b) return json({ error: "bad request" }, 400);
     const label = text(b.label, 80), number = text(b.number, 40), filename = text(b.filename, 120).replace(/[\\/]/g, "_");
-    const mime = b.mime, data = b.data;
+    const mime = b.mime, data = b.data, kind = b.kind === undefined ? "cert" : b.kind, certifiedOn = dateOnly(b.certifiedOn);
+    if (!KINDS.includes(kind) || certifiedOn === false) return json({ error: "invalid details" }, 400);
     if (!label) return json({ error: "Give the certification a name." }, 400);
     if (number === false || filename === false || !filename) return json({ error: "invalid details" }, 400);
     if (typeof mime !== "string" || !SIGNATURES[mime] || typeof data !== "string" || !data || !B64.test(data)) return json({ error: "Only PDF, JPEG, PNG or WebP files." }, 400);
     if (rawSize(data) > MAX_FILE_BYTES) return json({ error: "That file is too large (limit 1 MB)." }, 413);
     if (!SIGNATURES[mime](head(data))) return json({ error: "The file does not look like a " + mime.split("/")[1].toUpperCase() + "." }, 400);
-    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM certs WHERE user_email = ?").bind(email).first();
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM certs WHERE user_email = ? AND kind = ?").bind(email, kind).first();
     if (n.n >= MAX_FILES) return json({ error: `You can keep up to ${MAX_FILES} files. Delete one first.` }, 409);
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-    await env.DB.prepare("INSERT INTO certs (id, user_email, label, number, filename, mime, size, data) VALUES (?,?,?,?,?,?,?,?)").bind(id, email, label, number, filename, mime, rawSize(data), data).run();
+    await env.DB.prepare("INSERT INTO certs (id, user_email, label, number, kind, certified_on, filename, mime, size, data) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(id, email, label, number, kind, certifiedOn, filename, mime, rawSize(data), data).run();
     return json({ id });
   }
   const one = path.match(/^\/api\/certs\/([0-9a-f]{16})$/);
   if (one && m === "GET") {
-    const r = await env.DB.prepare("SELECT id, label, number, filename, mime, size, data FROM certs WHERE user_email = ? AND id = ?").bind(email, one[1]).first();
+    const r = await env.DB.prepare("SELECT id, label, number, kind, certified_on AS certifiedOn, filename, mime, size, data FROM certs WHERE user_email = ? AND id = ?").bind(email, one[1]).first();
     return r ? json({ cert: r }) : json({ error: "not found" }, 404);
   }
   if (one && m === "DELETE") {
