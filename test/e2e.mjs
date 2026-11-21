@@ -957,6 +957,12 @@ if (process.env.REAL_DB) {
     assert.ok((await page.locator(".theme-switch .ts-sun").boundingBox()).x < (await page.locator(".theme-switch .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
     await sw.click(); await page.waitForTimeout(450); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);
     assert.equal(await page.evaluate(() => localStorage.getItem("theme")), "dark");
+    // the logo replaces the title text: the one for the current theme is shown, it loads, it has the title as its name, and it fits between the switch and the avatar
+    const logo = async () => page.evaluate(() => { const vis = [...document.querySelectorAll("header .logo")].filter((i) => getComputedStyle(i).display !== "none"); const r = vis[0] && vis[0].getBoundingClientRect(), s = document.querySelector(".theme-switch").getBoundingClientRect(), a = document.getElementById("acctBtn").getBoundingClientRect();
+      return { shown: vis.map((i) => i.className), ok: !!vis[0] && vis[0].complete && vis[0].naturalWidth > 300, alt: vis[0] && vis[0].alt, left: r && r.left - s.right, right: r && a.left - r.right, w: r && r.width }; });
+    let lg = await logo(); assert.deepEqual(lg.shown, ["logo logo-dark"], "dark theme: the cream logo"); assert.ok(lg.ok, "logo loads"); assert.equal(lg.alt, "Dive Manager"); assert.ok(lg.left >= 0 && lg.right >= 0, "does not touch the switch or the avatar: " + JSON.stringify(lg));
+    assert.ok(await page.getByRole("heading", { name: "Dive Manager" }).isVisible(), "the heading still reads Dive Manager for screen readers");
+    await page.locator("header .theme-switch").click(); await page.waitForTimeout(450); lg = await logo(); assert.deepEqual(lg.shown, ["logo logo-light"], "light theme: the dark logo"); assert.ok(lg.ok); await page.locator("header .theme-switch").click(); await page.waitForTimeout(450);
     // 3. remembered after a reload, no flash (the script runs in <head> before the page is painted)
     assert.equal(await page.evaluate(() => { const s = document.querySelector('head script[src="/auth/theme.js"]'); return !!s && !s.async && !s.defer; }), true, "theme.js blocks painting so there is no light flash");
     await page.reload(); await page.waitForSelector("header .theme-switch"); d = await look(page); assert.equal(d.theme, "dark", "still dark after a reload");

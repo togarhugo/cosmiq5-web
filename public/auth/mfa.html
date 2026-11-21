@@ -19,7 +19,9 @@
          padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
   main { width:100%; max-width:380px; }
   h1 { font-size:22px; text-align:center; margin:0 0 4px; }
-  .ver { text-align:center; color:var(--muted); font-size:12px; margin-bottom:22px; }
+  .brand { margin: 0; line-height: 0; text-align: center; } .brand .logo { height: auto; max-width: 100%; display: inline-block; vertical-align: top; } .brand .logo-dark { display: none; }
+  html[data-theme="dark"] .brand .logo-light { display: none; } html[data-theme="dark"] .brand .logo-dark { display: inline-block; }
+  .ver { text-align:center; color:var(--muted); font-size:12px; margin:6px 0 22px; }
   .card { background:var(--card); border-radius:14px; padding:22px 18px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-align:center; }
   h2 { font-size:17px; margin:0 0 8px; }
   p { color:var(--muted); font-size:14px; line-height:1.45; margin:0 0 18px; }
@@ -41,7 +43,7 @@
 <body>
 <div class="theme-corner" data-theme-switch></div>
 <main>
-  <h1>Dive Manager</h1>
+  <h1 class="brand"><img class="logo logo-light" src="/auth/logo-light.png" alt="Dive Manager" width="240" height="107"><img class="logo logo-dark" src="/auth/logo-dark.png" alt="Dive Manager" width="240" height="106" loading="lazy"></h1>
   <div class="ver">v__APP_VERSION__</div>
   <div class="card">
     <h2>Two-step verification</h2>

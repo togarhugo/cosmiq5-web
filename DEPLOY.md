@@ -143,6 +143,10 @@ the free plan's CPU limit.
   sets `data-theme` from `localStorage.theme` or the system setting and builds the switch for any `[data-theme-switch]` element. Both live under `/auth/` because the sign-in pages are public.
   A new colour should be written as `var(--bg-…)` etc. and the generator re-run.
 
+- **Logo:** `design/logo-source.png` (the artwork, dark and light versions side by side) is cut into `public/auth/logo-dark.png` / `logo-light.png` by `scripts/make-logo.py` (transparent background,
+  48-colour palette, ~28 KB each). The header and both sign-in pages show the one matching the theme (`.brand .logo-light/.logo-dark`); the heading text "Dive Manager" is the image's alt text.
+  They live under `/auth/` because the sign-in pages are public.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash

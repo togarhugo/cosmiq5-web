@@ -218,3 +218,17 @@ test("app icons: a diver-down flag in every size, linked from the app and the si
   for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /rel="icon" href="\/auth\/favicon\.svg"/, f); assert.match(h, /rel="apple-touch-icon" href="\/auth\/apple-touch-icon\.png"/, f); }
   const mf = JSON.parse(fs.readFileSync(new URL("manifest.webmanifest", root), "utf8")); for (const i of mf.icons) assert.ok(fs.existsSync(new URL(i.src, root)), i.src + " exists");
 });
+
+test("logo: a transparent PNG for each theme, shown in the app header and on both sign-in pages", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), zlib = await import("node:zlib");
+  for (const f of ["auth/logo-light.png", "auth/logo-dark.png"]) {
+    const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], f + " is a PNG");
+    assert.ok(b.readUInt32BE(16) >= 700 && b.readUInt32BE(16) <= 900, "sharp enough for a phone screen: " + b.readUInt32BE(16)); assert.ok(b.length < 60_000, f + " stays small (" + b.length + " bytes)");
+    assert.equal(b[25], 3, "a palette image"); assert.ok(b.includes(Buffer.from("tRNS")), "with transparency");
+    let i = 8, trns = null; while (i < b.length) { const len = b.readUInt32BE(i), type = b.slice(i + 4, i + 8).toString(); if (type === "tRNS") trns = b.slice(i + 8, i + 8 + len); i += 12 + len; }
+    assert.ok([...trns].some((v) => v === 0), "one palette entry is fully transparent (so there is no faint box around the logo)");
+  }
+  const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png" alt="Dive Manager"/); assert.match(main, /class="logo logo-dark" src="\/auth\/logo-dark\.png" alt="Dive Manager"/);
+  for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png"/, f); assert.match(h, /html\[data-theme="dark"\] \.brand \.logo-dark \{ display: inline-block; \}/, f); assert.ok(!/<h1>Dive Manager<\/h1>/.test(h), f + ": the plain text title is gone"); }
+  assert.ok(fs.existsSync(new URL("../design/logo-source.png", root)), "the source artwork is kept so the logo can be regenerated");
+});
