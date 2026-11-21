@@ -41,8 +41,8 @@ test("summarize: last dive date, total dive time, dive count, location of the la
   const r = [dive("2026-10-17T08:26:00", 4500, "Komodo"), dive("2026-10-12T06:36:00", 3600), dive("2021-06-11T14:10:00", 3600 * 2 + 60)];
   const s = U.summarize(r, new Date(2026, 10, 21, 15, 0));
   assert.equal(s.count, 3); assert.equal(s.totalSec, 4500 + 3600 + 7260);
-  assert.deepEqual(s.last, { date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
-  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0 }); assert.equal(s.duplicates, 0);
+  assert.deepEqual(s.last, { kind: "scuba", date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
+  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0, byKind: { scuba: { count: 0, sec: 0 }, freedive: { count: 0, sec: 0 } } }); assert.equal(s.duplicates, 0);
   assert.equal(U.summarize([dive("2026-11-21T09:00:00", 60)], new Date(2026, 10, 21, 23, 59)).last.daysAgo, 0, "same calendar day = today");
 });
 
@@ -243,4 +243,28 @@ test("fonts and tab icons: Geist and Geist Mono served from the app, tab icons a
   for (const [id, cls] of [["navSummary", "ti-summary"], ["navLog", "ti-log"], ["navDevice", "ti-device"]]) assert.match(main, new RegExp(`id="${id}"[^>]*><i class="ti ${cls}" aria-hidden="true"></i><span>`));
   for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<link rel="stylesheet" href="\/auth\/fonts\.css">/, f); assert.match(h, /font-family:"Geist"/, f); }
   assert.ok(fs.existsSync(new URL("../design/tab-icons-source.png", root)), "the source artwork is kept");
+});
+
+test("scuba and freedive: told apart in the totals and on the map, each dive counted once", () => {
+  const d = (startedAt, durationSec, mode, location, device, depth = 20) => ({ fingerprint: (device || "c") + startedAt, startedAt, durationSec, mode, maxDepthM: depth, ...(location ? { location } : {}), ...(device ? { device } : {}) });
+  const recs = [d("2026-05-01T09:00:00", 3000, "scuba", "Tulamben"), d("2026-05-01T13:00:00", 3300, "scuba", "Tulamben"), d("2026-05-02T09:00:00", 2700, "gauge", "Komodo"),
+    d("2026-05-03T09:00:00", 45, "freedive", "Bunaken", undefined, 12), d("2026-05-03T09:10:00", 70, "freedive", "bunaken", undefined, 15), d("2026-05-03T14:00:00", 3000, "scuba", "Bunaken"), d("2026-05-04T08:00:00", 90, "freedive", "Raja Ampat", undefined, 14), d("2026-05-05T08:00:00", 600, "scuba")];
+  assert.equal(U.kindOf({ mode: "freedive" }), "freedive"); assert.equal(U.kindOf({ mode: "scuba" }), "scuba"); assert.equal(U.kindOf({ mode: "gauge" }), "scuba", "a dive in gauge mode is a dive with a tank"); assert.equal(U.kindOf({}), "scuba");
+  const k = U.byKind(recs); assert.deepEqual(k, { scuba: { count: 5, sec: 3000 + 3300 + 2700 + 3000 + 600 }, freedive: { count: 3, sec: 45 + 70 + 90 } });
+  const sm = U.summarize(recs, new Date(2026, 10, 1)); assert.deepEqual(sm.byKind, k); assert.equal(sm.count, 8); assert.equal(sm.last.kind, "scuba"); assert.equal(sm.totalSec, k.scuba.sec + k.freedive.sec, "kinds add up to the total");
+  assert.equal(U.summarize([d("2026-05-09T08:00:00", 50, "freedive")], new Date(2026, 10, 1)).last.kind, "freedive");
+  // the same dive on both computers is one dive of one kind (the Cosmiq+ record decides)
+  const twin = [d("2026-05-06T09:00:00", 3000, "scuba"), d("2026-05-06T09:02:00", 2940, "scuba", undefined, "peregrine"), d("2026-05-06T15:00:00", 60, "freedive", undefined, "peregrine")];
+  assert.deepEqual(U.byKind(twin), { scuba: { count: 1, sec: 3000 }, freedive: { count: 1, sec: 60 } });
+  // places: both kinds counted per place, Bunaken/bunaken is one place
+  const ps = U.placeStats(recs), by = (n) => ps.find((e) => e.name.toLowerCase() === n.toLowerCase());
+  assert.deepEqual(ps.map((e) => e.key), ["bunaken", "tulamben", "komodo", "raja ampat"].sort((a, b) => (by(b) || { count: 0 }).count - (by(a) || { count: 0 }).count || a.localeCompare(b)), "most dives first");
+  assert.equal(by("Bunaken").count, 3); assert.deepEqual([by("Bunaken").by.scuba.count, by("Bunaken").by.freedive.count], [1, 2]); assert.equal(by("Bunaken").by.freedive.sec, 115); assert.equal(by("Tulamben").by.freedive.count, 0); assert.equal(by("Komodo").by.scuba.sec, 2700);
+  assert.equal(by("Bunaken").by.freedive.first, "2026-05-03T09:00:00"); assert.equal(by("Bunaken").by.freedive.last, "2026-05-03T09:10:00");
+  const fo = U.placeStats(recs, "freedive"); assert.deepEqual(fo.map((e) => [e.key, e.count]), [["bunaken", 2], ["raja ampat", 1]], "only places where you freedived, with the freedive count"); assert.equal(fo[0].last, "2026-05-03T09:10:00"); assert.equal(fo[0].by.scuba.count, 1, "`by` still has both kinds");
+  const so = U.placeStats(recs, "scuba"); assert.deepEqual(so.map((e) => [e.key, e.count]), [["tulamben", 2], ["bunaken", 1], ["komodo", 1]]); assert.ok(!so.some((e) => e.key === "raja ampat"), "a freedive-only place is not on the scuba map");
+  assert.deepEqual(U.pinsAndMissing(fo, { bunaken: { lat: 1, lon: 2 } }).missing.map((e) => e.key), ["raja ampat"]); assert.equal(U.pinsAndMissing(fo, { bunaken: { lat: 1, lon: 2 } }).pins[0].by.freedive.count, 2, "pins keep the breakdown");
+  assert.deepEqual(U.placeStats([], "scuba"), []);
+  // durations as text
+  for (const [sec, txt] of [[0, "0 s"], [45, "45 s"], [193, "3 min 13 s"], [599, "9 min 59 s"], [600, "10 min"], [2520, "42 min"], [3599, "60 min"], [12000, "3 h 20 min"], [null, "0 s"]]) assert.equal(U.durText(sec), txt, String(sec));
 });

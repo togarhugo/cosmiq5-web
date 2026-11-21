@@ -1013,4 +1013,47 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL tab icons and fonts\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-tabs.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: scuba and freedive are told apart in the Summary totals and on the map ----
+{
+  const run = async (dives, pre) => {
+    const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); localStorage.removeItem("mapKind"); } catch (e) {} }); if (pre) await ctx.addInitScript(pre);
+    const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+    await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+    await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+    await page.route("**/api/places", (r) => r.fulfill({ json: { places: [{ name: "Tulamben", lat: -8.29, lon: 115.59 }, { name: "Bunaken", lat: 1.6, lon: 124.76 }, { name: "Raja Ampat", lat: -0.55, lon: 130.5 }] } }));
+    await page.route("**/api/dives", (r) => r.fulfill({ json: { dives } })); await page.goto(base); await page.waitForSelector("#sumMap .leaflet-marker-icon", { timeout: 10000 }); return { ctx, page, errs };
+  };
+  const mk = (n, when, loc, mode, dur) => ({ fingerprint: (0x555000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode, durationSec: dur, maxDepthM: 15, o2Percent: null, headerHex: "", profileHex: "", location: loc, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 12, 28]] }) });
+  const dives = [mk(1, "2025-03-14T09:00:00", "Tulamben", "scuba", 3000), mk(2, "2025-03-14T13:00:00", "Tulamben", "scuba", 3300), mk(3, "2025-03-15T09:00:00", "tulamben", "gauge", 2700),
+    mk(4, "2025-05-03T09:00:00", "Bunaken", "freedive", 45), mk(5, "2025-05-03T09:10:00", "Bunaken", "freedive", 70), mk(6, "2025-05-03T14:00:00", "Bunaken", "scuba", 3000), mk(7, "2025-11-04T08:00:00", "Raja Ampat", "freedive", 90), mk(8, "2025-12-10T08:00:00", "", "freedive", 193)];
+  try {
+    let { ctx, page, errs } = await run(dives);
+    // 1. totals: scuba (incl. gauge) and freedive, each with its time and number of dives; they add up to the total
+    const kinds = await page.evaluate(() => [...document.querySelectorAll("#sumKinds .kindrow")].map((r) => ({ chip: r.querySelector(".kindchip").textContent, cls: r.querySelector(".kindchip").className, time: r.querySelector("b").textContent, n: r.querySelector(".muted").textContent })));
+    assert.deepEqual(kinds.map((k) => [k.chip, k.time, k.n]), [["Scuba", "3 h 02 min", "4 dives"], ["Freedive", "6 min 38 s", "4 dives"]], "gauge counts as scuba; freedive time in minutes and seconds: " + JSON.stringify(kinds));
+    assert.match(kinds[0].cls, /kind-scuba/); assert.match(kinds[1].cls, /kind-freedive/); assert.equal(await page.locator("#sumHours").innerText(), "3 h 09 min", "total = scuba + freedive"); assert.match(await page.locator("#sumCount").innerText(), /across 8 dives/);
+    assert.equal(await page.locator("#sumLastKind").innerText(), "Freedive", "the last dive is a freedive"); assert.match(await page.locator("#sumLastKind").getAttribute("class"), /kind-freedive/);
+    // 2. the map: a filter with the number of places per kind, pins coloured by kind, the count on a pin follows the filter
+    assert.deepEqual((await page.locator("#mapKinds button").allInnerTexts()).map((t) => t.replace(/\s+/g, " ")), ["All · 3", "Scuba · 2", "Freedive · 2"]); assert.ok(await page.locator("#mapLegend").isVisible());
+    const pins = () => page.evaluate(() => [...document.querySelectorAll("#sumMap .leaflet-marker-icon")].map((m) => ({ title: m.title, n: m.querySelector("text").textContent, fill: m.querySelector("path").getAttribute("fill").startsWith("url(") ? "split" : m.querySelector("path").getAttribute("fill") })).sort((a, b) => a.title.localeCompare(b.title)));
+    assert.deepEqual(await pins(), [{ title: "Bunaken: 1 scuba, 2 freedive", n: "3", fill: "split" }, { title: "Raja Ampat: 1 freedive", n: "1", fill: "#12b886" }, { title: "Tulamben: 3 scuba", n: "3", fill: "#228be6" }], "scuba blue, freedive green, both = split");
+    await page.locator("#sumMap .leaflet-marker-icon[title^=Bunaken]").click(); await page.waitForSelector("#sumMap .pin-pop"); const pop = await page.locator("#sumMap .pin-pop").innerText(); assert.match(pop, /Bunaken[\s\S]*SCUBA\s+1 dive . 50 min[\s\S]*FREEDIVE\s+2 dives . 1 min 55 s[\s\S]*May 2025/i, pop);
+    await page.locator('#mapKinds button[data-kind="freedive"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "2", "#12b886"], ["Raja Ampat", "1", "#12b886"]], "only freedive places, with their freedive count");
+    assert.match(await page.locator("#mapMsg").innerText(), /3 places . 3 on the map . showing freedive only/);
+    await page.locator('#mapKinds button[data-kind="scuba"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "1", "#228be6"], ["Tulamben", "3", "#228be6"]]);
+    await page.locator("#mapCard details summary").click(); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    // 3. the filter is remembered; a reload keeps it
+    await page.reload(); await page.waitForSelector("#sumMap .leaflet-marker-icon"); assert.equal(await page.locator("#mapKinds button.active").getAttribute("data-kind"), "scuba", "remembered"); assert.equal(await page.evaluate(() => localStorage.getItem("mapKind")), "scuba");
+    assert.deepEqual(errs, [], "page errors"); await ctx.close();
+    // 4. nobody freediving: no filter, no legend, no freedive row - only the totals of scuba
+    ({ ctx, page, errs } = await run(dives.filter((d) => d.mode !== "freedive")));
+    assert.ok(!(await page.locator("#mapKinds").isVisible()), "no filter without freedives"); assert.ok(!(await page.locator("#mapLegend").isVisible())); assert.deepEqual(await page.locator("#sumKinds .kindrow").evaluateAll((r) => r.map((x) => x.querySelector(".kindchip").textContent)), ["Scuba"]);
+    assert.deepEqual(errs, []); await ctx.close();
+    // 5. a stored 'freedive' filter does not hide the map once there are no freedives left
+    ({ ctx, page, errs } = await run(dives.filter((d) => d.mode !== "freedive"), () => { try { localStorage.setItem("mapKind", "freedive"); } catch (e) {} })); assert.equal(await page.locator("#sumMap .leaflet-marker-icon").count(), 2, "pins still shown"); await ctx.close();
+    console.log("PASS scuba and freedive");
+  } catch (e) { failed++; console.log("FAIL scuba and freedive\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

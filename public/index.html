@@ -407,7 +407,7 @@
             .badge.also { background: var(--bg-e7f5ff); color: var(--tx-1864ab); text-transform: none; }
             .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: var(--bg-dbe9f3); margin: 8px 0; }
             .mapbox.tall { height: 300px; flex: 0 0 auto; }
-            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: var(--tx-495057); margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
+            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: var(--tx-495057); margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; } .pin-pop .pin-kind { display: flex; align-items: center; gap: 6px; margin: 4px 0 !important; color: var(--tx-212529); }
             .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid var(--bd-ffe08a); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--tx-6b5200); }
             #mapUnplaced { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
             .chip { background: var(--bg-fff4e6); color: var(--tx-d9480f); border: 1px solid var(--bd-ffd8a8); border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
@@ -433,6 +433,19 @@
             .brand { margin: 0; line-height: 0; text-align: center; } .brand .logo { height: auto; max-width: 100%; display: inline-block; vertical-align: top; } .brand .logo-dark { display: none; }
             html[data-theme="dark"] .brand .logo-light { display: none; } html[data-theme="dark"] .brand .logo-dark { display: inline-block; }
 
+            .kindchip { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 2px 9px; border-radius: 10px; vertical-align: middle; }
+            .kindchip:empty { display: none; }
+            .kind-scuba { background: var(--bg-e3f2fd); color: var(--tx-0b5ed7); } .kind-freedive { background: var(--bg-e0f7f4); color: var(--tx-0f766e); }
+            .sum-label .kindchip { margin-left: 8px; }
+            .kinds { margin-top: 10px; border-top: 1px solid var(--bd-e9ecef); }
+            .kindrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--bd-f1f3f5); font-size: 15px; } .kindrow:last-child { border-bottom: 0; padding-bottom: 0; }
+            .kindrow .kindchip { min-width: 74px; text-align: center; } .kindrow b { font-family: var(--mono); font-weight: 600; } .kindrow .muted { margin-left: auto; }
+            .kindseg { display: flex; gap: 6px; margin: 2px 0 6px; }
+            .kindseg button { flex: 1 1 0; min-height: 38px; padding: 4px 6px; border-radius: 10px; background: var(--bg-e9ecef); color: var(--tx-495057); font-size: 13px; line-height: 1.15; }
+            .kindseg button.active { background: var(--bg-343a40); color: var(--tx-fff); } .kindseg button .muted { color: inherit; opacity: .7; }
+            .maplegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--tx-6c757d); margin: 2px 0 4px; }
+            .maplegend .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+            .kind-scuba-dot { background: #228be6; } .kind-freedive-dot { background: #12b886; } .kind-both-dot { background: linear-gradient(90deg, #228be6 50%, #12b886 50%); }
             .chart { display: block; }
             .chart .g-axis { stroke: var(--bd-adb5bd); } .chart .g-grid { stroke: var(--bd-dee2e6); } .chart .g-grid2 { stroke: var(--bd-e9ecef); } .chart .g-lbl { fill: var(--tx-6c757d); } .chart .g-gap { fill: var(--tx-adb5bd); }
 
@@ -510,14 +523,16 @@
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
             <div id="mapCard" class="card" style="display:none">
                 <div class="sum-label">Where you have dived</div>
+                <div id="mapKinds" class="kindseg" role="tablist" aria-label="Show on the map"></div>
                 <div id="sumMap" class="mapbox" role="region" aria-label="Map of the places you have dived"></div>
+                <div id="mapLegend" class="maplegend" aria-hidden="true"><span><i class="dot kind-scuba-dot"></i>Scuba</span><span><i class="dot kind-freedive-dot"></i>Freedive</span><span><i class="dot kind-both-dot"></i>Both</span></div>
                 <div id="mapMsg" class="muted"></div>
                 <div id="mapUnplaced"></div>
                 <details class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
             </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
-                    <div class="sum-label">Last dive</div>
+                    <div class="sum-label">Last dive <span id="sumLastKind" class="kindchip"></span></div>
                     <div id="sumLastDate" class="sum-big">&ndash;</div>
                     <div id="sumLastSub" class="muted"></div>
                 </div>
@@ -525,6 +540,7 @@
                     <div class="sum-label">Total dive time</div>
                     <div id="sumHours" class="sum-big">&ndash;</div>
                     <div id="sumCount" class="muted"></div>
+                    <div id="sumKinds" class="kinds"></div>
                 </div>
             </div>
         </div>

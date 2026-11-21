@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.15.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.16.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -70,8 +70,8 @@ The Summary opens first and shows, from top to bottom:
    * Total dive time and the dive count include both dive computers; a dive recorded by both at the same time is counted once.
    * DAN is **green** while valid, **orange** when it expires within 60 days, **red** once expired.
 2. **Regulator service**: dives on your regulator since its last reset, with a progress bar. **Green** below 70, **orange from 70**, **red from 90**.
-3. **Last dive**: the date, how long ago, and where.
-4. **Total dive time** across all your dives.
+3. **Last dive**: the date, how long ago, and where, with a **SCUBA** or **FREEDIVE** tag.
+4. **Total dive time** across all your dives, split into **Scuba** and **Freedive** (each with its dive time and number of dives). A dive in gauge mode counts as scuba. Freedives are counted apart because a freediving session has many short dives: they would otherwise inflate your dive count.
 
 Tap the You card or the regulator card to jump to the matching Account section.
 
@@ -152,6 +152,8 @@ Your 7–14 dives from a single trip are one tap with *Set place for the month*.
 ## 6b. Maps and places
 
 Every dive location you type (for example *Tulamben*) is a **place**. A place gets a position on the map once, and then all dives with that location are on the map.
+
+**Scuba or freedive on the map.** Once you have freedives, a switch above the map shows **All / Scuba / Freedive** (with the number of places for each). Pins are **blue** for scuba, **green** for freedive and **split blue / green** where you did both (the split only says "both"; it is not to scale). The number on a pin is its dive count for what you are showing. Tap a pin for a line per kind: dives and dive time. The choice is remembered; with no freedives the switch is hidden.
 
 **The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*.
 
