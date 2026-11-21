@@ -67,7 +67,7 @@ const Dives = (() => {
   const saveLast = (o) => { try { localStorage.setItem(LAST, JSON.stringify({ at: new Date().toISOString(), ...o })); } catch (e) {} };
   const loadLast = () => { try { return JSON.parse(localStorage.getItem(LAST) || "null"); } catch (e) { return null; } };
 
-  async function syncFromDevice(io) {
+  async function syncFromDevice(io, opts) {
     if (busy) return;
     busy = true; setBusy(true); showBanner(true);
     let saved = 0, info = {};
@@ -77,7 +77,7 @@ const Dives = (() => {
       const res = await P.readDives(io, known, (m, p) => progress(m, p), async (raw, r) => {
         await put(toRecord(raw, r.mac)); saved++;                      // saved the moment it arrives
         if (Date.now() - lastRender > 400) { lastRender = Date.now(); render(); }
-      });
+      }, opts);
       info = { count: res.count, newDives: res.dives.length, skipped: res.skipped, fw: res.firmware, mac: res.mac };
       const up = await cloudPush();
       const msg = `Dive sync done: ${res.count} on device, ${res.dives.length} new, ${res.skipped} already saved` +
@@ -104,51 +104,78 @@ const Dives = (() => {
   function showBanner(on) { const el = $("syncBanner"); if (el) el.style.display = on ? "block" : "none"; }
   function setBusy(b) { const el = $("diveSyncBtn"); if (el) el.disabled = b; }
 
-  function chart(d) {
+  /** Depth profile. `missing` = samples the device no longer had: the axis keeps the full dive length and the gap is shown. */
+  function chart(d, missing = 0) {
     const s = d.samples; if (s.length < 2) return "<p class='muted'>No profile samples.</p>";
     const W = 320, H = 150, pl = 34, pr = 8, pt = 8, pb = 20;
-    const maxT = s[s.length - 1].t, maxD = Math.max(1, ...s.map((x) => x.depthM));
+    const lastT = s[s.length - 1].t, maxT = lastT + missing * d.sampleIntervalSec, maxD = Math.max(1, ...s.map((x) => x.depthM));
     const X = (t) => pl + (t / maxT) * (W - pl - pr), Y = (m) => pt + (Math.max(0, m) / maxD) * (H - pt - pb);
     const pts = [[0, 0], ...s.map((x) => [x.t, x.depthM])].map(([t, m]) => `${X(t).toFixed(1)},${Y(m).toFixed(1)}`).join(" ");
+    const gap = missing ? `<rect x="${X(lastT).toFixed(1)}" y="${pt}" width="${(X(maxT) - X(lastT)).toFixed(1)}" height="${H - pt - pb}" fill="#adb5bd" opacity=".25"/>
+      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">not</text>
+      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2 + 10).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">recovered</text>` : "";
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Depth profile">
-      <line x1="${pl}" y1="${pt}" x2="${W - pr}" y2="${pt}" stroke="#ced4da"/>
-      <polyline fill="rgba(0,123,255,.15)" stroke="#007bff" stroke-width="2" points="${X(0)},${Y(0)} ${pts} ${X(maxT)},${Y(0)}"/>
+      <line x1="${pl}" y1="${pt}" x2="${W - pr}" y2="${pt}" stroke="#ced4da"/>${gap}
+      <polygon fill="rgba(0,123,255,.15)" points="${pts} ${X(lastT).toFixed(1)},${Y(0).toFixed(1)}"/>
+      <polyline fill="none" stroke="#007bff" stroke-width="2" stroke-linejoin="round" points="${pts}"/>
       <text x="2" y="${pt + 9}" font-size="10" fill="#6c757d">0 m</text>
       <text x="2" y="${H - pb}" font-size="10" fill="#6c757d">${maxD.toFixed(0)} m</text>
       <text x="${pl}" y="${H - 4}" font-size="10" fill="#6c757d">0</text>
       <text x="${W - pr}" y="${H - 4}" font-size="10" fill="#6c757d" text-anchor="end">${fmtDur(maxT)}</text></svg>`;
   }
 
-  // Layout of the 36-byte dive header. Known fields come from libdivecomputer's Cosmiq parser;
-  // everything marked "unknown" is shown raw so new meanings (e.g. a location) can be spotted.
-  const HEADER_MAP = [[0, 2, "unknown"], [2, 1, "mode (2 scuba, 3 gauge, 4 freedive)"], [3, 1, "O\u2082 %"], [4, 2, "atmospheric pressure (low 13 bits, mbar) + flags"],
-    [6, 2, "year"], [8, 1, "day"], [9, 1, "month"], [10, 1, "minute"], [11, 1, "hour"], [12, 2, "duration"], [14, 8, "unknown"],
-    [22, 2, "max depth (raw pressure, mbar)"], [24, 2, "unknown"], [26, 1, "sample interval (s)"], [27, 9, "unknown"]];
-  function techDetails(rec) {
+  // Layout of the 36-byte dive header. Fields come from libdivecomputer's Cosmiq parser plus our own decoding of a real
+  // device's log; bytes still marked "unknown" are shown raw so new meanings can be spotted.
+  const HEADER_MAP = [[0, 2, "dive number (the device's own count)"], [2, 1, "mode (2 scuba, 3 gauge, 4 freedive)"], [3, 1, "O\u2082 %"],
+    [4, 2, "surface pressure (low 13 bits, mbar) + 3 flag bits"], [6, 2, "year"], [8, 1, "day"], [9, 1, "month"], [10, 1, "minute"], [11, 1, "hour"],
+    [12, 2, "duration"], [14, 8, "unknown (settings-like constants)"], [22, 2, "max depth (raw pressure, mbar)"], [24, 2, "minimum temperature (0.1 \u00b0C)"],
+    [26, 1, "sample interval (s)"], [27, 1, "unknown"], [28, 2, "number of profile samples"], [30, 2, "profile start page"], [32, 2, "profile end page"], [34, 2, "unknown (16-bit value, not a CRC we recognise)"]];
+  const STATUS_TEXT = {
+    ok: "",
+    truncated: (m, iv) => `The last ${m} sample${m === 1 ? "" : "s"} (about ${Math.max(1, Math.round(m * iv / 60))} min) of this depth profile could not be recovered: the device had already overwritten them. The summary figures above come from the dive header and are complete.`,
+    overwritten: () => "This dive's depth profile no longer exists on the device. Its profile memory is a ring that keeps roughly the last 128 dives, and newer dives overwrote this one. The summary (depth, time, temperature) is intact.",
+    empty: () => "The device returned no depth data for this dive.",
+  };
+  const BADGE = { truncated: "partial profile", overwritten: "summary only", empty: "no profile" };
+
+  function techDetails(rec, res) {
     const h = P.fromHex(rec.headerHex);
     const rows = HEADER_MAP.map(([o, n, name]) => {
       const bytes = P.toHex(h.slice(o, o + n)).match(/../g).join(" ");
-      const unk = name === "unknown";
+      const unk = name.startsWith("unknown");
       return `<tr${unk ? ' class="unk"' : ""}><td>${o}${n > 1 ? "\u2013" + (o + n - 1) : ""}</td><td>${bytes}</td><td>${esc(name)}</td></tr>`;
     }).join("");
-    const nonzero = HEADER_MAP.filter(([, , nm]) => nm === "unknown").some(([o, n]) => h.slice(o, o + n).some((b) => b !== 0 && b !== 255));
+    const from = res.from && res.from !== rec.fingerprint ? " Recovered from the bytes the device returned under an older dive's number (the profile memory wrapped around)." : "";
     return `<details class="tech"><summary>Technical details</summary>
-      <p class="muted">Location: this dive computer's log has no location (GPS) field that we know of. ${nonzero ? "Some bytes we can't decode (amber) contain data." : "All undecoded bytes are empty."}</p>
+      <p class="muted">Location: this dive computer's log has no location (GPS) field. Every header byte is a dive statistic, a memory pointer, or an unknown setting-like value (amber); none looks like coordinates.</p>
       <table class="hdr">${rows}</table>
-      <p class="muted">Profile: ${rec.profileHex.length / 2} bytes (${rec.profileHex.length / 8} samples). Fingerprint ${esc(rec.fingerprint)}.</p></details>`;
+      <p class="muted">Profile: ${esc(res.status)}, ${res.profileHex.length / 2} bytes.${from} Fingerprint ${esc(rec.fingerprint)}.</p></details>`;
   }
 
-  function detail(rec) {
-    const d = P.parseDive(P.fromHex(rec.headerHex), P.fromHex(rec.profileHex));
-    const temps = d.samples.map((x) => x.tempC);
-    const tmin = temps.length ? Math.min(...temps).toFixed(1) : "–";
-    return `${chart(d)}<div class="stats">
+  const fmtGap = (min) => (min < 90 ? `${Math.max(0, Math.round(min))} min` : min < 2880 ? `${Math.floor(min / 60)} h ${Math.round(min % 60)} min` : `${Math.floor(min / 1440)} d ${Math.round((min % 1440) / 60)} h`);
+  const asMs = (iso) => { const [d, t] = iso.split("T"); const [y, mo, da] = d.split("-").map(Number), [h, mi] = t.split(":").map(Number); return Date.UTC(y, mo - 1, da, h, mi); };
+
+  function detail(rec, res, gapBefore) {
+    const d = P.parseDive(P.fromHex(rec.headerHex), P.fromHex(res.profileHex));
+    const usable = res.status === "ok" || res.status === "truncated";
+    const depths = d.samples.map((x) => x.depthM).filter((m) => m > 0.3);
+    const avg = depths.length ? (depths.reduce((a, b) => a + b, 0) / depths.length).toFixed(1) + " m" : "\u2013";
+    const note = STATUS_TEXT[res.status] ? STATUS_TEXT[res.status](res.missing, d.sampleIntervalSec) : "";
+    return `${usable ? chart(d, res.status === "truncated" ? res.missing : 0) : ""}${note ? `<p class="note">${esc(note)}</p>` : ""}<div class="stats">
       <div><b>${d.maxDepthM.toFixed(1)} m</b><span>max depth</span></div>
       <div><b>${fmtDur(d.durationSec)}</b><span>duration</span></div>
-      <div><b>${tmin} °C</b><span>min temp</span></div>
-      <div><b>${d.o2Percent != null ? d.o2Percent + "%" : "–"}</b><span>O₂</span></div></div>
-      <p class="muted">Depth assumes seawater (1025 kg/m³) like the device. ${d.samples.length} sample${d.samples.length === 1 ? "" : "s"}, every ${d.sampleIntervalSec}s.</p>${techDetails(rec)}`;
+      <div><b>${d.minTempC.toFixed(1)} \u00b0C</b><span>min temp</span></div>
+      <div><b>${d.o2Percent != null ? d.o2Percent + "%" : "\u2013"}</b><span>O\u2082</span></div></div>
+      <div class="stats">
+      <div><b>#${d.number}</b><span>dive number</span></div>
+      <div><b>${usable ? avg : "\u2013"}</b><span>avg depth</span></div>
+      <div><b>${gapBefore == null ? "\u2013" : fmtGap(gapBefore)}</b><span>since last dive</span></div>
+      <div><b>${d.atmosphericMbar}</b><span>surface mbar</span></div></div>
+      <p class="muted">Depth assumes seawater (1025 kg/m\u00b3) like the device.${usable ? ` ${d.samples.length} sample${d.samples.length === 1 ? "" : "s"}, every ${d.sampleIntervalSec}s.` : ""}</p>${techDetails(rec, res)}`;
   }
+
+  const YEARS_KEY = "yearsOpen";
+  const loadYears = () => { try { return JSON.parse(localStorage.getItem(YEARS_KEY) || "null"); } catch (e) { return null; } };
 
   async function render() {
     const list = $("diveList"); if (!list) return;
@@ -156,18 +183,44 @@ const Dives = (() => {
     $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
-    const cloudTxt = { ok: "☁ synced to cloud", unavailable: "☁ cloud unavailable", offline: "offline", signedout: "🔒 signed out: reload the page to sign in again", unknown: "" }[cloudState];
+    const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
     if (!recs.length) { list.innerHTML = "<p class='muted'>No dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>"; return; }
-    list.innerHTML = recs.map((r) => `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
-      <span class="dive-date">${esc(fmtDate(r.startedAt))}</span>
-      <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>
-      <span class="dive-meta">${r.maxDepthM.toFixed(1)} m · ${fmtDur(r.durationSec)}${r.uploaded ? "" : " · ⏳"}</span></summary>
-      <div class="dive-body"></div></details>`).join("");
+
+    const resolved = P.reconcileProfiles(recs);                                      // which profile really belongs to which dive
+    const asc = recs.slice().reverse(), gapBefore = new Map();
+    asc.forEach((r, i) => { if (i) gapBefore.set(r.fingerprint, (asMs(r.startedAt) - (asMs(asc[i - 1].startedAt) + asc[i - 1].durationSec * 1000)) / 60000); });
+
+    const byYear = new Map();
+    for (const r of recs) { const y = r.startedAt.slice(0, 4); if (!byYear.has(y)) byYear.set(y, []); byYear.get(y).push(r); }
+    const years = [...byYear.keys()];                                                // newest first
+    const openNow = list.querySelector("details.year") ? new Set([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year)) : null;
+    const saved = loadYears(), open = openNow || new Set(saved || [years[0]]);
+
+    const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
+    const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
+    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"} \u00b7 ${full} with full depth profile` +
+      `${partial ? ` \u00b7 ${partial} partial` : ""}${summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : ""}</p>`;
+    for (const y of years) {
+      const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
+      html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
+        g.map((r) => {
+          const st = resolved[r.fingerprint].status, num = P.parseDive(P.fromHex(r.headerHex), new Uint8Array(0)).number;
+          return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
+            <span class="dive-num">#${num}</span><span class="dive-date">${esc(fmtDate(r.startedAt))}</span>
+            <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}
+            <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
+            <div class="dive-body"></div></details>`;
+        }).join("") + `</details>`;
+    }
+    list.innerHTML = html;
+    list.querySelectorAll("details.year").forEach((el) => el.addEventListener("toggle", () => {
+      try { localStorage.setItem(YEARS_KEY, JSON.stringify([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year))); } catch (e) {}
+    }));
     list.querySelectorAll("details.dive").forEach((el) => el.addEventListener("toggle", async () => {
       if (!el.open || el.dataset.done) return;
       const rec = recs.find((r) => r.fingerprint === el.dataset.fp);
-      try { el.querySelector(".dive-body").innerHTML = detail(rec); el.dataset.done = 1; }
+      try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null); el.dataset.done = 1; }
       catch (e) { el.querySelector(".dive-body").textContent = "Cannot parse this dive: " + e.message; }
     }));
   }

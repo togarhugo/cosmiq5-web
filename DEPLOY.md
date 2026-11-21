@@ -73,13 +73,29 @@ Open the site, sign in with Google, tap **Connect**. The clock is set to your ph
 download and upload. Tap **Download raw backup** after the first sync.
 
 ## Dive sync notes
-- Each dive is saved on the phone the moment it arrives (and uploaded at the end), so a dropped connection or **Cancel**
-  loses at most the dive in flight; running the sync again continues with what is missing.
-- Progress shows on every tab. After a sync that saved dives the app switches to the **Dive log** tab.
+- **Only new dives are downloaded.** Headers are scanned from the newest dive and the scan stops at the first dive you
+  already have, so syncing a few new dives takes seconds. If that leaves a gap, or you tap **Re-check every dive**, every
+  header is checked. New dives are fetched oldest first and each is saved the moment it arrives (and uploaded at the end),
+  so a dropped connection or **Cancel** loses at most the dive in flight; running the sync again continues.
+- Progress shows on every tab. After a sync that saved dives the app switches to the **Dive log** tab, grouped by year.
 - **Copy / Save diagnostics** (Dive log tab) exports the app version, device traffic and stored dive headers: attach it when
   reporting a problem. Each dive's **Technical details** shows the raw 36-byte header with undecoded bytes highlighted.
-- The dive computer's log has no location (GPS) field that we know of; if the highlighted bytes ever turn out to hold one,
-  it can be decoded from the diagnostics.
+
+### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)
+Header (36 bytes): 0-1 dive number, 2 mode, 3 O2 %, 4-5 surface pressure (13 bits) + 3 flag bits, 6-11 date/time,
+12-13 duration, 22-23 max depth (raw pressure), **24-25 minimum temperature (0.1 C)**, 26 sample interval,
+**28-29 number of profile samples, 30-31 / 32-33 first / last profile page**. Bytes 14-21, 27 and 34-35 are still unknown
+(constants / a 16-bit value). **There is no location (GPS) field.** Profile samples are 4 bytes: temperature (0.1 C) and
+pressure (mbar).
+
+**The profile memory is a ring of 256 pages (512 bytes each, 2 pages per dive: about the last 128 dives).** Writes wrap
+around and erase the oldest dives, but the device can only read pages 0-255, so a dive stored at page 256 or above reads
+back as erased bytes (0xFF) under its own number, while its real data is returned under the oldest dive's number. The app
+matches every profile to the dive whose header it fits (sample count, minimum temperature, maximum depth, nothing but
+erased bytes after the last sample), recovers the wrapped dives, and marks dives whose profile was overwritten as
+"summary only" (their depth, time and temperature survive in the header). A dive that is longer than the older dive whose
+slot it occupies loses the tail of its profile ("partial profile"). To keep profiles of new dives, sync before the ring
+wraps over them: each new dive overwrites an old one.
 
 ## Develop / test
 ```bash

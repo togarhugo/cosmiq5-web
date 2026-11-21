@@ -22,12 +22,21 @@ const fakeBle = () => {
   const enc = new TextEncoder();
   const frame = (cmd, data) => { const len = data.length * 2; let s = cmd + len; for (const b of data) s += b;
     const h = [cmd, (256 - (s & 255)) & 255, len, ...data].map((x) => x.toString(16).padStart(2, "0")).join(""); return "$" + h + "\n"; };
-  const hdr = (y, mo, d, h, mi, dur, mode, o2, maxRaw) => { const b = new Array(36).fill(0);
-    b[2] = mode; b[3] = o2; b[4] = 0xf5; b[5] = 0x03; b[6] = y & 255; b[7] = y >> 8; b[8] = d; b[9] = mo; b[10] = mi; b[11] = h;
-    b[12] = dur & 255; b[13] = dur >> 8; b[22] = maxRaw & 255; b[23] = maxRaw >> 8; b[26] = 10; return b; };
+  const hdr = (y, mo, d, h, mi, dur, mode, o2, maxRaw, number, n, minT, page) => { const b = new Array(36).fill(0);
+    b[0] = number; b[2] = mode; b[3] = o2; b[4] = 0xf5; b[5] = 0xa3; b[6] = y & 255; b[7] = y >> 8; b[8] = d; b[9] = mo; b[10] = mi; b[11] = h;
+    b[12] = dur & 255; b[13] = dur >> 8; b[22] = maxRaw & 255; b[23] = maxRaw >> 8; b[24] = minT & 255; b[25] = minT >> 8; b[26] = 10;
+    b[28] = n & 255; b[29] = n >> 8; b[30] = page & 255; b[31] = page >> 8; b[32] = (page + 1) & 255; b[33] = (page + 1) >> 8; return b; };
   const smp = (t, d) => [t & 255, t >> 8, d & 255, d >> 8];
   const prof = []; for (let i = 0; i < 40; i++) { const depth = 1013 + Math.round(1800 * Math.sin((i / 39) * Math.PI)); prof.push(...smp(270 + i % 5, depth)); }
-  const dives = [{ h: hdr(2025, 3, 14, 9, 30, 42, 2, 32, 1013 + 1800), p: prof }, { h: hdr(2025, 3, 15, 8, 5, 1, 4, 0, 1013 + 1500), p: smp(260, 1013 + 1500) }];
+  const dives = [{ h: hdr(2025, 3, 14, 9, 30, 42, 2, 32, 1013 + 1800, 1, 40, 270, 0), p: prof }, { h: hdr(2025, 3, 15, 8, 5, 1, 4, 0, 1013 + 1500, 2, 1, 260, 2), p: smp(260, 1013 + 1500) }];
+  // window.__wrap: dive #3 lives at page 256 (wrapped) and physically overwrote dive #1's slot, like the real device
+  const prof3 = []; for (let i = 0; i < 20; i++) prof3.push(...smp(255 + (i % 3), 1013 + Math.round(900 * Math.sin((i / 19) * Math.PI))));
+  if (window.__wrap) dives.push({ h: hdr(2025, 3, 16, 10, 0, 7, 2, 32, 1013 + 900, 3, 20, 255, 256), p: prof3 });
+  const readProfile = (n) => { const d = dives[n - 1]; if (!window.__wrap) return d.p;
+    const page = d.h[30] | (d.h[31] << 8), len = (d.h[28] | (d.h[29] << 8)) * 4;
+    if (page >= 256) return new Array(len).fill(255);                                  // the device cannot read wrapped pages
+    if (page === 0) { const p = prof3.slice(); while (p.length < len) p.push(255); return p.slice(0, len); }   // slot 0 now holds dive #3
+    return d.p; };
   let handler = null; const out = [];
   const chunks = (str) => { for (let i = 0; i < str.length; i += 20) out.push(str.slice(i, i + 20)); };
   const flush = () => { while (out.length) { const c = enc.encode(out.shift()); handler && handler({ target: { value: new DataView(c.buffer) } }); } };
@@ -39,7 +48,7 @@ const fakeBle = () => {
     else if (cmd === 0x40) chunks(frame(0x40, [dives.length]));
     else if (cmd === 0x41) { chunks(frame(0x41, [36])); for (let i = 0; i < 36; i += 6) chunks(frame(0x42, dives[n - 1].h.slice(i, i + 6))); }
     else if (cmd === 0x43 && n === 2 && window.__stall) { /* device goes silent */ }
-    else if (cmd === 0x43) { const p = dives[n - 1].p; chunks(frame(0x43, [p.length >> 8, p.length & 255])); for (let i = 0; i < p.length; i += 6) chunks(frame(0x44, p.slice(i, i + 6))); }
+    else if (cmd === 0x43) { const p = readProfile(n); chunks(frame(0x43, [p.length >> 8, p.length & 255])); for (let i = 0; i < p.length; i += 6) chunks(frame(0x44, p.slice(i, i + 6))); }
     setTimeout(flush, 0);
   };
   const tx = { properties: { write: true }, writeValue: async (v) => { const s = new TextDecoder().decode(v); window.__tx.push(s.trim()); respond(s); } };
@@ -84,12 +93,17 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.match(await page.locator("#lastSync").innerText(), /Last sync .*Dive sync done: 2 on device, 2 new/);
       await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });   // progress banner hidden when finished
       assert.equal(await page.locator("details.dive").count(), 2);
-      await page.locator("details.dive").last().locator("summary").click();
+      // grouped by year: both dives are from 2025 -> one group, open by default (newest year)
+      assert.equal(await page.locator("details.year").count(), 1);
+      assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*2 dives[\s\S]*max \d+\.\d m/);
+      assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
+      assert.match(await page.locator("details.dive").first().innerText(), /#2/); assert.match(await page.locator("details.dive").last().innerText(), /#1/);
+      assert.match(await page.locator("#diveList > p").first().innerText(), /2 dives . 2 with full depth profile/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
       const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
       assert.ok((await tech.locator("table.hdr tr").count()) >= 15, "header map rendered");
-      assert.ok((await tech.locator("tr.unk").count()) >= 4, "undecoded byte ranges highlighted");
+      assert.ok((await tech.locator("tr.unk").count()) >= 3, "undecoded byte ranges highlighted");
       assert.match(await tech.innerText(), /no location \(GPS\) field/);
       // diagnostics file contains version, device traffic and the stored headers
       const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#diagSave")]);
@@ -142,6 +156,34 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(uploaded.length, 2); assert.equal(await page.locator("details.dive").count(), 2);
     console.log("PASS cancel + resume");
   } catch (e) { failed++; console.log("FAIL cancel + resume\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cancel.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: wrapped profile memory (what really happened on the real device) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [] } }) : r.fulfill({ json: { stored: 3 } })));
+  await page.addInitScript(() => { window.__wrap = true; }); await page.addInitScript(fakeBle);
+  await page.goto(base);
+  try {
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    assert.equal(await page.locator("details.dive").count(), 3);
+    assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
+    const row = (n) => page.locator("details.dive", { hasText: `#${n}` });
+    assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
+    assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
+    await row(3).locator("summary").click(); await page.waitForSelector("details.dive[open] svg polyline");
+    assert.match(await row(3).innerText(), /#3[\s\S]*dive number/);
+    await row(1).locator("summary").click();
+    assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
+    assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
+    console.log("PASS wrapped profile memory");
+  } catch (e) {
+    failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
+    console.log("  progress:", await page.evaluate(() => document.getElementById("diveProgress").textContent));
+    console.log("  last log:", (await page.evaluate(() => (window.__diag || []).slice(-14))).join("\n            "));
+    await page.screenshot({ path: "/tmp/fail-wrap.png", fullPage: true });
+  }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

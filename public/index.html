@@ -331,6 +331,13 @@
             table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
             table.hdr td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
             table.hdr tr.unk td { background: #fff8e1; }
+            details.year { margin-bottom: 10px; }
+            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid #dee2e6; margin-bottom: 8px; }
+            details.year > summary::-webkit-details-marker { display: none; }
+            details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
+            .dive-num { font-family: var(--mono); font-size: 12px; color: #6c757d; min-width: 34px; }
+            .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
+            p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
             #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
         </style>
@@ -707,6 +714,7 @@
                 <label class="opt"><input type="checkbox" id="optDives" /> Download new dives on every connect</label>
                 <div class="muted"><span id="cloudState"></span></div>
                 <div id="lastSync" class="muted" style="margin-top:6px"></div>
+                <div class="muted" style="margin-top:8px">Only dives you don't have yet are downloaded. <a href="#" id="diveFullBtn">Re-check every dive</a> if something seems missing.</div>
                 <div class="row" style="margin:10px 0 0">
                     <button id="diagCopy" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
                     <button id="diagSave" class="btn-set" type="button" style="background:#6c757d">Save diagnostics</button>
@@ -825,9 +833,9 @@
             const isConnected = () => !!(dev && dev.gatt && dev.gatt.connected && txChar);
             function opt(id, def) { try { const v = localStorage.getItem(id); return v === null ? def : v === "1"; } catch (e) { return def; } }
             function setOpt(id, v) { try { localStorage.setItem(id, v ? "1" : "0"); } catch (e) {} }
-            async function syncDivesNow() {
+            async function syncDivesNow(full) {
                 if (!isConnected()) return connect();
-                await Dives.syncFromDevice(diveIO);
+                await Dives.syncFromDevice(diveIO, { full: !!full });
             }
             function upd(id, val) {
                 document.getElementById(id).innerText = val;
@@ -1518,6 +1526,7 @@
                     })
                     .catch(() => {});
                 if (!navigator.bluetooth) showBtHelp();
+                document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });
                 const dmsg = (t) => { document.getElementById("diagMsg").textContent = t; };
                 document.getElementById("diagCopy").addEventListener("click", async () => dmsg(await Dives.copyDiagnostics()));
