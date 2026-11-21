@@ -859,9 +859,9 @@ if (process.env.REAL_DB) {
     await one.fill("Raja Ampat"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForFunction(() => /Location saved/.test(document.getElementById("toast").textContent));
     await page.waitForTimeout(500); assert.ok(!(await picker().isVisible()), "switched off: the map stays closed"); assert.equal(searches.length, 3, "and no search is made");
     // 4. what was skipped is still offered: the bar in the dive log and the orange buttons under the Summary map
-    await page.waitForFunction(() => /2 places are not on the map yet/.test(document.getElementById("placeBannerText").textContent), null, { timeout: 5000 });
+    await page.waitForFunction(() => /1 place is not on the map yet/.test(document.getElementById("placeBannerText").textContent), null, { timeout: 5000 });
     await page.click("#navSummary"); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
-    assert.equal(await page.locator("#mapUnplaced .chip").count(), 1, "Wakatobi was replaced by Raja Ampat on that dive, so only that one is left");
+    assert.equal(await page.locator("#mapUnplaced .chip").count(), 1, "Wakatobi was replaced by Raja Ampat on that dive, so Raja Ampat is the only place left");
     assert.deepEqual(errs, [], "page errors"); console.log("PASS location entry opens the map");
   } catch (e) { failed++; console.log("FAIL location entry opens the map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-entry.png", fullPage: true }); }
   await ctx.close();
