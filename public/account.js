@@ -3,7 +3,7 @@
 const Account = (() => {
   const $ = (id) => document.getElementById(id);
   let info = null, pw = "";
-  const msg = (t, bad) => { const el = $("accMsg"); el.textContent = t || ""; el.style.color = bad ? "#c92a2a" : "#2b8a3e"; };
+  const msg = (t, bad) => { const el = $("accMsg"); el.textContent = t || ""; el.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; };
   async function api(method, path, body) {
     const r = await fetch(path, { method, credentials: "same-origin", redirect: "error", headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(body || {}) });
     let data = {}; try { data = await r.json(); } catch (e) {}

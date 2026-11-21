@@ -4,13 +4,17 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="theme-color" content="#007bff" />
+        <meta name="color-scheme" content="light dark" />
+        <script src="/auth/theme.js"></script>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <script src="version.js"></script>
         <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
-        <link rel="apple-touch-icon" href="icon-192.png" />
-        <link rel="icon" href="icon-192.png" />
+        <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
+        <link rel="apple-touch-icon" href="apple-touch-icon.png" />
         <title>Dive Manager</title>
+        <link rel="stylesheet" href="/auth/theme.css" />
         <link rel="stylesheet" href="vendor/leaflet.css" />
         <style>
             :root {
@@ -40,12 +44,12 @@
             h1 {
                 font-size: 20px;
                 margin: 0;
-                color: #343a40;
+                color: var(--tx-343a40);
             }
             .status {
                 font-size: 12px;
                 font-weight: 600;
-                color: #adb5bd;
+                color: var(--tx-adb5bd);
                 margin-top: 5px;
             }
             .connected {
@@ -74,16 +78,16 @@
                 transform: scale(0.98);
             }
             .btn-test {
-                background: #6f42c1;
+                background: var(--bg-6f42c1);
             }
             .btn-disc {
-                background: #6c757d;
+                background: var(--bg-6c757d);
                 display: none;
             }
 
             .tabs {
                 display: flex;
-                background: white;
+                background: var(--bg-fff);
                 padding: 5px;
                 border-radius: 10px;
                 margin-bottom: 15px;
@@ -93,7 +97,7 @@
                 flex: 1;
                 padding: 10px;
                 background: none;
-                color: #6c757d;
+                color: var(--tx-6c757d);
                 border-radius: 8px;
                 font-size: 14px;
                 transition: 0.2s;
@@ -120,7 +124,7 @@
             }
 
             .card {
-                background: white;
+                background: var(--bg-fff);
                 padding: 15px;
                 border-radius: 12px;
                 margin-bottom: 12px;
@@ -130,8 +134,8 @@
                 margin: 0 0 15px 0;
                 font-size: 13px;
                 text-transform: uppercase;
-                color: #868e96;
-                border-bottom: 1px solid #eee;
+                color: var(--tx-868e96);
+                border-bottom: 1px solid var(--bd-eee);
                 padding-bottom: 8px;
             }
 
@@ -140,7 +144,7 @@
                 font-weight: 600;
                 margin-bottom: 8px;
                 display: block;
-                color: #495057;
+                color: var(--tx-495057);
             }
             .grid {
                 display: grid;
@@ -150,16 +154,16 @@
 
             .btn-opt {
                 padding: 10px;
-                background: #f1f3f5;
+                background: var(--bg-f1f3f5);
                 border-radius: 6px;
-                color: #495057;
+                color: var(--tx-495057);
                 font-size: 13px;
                 transition: 0.2s;
             }
             .btn-opt.selected {
-                background: #e3f2fd;
+                background: var(--bg-e3f2fd);
                 color: var(--blue);
-                border: 1px solid #90caf9;
+                border: 1px solid var(--bd-90caf9);
             }
 
             .synced {
@@ -167,7 +171,7 @@
             }
             @keyframes flashGreen {
                 0% {
-                    background-color: #d4edda;
+                    background-color: var(--bg-d4edda);
                 }
                 100% {
                     background-color: transparent;
@@ -187,7 +191,7 @@
                 width: 60px;
                 padding: 8px;
                 text-align: center;
-                border: 1px solid #ced4da;
+                border: 1px solid var(--bd-ced4da);
                 border-radius: 6px;
                 font-weight: bold;
                 color: var(--blue);
@@ -207,41 +211,41 @@
             }
 
             .warning-box {
-                background: #fff3cd;
-                color: #856404;
+                background: var(--bg-fff3cd);
+                color: var(--tx-856404);
                 padding: 10px;
                 border-radius: 6px;
                 font-size: 11px;
                 margin-top: 10px;
-                border: 1px solid #ffeeba;
+                border: 1px solid var(--bd-ffeeba);
                 display: none;
             }
 
             #log {
                 font-family: var(--mono);
                 font-size: 10px;
-                color: #aaa;
+                color: var(--tx-aaa);
                 margin-top: 20px;
                 text-align: left;
                 height: 150px;
                 overflow-y: scroll;
                 padding: 10px;
                 border-radius: 8px;
-                background: #212529;
+                background: var(--bg-212529);
                 white-space: pre-wrap;
             }
             .log-tx {
-                color: #4dabf7;
+                color: var(--tx-4dabf7);
             }
             .log-rx {
-                color: #2ecc71;
+                color: var(--tx-2ecc71);
             }
             .log-err {
-                color: #ff6b6b;
+                color: var(--tx-ff6b6b);
                 font-weight: bold;
             }
             .log-info {
-                color: #ffd700;
+                color: var(--tx-ffd700);
                 font-weight: bold;
             }
 
@@ -255,20 +259,20 @@
             .byte-table td,
             .byte-table th {
                 padding: 6px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid var(--bd-eee);
             }
             .byte-cell {
                 display: inline-block;
                 padding: 2px 4px;
-                background: #f1f3f5;
+                background: var(--bg-f1f3f5);
                 border-radius: 4px;
                 margin-right: 2px;
-                color: #d63384;
+                color: var(--tx-d63384);
                 font-weight: bold;
             }
             .byte-idx {
                 font-size: 9px;
-                color: #adb5bd;
+                color: var(--tx-adb5bd);
                 display: block;
                 text-align: center;
                 margin-bottom: 2px;
@@ -280,7 +284,7 @@
             }
             .bit {
                 flex: 1;
-                background: #eee;
+                background: var(--bg-eee);
                 text-align: center;
                 font-size: 10px;
                 padding: 4px 0;
@@ -302,144 +306,150 @@
             .tabs::-webkit-scrollbar { display: none; }
             .tab { flex: 0 0 auto; padding: 10px 14px; }
             .nav { display: flex; gap: 6px; margin-bottom: 15px; }
-            .nav button { flex: 1; background: #e9ecef; color: #495057; border-radius: 10px; font-size: 15px; }
-            .nav button.active { background: #343a40; color: #fff; }
-            .banner { background: #fff3cd; color: #664d03; border: 1px solid #ffeeba; border-radius: 10px; padding: 12px; font-size: 13px; margin-bottom: 12px; display: none; }
+            .nav button { flex: 1; background: var(--bg-e9ecef); color: var(--tx-495057); border-radius: 10px; font-size: 15px; }
+            .nav button.active { background: var(--bg-343a40); color: var(--tx-fff); }
+            .banner { background: var(--bg-fff3cd); color: var(--tx-664d03); border: 1px solid var(--bd-ffeeba); border-radius: 10px; padding: 12px; font-size: 13px; margin-bottom: 12px; display: none; }
             .banner.show { display: block; }
-            .muted { color: #6c757d; font-size: 12px; }
+            .muted { color: var(--tx-6c757d); font-size: 12px; }
             .btn-main:disabled { opacity: .5; }
-            .bar { height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
+            .bar { height: 6px; background: var(--bg-e9ecef); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
             #diveBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
-            details.dive { background: #fff; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.05); }
+            details.dive { background: var(--bg-fff); border-radius: 12px; margin-bottom: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.05); }
             details.dive summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 12px; min-height: 44px; cursor: pointer; flex-wrap: wrap; }
             details.dive summary::-webkit-details-marker { display: none; }
             .dive-date { font-weight: 600; font-size: 14px; }
-            .dive-meta { margin-left: auto; font-family: var(--mono); font-size: 13px; color: #495057; }
-            .dive-mode { font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; background: #e3f2fd; color: #0b5ed7; }
-            .dive-mode.m-freedive { background: #e0f7f4; color: #0f766e; }
-            .dive-mode.m-gauge { background: #f1f3f5; color: #495057; }
+            .dive-meta { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--tx-495057); }
+            .dive-mode { font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; background: var(--bg-e3f2fd); color: var(--tx-0b5ed7); }
+            .dive-mode.m-freedive { background: var(--bg-e0f7f4); color: var(--tx-0f766e); }
+            .dive-mode.m-gauge { background: var(--bg-f1f3f5); color: var(--tx-495057); }
             .dive-body { padding: 0 12px 12px; }
             .dive-body svg { width: 100%; height: auto; }
             .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-top: 8px; }
-            .stats b { display: block; font-size: 15px; } .stats span { font-size: 11px; color: #6c757d; }
+            .stats b { display: block; font-size: 15px; } .stats span { font-size: 11px; color: var(--tx-6c757d); }
             .opt { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
             .opt input { width: 22px; height: 22px; min-height: 0; }
-            details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: #6c757d; min-height: 44px; display: flex; align-items: center; }
+            details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: var(--tx-6c757d); min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
             .nav { gap: 4px; } .nav button { flex: 1 1 auto; padding: 0 8px; font-size: 13px; white-space: nowrap; min-width: 0; }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
-            .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; margin-bottom: 6px; }
+            .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
             .sum-big { font-size: 28px; font-weight: 700; line-height: 1.15; margin-bottom: 4px; }
             #locPrompt { border: 2px solid var(--blue); } #locPrompt h3 { border: 0; padding: 0; margin: 0 0 4px; font-size: 16px; text-transform: none; color: var(--text); }
             .locask label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-            .locask input, .dh-edit input, .loc1 input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            .locask input, .dh-edit input, .loc1 input { flex: 1; min-width: 0; padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; box-sizing: border-box; }
             #locList { display: none; }
             .datehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 2px 6px; flex-wrap: wrap; }
-            .dh-date { font-size: 13px; font-weight: 700; color: #495057; }
-            .dh-loc { background: #e7f5ff; color: #1864ab; border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .dh-loc.empty { background: #f1f3f5; color: #868e96; font-weight: 500; }
+            .dh-date { font-size: 13px; font-weight: 700; color: var(--tx-495057); }
+            .dh-loc { background: var(--bg-e7f5ff); color: var(--tx-1864ab); border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .dh-loc.empty { background: var(--bg-f1f3f5); color: var(--tx-868e96); font-weight: 500; }
             .dh-edit { display: flex; gap: 6px; flex: 1; justify-content: flex-end; }
             .loc1 { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
             header { position: relative; } #signOut { box-sizing: border-box; }
-            .avatar { width: 40px; height: 40px; border-radius: 50%; padding: 0; overflow: hidden; background: #dee2e6; color: #868e96; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; }
-            header .avatar { position: absolute; right: 0; top: 0; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+            .avatar { width: 40px; height: 40px; border-radius: 50%; padding: 0; overflow: hidden; background: var(--bg-dee2e6); color: var(--tx-868e96); display: inline-flex; align-items: center; justify-content: center; min-height: 40px; }
+            header .avatar { position: absolute; right: 0; top: 0; border: 2px solid var(--bd-fff); box-shadow: 0 1px 4px rgba(0,0,0,.2); }
             header .avatar.active { box-shadow: 0 0 0 2px var(--blue); }
             .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; } .avatar img[hidden] { display: none; }
             .avatar.big { width: 80px; height: 80px; flex: none; min-height: 80px; cursor: default; }
             .prof { display: flex; gap: 14px; align-items: center; } .prof-side { flex: 1; min-width: 0; word-break: break-all; }
             details.acc { padding: 0; } details.acc > summary { list-style: none; cursor: pointer; padding: 16px; min-height: 44px; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
             details.acc > summary::-webkit-details-marker { display: none; }
-            details.acc > summary::after { content: "\25B8"; margin-left: auto; color: #868e96; } details.acc[open] > summary::after { content: "\25BE"; }
+            details.acc > summary::after { content: "\25B8"; margin-left: auto; color: var(--tx-868e96); } details.acc[open] > summary::after { content: "\25BE"; }
             .acc-body { padding: 0 16px 16px; }
-            .subcard { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 12px; margin-top: 12px; } .subcard h4 { margin: 0 0 8px; font-size: 14px; }
-            .fld { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; margin-bottom: 8px; min-height: 44px; }
+            .subcard { background: var(--bg-f8f9fa); border: 1px solid var(--bd-e9ecef); border-radius: 10px; padding: 12px; margin-top: 12px; } .subcard h4 { margin: 0 0 8px; font-size: 14px; }
+            .fld { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; margin-bottom: 8px; min-height: 44px; }
             .row.wrap { flex-wrap: wrap; } .msg { font-size: 13px; margin: 8px 0; min-height: 0; }
             .filebtn { display: inline-flex; align-items: center; cursor: pointer; }
-            .cert { border: 1px solid #e9ecef; border-radius: 10px; padding: 10px; margin-bottom: 8px; } .cert .cert-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-            .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid #dee2e6; }
-            .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: #495057; line-height: 1.45; } ul.help li { margin-bottom: 6px; }
+            .cert { border: 1px solid var(--bd-e9ecef); border-radius: 10px; padding: 10px; margin-bottom: 8px; } .cert .cert-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+            .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--bd-dee2e6); }
+            .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: var(--tx-495057); line-height: 1.45; } ul.help li { margin-bottom: 6px; }
             .reg-title { font-size: 15px; } .reg-count { font-size: 30px; font-weight: 700; margin: 2px 0; }
-            .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #2b8a3e; color: #fff; }
-            .regbadge.orange { background: #e67700; } .regbadge.red { background: #c92a2a; }
+            .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: var(--bg-2b8a3e); color: var(--tx-fff); }
+            .regbadge.orange { background: var(--bg-e67700); } .regbadge.red { background: var(--bg-c92a2a); }
             .regbar { position: relative; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; margin: 10px 0 6px; overflow: visible; }
-            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: #2b8a3e; width: 0; transition: width .3s; }
+            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: var(--bg-2b8a3e); width: 0; transition: width .3s; }
             .regbar i { position: absolute; left: 77.78%; top: -3px; width: 2px; height: 14px; background: rgba(0,0,0,.35); }
             .reg-msg { font-size: 13px; font-weight: 600; }
-            .sum.reg-ok { border-left: 5px solid #2b8a3e; } .sum.reg-ok .reg-msg { color: #2b8a3e; }
-            .sum.reg-orange { border-left: 5px solid #e67700; background: #fff4e6; } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: #d9480f; } .sum.reg-orange #sumRegBar { background: #e67700; }
-            .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
+            .sum.reg-ok { border-left: 5px solid var(--bd-2b8a3e); } .sum.reg-ok .reg-msg { color: var(--tx-2b8a3e); }
+            .sum.reg-orange { border-left: 5px solid var(--bd-e67700); background: var(--bg-fff4e6); } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: var(--tx-d9480f); } .sum.reg-orange #sumRegBar { background: var(--bg-e67700); }
+            .sum.reg-red { border-left: 5px solid var(--bd-c92a2a); background: var(--bg-fff5f5); } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: var(--tx-c92a2a); } .sum.reg-red #sumRegBar { background: var(--bg-c92a2a); }
             .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
-            .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: #f8f9fa; }
-            .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
+            .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: var(--bg-f8f9fa); }
+            .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; }
             .diver-val { font-size: 16px; font-weight: 600; word-break: break-word; } .dan-valid { font-size: 13px; font-weight: 600; margin-top: 2px; }
-            .diver-row.dan-ok { background: #ebfbee; border-left: 4px solid #2b8a3e; } .dan-ok .dan-valid { color: #2b8a3e; }
-            .diver-row.dan-soon { background: #fff4e6; border-left: 4px solid #e67700; } .dan-soon .dan-valid, .dan-soon .diver-val { color: #d9480f; }
-            .diver-row.dan-expired { background: #fff5f5; border-left: 4px solid #c92a2a; } .dan-expired .dan-valid, .dan-expired .diver-val { color: #c92a2a; }
-            .regbadge.expired { background: #c92a2a; } .regbadge.soon { background: #e67700; }
-            .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed #ced4da; flex-wrap: wrap; }
-            .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: #1864ab; font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
-            .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; }
+            .diver-row.dan-ok { background: var(--bg-ebfbee); border-left: 4px solid var(--bd-2b8a3e); } .dan-ok .dan-valid { color: var(--tx-2b8a3e); }
+            .diver-row.dan-soon { background: var(--bg-fff4e6); border-left: 4px solid var(--bd-e67700); } .dan-soon .dan-valid, .dan-soon .diver-val { color: var(--tx-d9480f); }
+            .diver-row.dan-expired { background: var(--bg-fff5f5); border-left: 4px solid var(--bd-c92a2a); } .dan-expired .dan-valid, .dan-expired .diver-val { color: var(--tx-c92a2a); }
+            .regbadge.expired { background: var(--bg-c92a2a); } .regbadge.soon { background: var(--bg-e67700); }
+            .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed var(--bd-ced4da); flex-wrap: wrap; }
+            .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
+            .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; }
             .mh-edit .chk { font-size: 13px; display: flex; gap: 8px; align-items: center; min-height: 36px; } .mh-edit .chk input { width: 20px; height: 20px; min-height: 0; }
-            .monthask { background: #f1f3f5; border-radius: 8px; padding: 10px; margin: 8px 0 12px; } .monthask label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+            .monthask { background: var(--bg-f1f3f5); border-radius: 8px; padding: 10px; margin: 8px 0 12px; } .monthask label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
             #bannerBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
-            #syncBanner { border: 1px solid #b2dfdb; }
-            details.tech { margin-top: 10px; } details.tech summary { cursor: pointer; font-size: 13px; color: #495057; min-height: 36px; display: flex; align-items: center; }
+            #syncBanner { border: 1px solid var(--bd-b2dfdb); }
+            details.tech { margin-top: 10px; } details.tech summary { cursor: pointer; font-size: 13px; color: var(--tx-495057); min-height: 36px; display: flex; align-items: center; }
             table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
-            table.hdr td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
-            table.hdr tr.unk td { background: #fff8e1; }
+            table.hdr td { padding: 3px 6px; border-bottom: 1px solid var(--bd-eee); vertical-align: top; }
+            table.hdr tr.unk td { background: var(--bg-fff8e1); }
             details.year { margin-bottom: 10px; }
-            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid #dee2e6; margin-bottom: 8px; }
+            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid var(--bd-dee2e6); margin-bottom: 8px; }
             details.year > summary::-webkit-details-marker { display: none; }
             details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
-            .dive-num, .numtile { display: inline-block; box-sizing: border-box; min-width: 30px; padding: 2px 7px; border: 1px solid #ced4da; border-radius: 6px; background: #f1f3f5; color: #212529; font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1.3; text-align: center; }
+            .dive-num, .numtile { display: inline-block; box-sizing: border-box; min-width: 30px; padding: 2px 7px; border: 1px solid var(--bd-ced4da); border-radius: 6px; background: var(--bg-f1f3f5); color: var(--tx-212529); font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1.3; text-align: center; }
             .stats b.numtile { display: block; width: max-content; margin: 0 auto 2px; font-size: 14px; }
             #devTabs { display: flex; gap: 6px; margin-bottom: 12px; }
-            #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
-            #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
-            .badge.also { background: #e7f5ff; color: #1864ab; text-transform: none; }
-            .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: #dbe9f3; margin: 8px 0; }
+            #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: var(--bg-e9ecef); color: var(--tx-495057); font-size: 13px; font-weight: 600; line-height: 1.2; }
+            #devTabs button.active { background: var(--bg-343a40); color: var(--tx-fff); } #devTabs button.active .muted { color: var(--tx-ced4da); }
+            .badge.also { background: var(--bg-e7f5ff); color: var(--tx-1864ab); text-transform: none; }
+            .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: var(--bg-dbe9f3); margin: 8px 0; }
             .mapbox.tall { height: 300px; flex: 0 0 auto; }
-            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: #495057; margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
-            .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid #ffe08a; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #6b5200; }
+            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: var(--tx-495057); margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
+            .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid var(--bd-ffe08a); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--tx-6b5200); }
             #mapUnplaced { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-            .chip { background: #fff4e6; color: #d9480f; border: 1px solid #ffd8a8; border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
-            .place-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee; flex-wrap: wrap; font-size: 14px; }
+            .chip { background: var(--bg-fff4e6); color: var(--tx-d9480f); border: 1px solid var(--bd-ffd8a8); border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
+            .place-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--bd-eee); flex-wrap: wrap; font-size: 14px; }
             #placeBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
-            #placePicker { position: fixed; inset: 0; z-index: 55; background: #fff; overflow-y: auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; max-width: 640px; margin: 0 auto; }
+            #placePicker { position: fixed; inset: 0; z-index: 55; background: var(--bg-fff); overflow-y: auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; max-width: 640px; margin: 0 auto; }
             #placePicker[hidden] { display: none; }
             body.pp-open { overflow: hidden; }
             .pp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; } .pp-head b { font-size: 17px; }
-            .pp-search { display: flex; gap: 6px; } .pp-search input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            .pp-search { display: flex; gap: 6px; } .pp-search input { flex: 1; min-width: 0; padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; box-sizing: border-box; }
             #ppResults { max-height: 190px; overflow-y: auto; margin-top: 6px; }
-            .res { display: block; width: 100%; text-align: left; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; min-height: 44px; font-size: 14px; color: #212529; }
+            .res { display: block; width: 100%; text-align: left; background: var(--bg-f8f9fa); border: 1px solid var(--bd-e9ecef); border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; min-height: 44px; font-size: 14px; color: var(--tx-212529); }
             .res b { display: block; } .res span { display: block; font-size: 12px; }
             .leaflet-container { font: inherit; }
-            #locSuggest { position: fixed; z-index: 75; background: #fff; border: 1px solid #ced4da; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2); max-height: 280px; overflow-y: auto; box-sizing: border-box; }
+            #locSuggest { position: fixed; z-index: 75; background: var(--bg-fff); border: 1px solid var(--bd-ced4da); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2); max-height: 280px; overflow-y: auto; box-sizing: border-box; }
             #locSuggest[hidden] { display: none; }
-            #locSuggest .sg { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #f1f3f5; padding: 9px 12px; min-height: 44px; font-size: 14px; color: #212529; }
-            #locSuggest .sg b { display: block; } #locSuggest .sg .muted { display: block; font-size: 12px; } #locSuggest .sg:hover, #locSuggest .sg.hi { background: #e7f5ff; }
-            #locSuggest .sg-note { padding: 8px 12px; font-size: 12px; color: #c92a2a; }
-            #locSuggest .sg-foot { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; font-size: 11px; color: #868e96; background: #f8f9fa; } #locSuggest .sg-off { background: none; color: #1971c2; font-size: 11px; min-height: 28px; padding: 0 4px; }
-            input.onmap { border-color: #2b8a3e !important; box-shadow: 0 0 0 2px rgba(43,138,62,.18); }
+            #locSuggest .sg { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--bd-f1f3f5); padding: 9px 12px; min-height: 44px; font-size: 14px; color: var(--tx-212529); }
+            #locSuggest .sg b { display: block; } #locSuggest .sg .muted { display: block; font-size: 12px; } #locSuggest .sg:hover, #locSuggest .sg.hi { background: var(--bg-e7f5ff); }
+            #locSuggest .sg-note { padding: 8px 12px; font-size: 12px; color: var(--tx-c92a2a); }
+            #locSuggest .sg-foot { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; font-size: 11px; color: var(--tx-868e96); background: var(--bg-f8f9fa); } #locSuggest .sg-off { background: none; color: var(--tx-1971c2); font-size: 11px; min-height: 28px; padding: 0 4px; }
+            input.onmap { border-color: var(--bd-2b8a3e) !important; box-shadow: 0 0 0 2px rgba(43,138,62,.18); }
+            .theme-slot { position: absolute; left: 0; top: 4px; line-height: 0; }
+            .brand { margin: 0; line-height: 0; text-align: center; } .brand .logo { height: auto; max-width: 100%; display: inline-block; vertical-align: top; } .brand .logo-dark { display: none; }
+            html[data-theme="dark"] .brand .logo-light { display: none; } html[data-theme="dark"] .brand .logo-dark { display: inline-block; }
+
             .chart { display: block; }
-            #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed #74c0fc; border-radius: 14px; background: #f3faff; color: #1864ab; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
-            #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: #495057; }
-            #dropZone:hover, #dropZone:focus-visible { background: #e7f5ff; border-color: #339af0; outline: none; }
-            #importCard.dropping #dropZone { background: #d0ebff; border-color: #1c7ed6; border-style: solid; transform: scale(1.01); }
-            .cert.latest { border-color: #2b8a3e; } .latest-tag { font-size: 11px; font-weight: 700; color: #2b8a3e; background: #ebfbee; border-radius: 10px; padding: 2px 8px; }
-            .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
-            p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
+            .chart .g-axis { stroke: var(--bd-adb5bd); } .chart .g-grid { stroke: var(--bd-dee2e6); } .chart .g-grid2 { stroke: var(--bd-e9ecef); } .chart .g-lbl { fill: var(--tx-6c757d); } .chart .g-gap { fill: var(--tx-adb5bd); }
+
+            #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed var(--bd-74c0fc); border-radius: 14px; background: var(--bg-f3faff); color: var(--tx-1864ab); text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
+            #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: var(--tx-495057); }
+            #dropZone:hover, #dropZone:focus-visible { background: var(--bg-e7f5ff); border-color: var(--bd-339af0); outline: none; }
+            #importCard.dropping #dropZone { background: var(--bg-d0ebff); border-color: var(--bd-1c7ed6); border-style: solid; transform: scale(1.01); }
+            .cert.latest { border-color: var(--bd-2b8a3e); } .latest-tag { font-size: 11px; font-weight: 700; color: var(--tx-2b8a3e); background: var(--bg-ebfbee); border-radius: 10px; padding: 2px 8px; }
+            .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: var(--bg-fff3cd); color: var(--tx-856404); }
+            p.note { background: var(--bg-fff8e1); border: 1px solid var(--bd-ffe08a); color: var(--tx-6b5200); border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
             #toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none;
-                     max-width: min(92vw, 420px); padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; color: #fff; background: #343a40;
+                     max-width: min(92vw, 420px); padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; color: var(--tx-fff); background: var(--bg-343a40);
                      box-shadow: 0 6px 20px rgba(0,0,0,.28); transition: opacity .2s, transform .2s; z-index: 60; display: flex; gap: 10px; align-items: center; }
             #toast.show { opacity: 1; transform: translate(-50%, 0); }
-            #toast.ok { background: #2b8a3e; } #toast.warn { background: #e67700; } #toast.err { background: #c92a2a; }
-            #toast .spin { flex: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+            #toast.ok { background: var(--bg-2b8a3e); } #toast.warn { background: var(--bg-e67700); } #toast.err { background: var(--bg-c92a2a); }
+            #toast .spin { flex: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: var(--bd-fff); border-radius: 50%; animation: spin .8s linear infinite; }
             @keyframes spin { to { transform: rotate(360deg); } }
             .btn-opt.applied { animation: appliedFlash 1.2s ease-out; }
-            @keyframes appliedFlash { 0% { box-shadow: 0 0 0 0 rgba(43,138,62,.7); background: #d3f9d8; } 100% { box-shadow: 0 0 0 10px rgba(43,138,62,0); } }
+            @keyframes appliedFlash { 0% { box-shadow: 0 0 0 0 rgba(43,138,62,.7); background: var(--bg-d3f9d8); } 100% { box-shadow: 0 0 0 10px rgba(43,138,62,0); } }
             @media (prefers-reduced-motion: reduce) { #toast, .btn-opt.applied, #toast .spin { animation: none; transition: none; } }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
             #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
@@ -447,7 +457,8 @@
     </head>
     <body>
         <header>
-            <h1>Dive Manager</h1>
+            <div class="theme-slot" data-theme-switch></div>
+            <h1 class="brand"><img class="logo logo-light" src="/auth/logo-light.png" alt="Dive Manager" width="176" height="78"><img class="logo logo-dark" src="/auth/logo-dark.png" alt="Dive Manager" width="176" height="78" loading="lazy"></h1>
             <div id="status" class="status">Disconnected</div>
             <button id="acctBtn" class="avatar" type="button" aria-label="Account" onclick="showView('account')"><img id="acctImg" alt="" hidden /><span id="acctIcon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></button>
         </header>
@@ -469,7 +480,7 @@
             <div style="font-weight:600;font-size:13px;margin-bottom:4px">Syncing dive log</div>
             <div id="bannerText" class="muted">Starting&hellip;</div>
             <div class="bar"><div id="bannerBar"></div></div>
-            <button id="cancelSync" class="btn-set" type="button" style="background:#6c757d;margin-top:6px">Cancel</button>
+            <button id="cancelSync" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:6px">Cancel</button>
         </div>
 
         <div class="nav">
@@ -558,7 +569,7 @@
                     <div style="margin-top: 15px"></div>
                     <span class="label">System Time</span>
                     <div class="row">
-                        <span style="flex: 1; font-size: 12px; color: #666"
+                        <span style="flex: 1; font-size: 12px; color: var(--tx-666)"
                             >Sync device clock to browser time</span
                         >
                         <button class="btn-set" onclick="setSystemTime()">
@@ -607,8 +618,8 @@
                                 flex: 1;
                                 padding: 8px;
                                 border-radius: 6px;
-                                background: #fff;
-                                border: 1px solid #ced4da;
+                                background: var(--bg-fff);
+                                border: 1px solid var(--bd-ced4da);
                             "
                         >
                             <option value="5">5 s</option>
@@ -626,7 +637,7 @@
                     <div
                         style="
                             font-size: 11px;
-                            color: #666;
+                            color: var(--tx-666);
                             margin-top: -10px;
                             margin-bottom: 15px;
                             font-style: italic;
@@ -815,7 +826,7 @@
                     <p
                         style="
                             font-size: 12px;
-                            color: #666;
+                            color: var(--tx-666);
                             margin-bottom: 15px;
                         "
                     >
@@ -824,7 +835,7 @@
                     <button
                         class="btn-main"
                         onclick="readAllSettings()"
-                        style="background: #6f42c1; margin-bottom: 15px"
+                        style="background: var(--bg-6f42c1); margin-bottom: 15px"
                     >
                         Refetch All
                     </button>
@@ -834,7 +845,7 @@
                             style="
                                 text-align: center;
                                 padding: 20px;
-                                color: #aaa;
+                                color: var(--tx-aaa);
                             "
                         >
                             No data received yet...
@@ -857,7 +868,7 @@
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
                 <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
-                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:#495057">
+                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
                     <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
                     <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
                     <li>Drag the file into the box below (or tap the box to choose it). A <b>UDDF</b> export works too.</li>
@@ -872,10 +883,10 @@
                 <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
                 <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
                     <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
-                    <button id="pgBtn" class="btn-main" type="button" style="background:#6c757d">Download dives over Bluetooth</button>
+                    <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
                     <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
                     <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
-                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Cancel</button>
+                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
                 </details>
             </div>
             <div id="syncCard" class="card">
@@ -889,8 +900,8 @@
                 <div id="lastSync" class="muted" style="margin-top:6px"></div>
                 <div class="muted" style="margin-top:8px">Only dives you don't have yet are downloaded. <a href="#" id="diveFullBtn">Re-check every dive</a> if something seems missing.</div>
                 <div class="row" style="margin:10px 0 0">
-                    <button id="diagCopy" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
-                    <button id="diagSave" class="btn-set" type="button" style="background:#6c757d">Save diagnostics</button>
+                    <button id="diagCopy" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy diagnostics</button>
+                    <button id="diagSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save diagnostics</button>
                 </div>
                 <div id="diagMsg" class="muted"></div>
             </div>
@@ -908,7 +919,7 @@
                             <div id="who" class="muted"></div>
                             <div class="row" style="margin:8px 0 0">
                                 <label class="btn-set filebtn" tabindex="0">Upload picture<input id="avatarFile" type="file" accept="image/*" hidden /></label>
-                                <button id="avatarRemove" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                                <button id="avatarRemove" class="btn-set" type="button" style="background:var(--bg-6c757d);display:none">Remove</button>
                             </div>
                         </div>
                     </div>
@@ -931,7 +942,7 @@
                     <div id="accBtns" class="row wrap" style="margin-bottom:0">
                         <button id="accChangeBtn" class="btn-set" type="button" style="display:none">Change password</button>
                         <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
-                        <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                        <button id="accRemoveBtn" class="btn-set" type="button" style="background:var(--bg-6c757d);display:none">Remove</button>
                     </div>
                     <div id="accChange" class="subcard" style="display:none">
                         <h4>Change password</h4>
@@ -944,7 +955,7 @@
                         <input id="pwCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" class="fld" />
                         <div class="row wrap" style="margin:0">
                             <button id="pwChangeGo" class="btn-set" type="button">Change password</button>
-                            <button id="pwChangeCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                            <button id="pwChangeCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
                         </div>
                         <div class="muted" style="margin-top:6px">Your authenticator stays the same: no new QR code.</div>
                     </div>
@@ -952,11 +963,11 @@
                 <h4>Email login setup</h4>
                 <div id="accStep1">
                     <span class="label">Choose a password (12+ characters)</span>
-                    <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
-                    <input id="accPw2" type="password" autocomplete="new-password" placeholder="Repeat password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--bd-ced4da);border-radius:6px" />
+                    <input id="accPw2" type="password" autocomplete="new-password" placeholder="Repeat password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--bd-ced4da);border-radius:6px" />
                     <div id="accCurWrap" style="display:none">
                         <span class="label">Current authenticator code (to confirm the change)</span>
-                        <input id="accCur" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                        <input id="accCur" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--bd-ced4da);border-radius:6px" />
                     </div>
                     <button id="accNext" class="btn-main" type="button">Continue</button>
                 </div>
@@ -965,15 +976,15 @@
                     <div id="accQr" style="max-width:240px;margin:0 auto 8px"></div>
                     <div class="muted" style="text-align:center;margin-bottom:10px">Can't scan? Choose "Enter a setup key" and type:<br /><code id="accSecret" style="user-select:all;word-break:break-all"></code></div>
                     <span class="label">Enter the 6-digit code it shows</span>
-                    <input id="accCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <input id="accCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--bd-ced4da);border-radius:6px" />
                     <button id="accFinish" class="btn-main" type="button">Turn on email login</button>
                 </div>
                 <div id="accRemove" style="display:none">
                     <span class="label">Authenticator code to confirm removal</span>
-                    <input id="accRmCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
-                    <button id="accRmGo" class="btn-main" type="button" style="background:#dc3545">Remove email login</button>
+                    <input id="accRmCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--bd-ced4da);border-radius:6px" />
+                    <button id="accRmGo" class="btn-main" type="button" style="background:var(--bg-dc3545)">Remove email login</button>
                 </div>
-                <button id="accCancel" class="btn-set" type="button" style="background:#6c757d;margin-top:4px">Cancel</button>
+                <button id="accCancel" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:4px">Cancel</button>
             </div>
 
                 </div>
@@ -985,7 +996,7 @@
                     <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
                     <div id="certList"></div>
                     <p id="certLatestHint" class="muted" style="margin:8px 0 0"></p>
-                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Use the newest by date instead</button>
+                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Use the newest by date instead</button>
                     <div class="subcard" style="margin-top:10px">
                         <h4>Add a certification</h4>
                         <label class="label" for="certLabel">Name</label>
@@ -1016,7 +1027,7 @@
                         <datalist id="danPlans"><option value="DAN Basic"><option value="DAN Preferred"><option value="DAN Master"><option value="DAN Master Plus"><option value="DAN Professional"><option value="DAN Europe Diver"><option value="DAN Asia-Pacific"></datalist>
                         <label class="label" for="danValid">Valid until</label>
                         <input id="danValid" class="fld" type="date" />
-                        <div class="row wrap" style="margin:0"><button id="danSave" class="btn-set" type="button">Save DAN details</button><button id="danClear" class="btn-set" type="button" style="background:#6c757d">Remove</button></div>
+                        <div class="row wrap" style="margin:0"><button id="danSave" class="btn-set" type="button">Save DAN details</button><button id="danClear" class="btn-set" type="button" style="background:var(--bg-6c757d)">Remove</button></div>
                         <div id="danState" class="msg" role="status"></div>
                     </div>
                     <h4 style="margin:16px 0 8px;font-size:14px">Insurance documents</h4>
@@ -1046,8 +1057,8 @@
                         <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span></div>
                         <div class="row wrap" style="margin:8px 0 0">
                             <button id="regReset" class="btn-set" type="button">Reset to 0</button>
-                            <button id="regEdit" class="btn-set" type="button" style="background:#6c757d">Edit</button>
-                            <button id="regRemove" class="btn-set" type="button" style="background:#6c757d">Remove</button>
+                            <button id="regEdit" class="btn-set" type="button" style="background:var(--bg-6c757d)">Edit</button>
+                            <button id="regRemove" class="btn-set" type="button" style="background:var(--bg-6c757d)">Remove</button>
                         </div>
                     </div>
                     <div id="regForm" class="subcard" style="display:none">
@@ -1058,10 +1069,10 @@
                         <datalist id="regTypes"><option value="Balanced piston"><option value="Unbalanced piston"><option value="Balanced diaphragm"><option value="Unbalanced diaphragm"><option value="Other"></datalist>
                         <label class="label" for="regBase">Dives already on it</label>
                         <div class="row" style="margin-bottom:6px"><input id="regBase" class="fld" type="number" min="0" max="99999" value="0" inputmode="numeric" style="margin:0" />
-                            <button id="regUseLogged" class="btn-set" type="button" style="background:#6c757d;white-space:nowrap">Use my logged dives</button></div>
+                            <button id="regUseLogged" class="btn-set" type="button" style="background:var(--bg-6c757d);white-space:nowrap">Use my logged dives</button></div>
                         <div class="row wrap" style="margin:0">
                             <button id="regSave" class="btn-set" type="button">Save regulator</button>
-                            <button id="regCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                            <button id="regCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
                         </div>
                     </div>
                     <button id="regAdd" class="btn-set" type="button" style="display:none">Add my regulator</button>
@@ -1076,7 +1087,7 @@
                     <div id="serverVer" class="muted"></div>
                     <div class="row wrap" style="margin:10px 0">
                         <button id="updateBtn" class="btn-set" type="button">Check for update</button>
-                        <button id="helpDiag" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
+                        <button id="helpDiag" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy diagnostics</button>
                     </div>
                     <div id="helpMsg" class="msg" role="status"></div>
                     <ul class="help">
@@ -1088,16 +1099,16 @@
                 </div>
             </details>
 
-            <a id="signOut" class="btn-main" href="/auth/logout" style="background:#6c757d;text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
+            <a id="signOut" class="btn-main" href="/auth/logout" style="background:var(--bg-6c757d);text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
         <div id="placePicker" role="dialog" aria-modal="true" aria-labelledby="ppTitle" hidden>
-            <div class="pp-head"><b id="ppTitle">Where is it?</b><button id="ppClose" class="btn-set" type="button" style="background:#6c757d" aria-label="Close">&#10005;</button></div>
+            <div class="pp-head"><b id="ppTitle">Where is it?</b><button id="ppClose" class="btn-set" type="button" style="background:var(--bg-6c757d)" aria-label="Close">&#10005;</button></div>
             <div class="pp-search"><input id="ppQuery" type="search" placeholder="Search a place, e.g. Tulamben" maxlength="80" autocomplete="off" aria-label="Search for a place" /><button id="ppGo" class="btn-set" type="button">Search</button></div>
             <div id="ppResults"></div>
             <div id="ppMap" class="mapbox tall"></div>
             <div id="ppHint" class="muted"></div><div id="ppCoords" class="muted" style="font-family:var(--mono)"></div>
-            <div class="row" style="margin-top:10px"><button id="ppSave" class="btn-main" type="button" disabled>Save pin</button><button id="ppSkip" class="btn-set" type="button" style="background:#6c757d">Cancel</button><button id="ppSkipAll" class="btn-set" type="button" style="background:#6c757d;display:none">Skip all</button></div>
+            <div class="row" style="margin-top:10px"><button id="ppSave" class="btn-main" type="button" disabled>Save pin</button><button id="ppSkip" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button><button id="ppSkipAll" class="btn-set" type="button" style="background:var(--bg-6c757d);display:none">Skip all</button></div>
             <label class="opt" style="min-height:36px;margin-top:6px"><input type="checkbox" id="ppAuto" checked /> Open the map when I enter a new location</label>
             <p class="muted" style="margin-top:10px">Map and search: &copy; OpenStreetMap contributors. Only the place name you search for is sent to OpenStreetMap.</p>
         </div>

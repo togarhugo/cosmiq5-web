@@ -207,3 +207,28 @@ test("Places.suggest: parses Photon results, drops junk and duplicates, needs 3 
   const first = P.suggest("bunak1"), second = P.suggest("bunak2"); await assert.rejects(first, /aborted/); await second; assert.equal(aborted, 1, "a newer request cancels the older one");
   delete globalThis.fetch;
 });
+
+test("app icons: a diver-down flag in every size, linked from the app and the sign-in pages", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url);
+  const png = (f) => { const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], f + " is a PNG"); return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }; };
+  assert.deepEqual(png("icon-192.png"), { w: 192, h: 192 }); assert.deepEqual(png("icon-512.png"), { w: 512, h: 512 }); assert.deepEqual(png("apple-touch-icon.png"), { w: 180, h: 180 });
+  for (const f of ["favicon.svg", "auth/favicon.svg"]) { const s = fs.readFileSync(new URL(f, root), "utf8"); assert.match(s, /^<svg [^>]*viewBox="0 0 64 64"/); assert.match(s, /#d94b3c/); assert.match(s, /<polygon[^>]*fill="#fff"/); assert.ok(!/<script|onload|href=/i.test(s), "no active content in the icon"); }
+  assert.deepEqual(fs.readFileSync(new URL("auth/apple-touch-icon.png", root)), fs.readFileSync(new URL("apple-touch-icon.png", root)));
+  const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /rel="icon" href="favicon\.svg" type="image\/svg\+xml"/); assert.match(main, /rel="apple-touch-icon" href="apple-touch-icon\.png"/);
+  for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /rel="icon" href="\/auth\/favicon\.svg"/, f); assert.match(h, /rel="apple-touch-icon" href="\/auth\/apple-touch-icon\.png"/, f); }
+  const mf = JSON.parse(fs.readFileSync(new URL("manifest.webmanifest", root), "utf8")); for (const i of mf.icons) assert.ok(fs.existsSync(new URL(i.src, root)), i.src + " exists");
+});
+
+test("logo: a transparent PNG for each theme, shown in the app header and on both sign-in pages", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), zlib = await import("node:zlib");
+  for (const f of ["auth/logo-light.png", "auth/logo-dark.png"]) {
+    const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], f + " is a PNG");
+    assert.ok(b.readUInt32BE(16) >= 700 && b.readUInt32BE(16) <= 900, "sharp enough for a phone screen: " + b.readUInt32BE(16)); assert.ok(b.length < 60_000, f + " stays small (" + b.length + " bytes)");
+    assert.equal(b[25], 3, "a palette image"); assert.ok(b.includes(Buffer.from("tRNS")), "with transparency");
+    let i = 8, trns = null; while (i < b.length) { const len = b.readUInt32BE(i), type = b.slice(i + 4, i + 8).toString(); if (type === "tRNS") trns = b.slice(i + 8, i + 8 + len); i += 12 + len; }
+    assert.ok([...trns].some((v) => v === 0), "one palette entry is fully transparent (so there is no faint box around the logo)");
+  }
+  const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png" alt="Dive Manager"/); assert.match(main, /class="logo logo-dark" src="\/auth\/logo-dark\.png" alt="Dive Manager"/);
+  for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png"/, f); assert.match(h, /html\[data-theme="dark"\] \.brand \.logo-dark \{ display: inline-block; \}/, f); assert.ok(!/<h1>Dive Manager<\/h1>/.test(h), f + ": the plain text title is gone"); }
+  assert.ok(fs.existsSync(new URL("../design/logo-source.png", root)), "the source artwork is kept so the logo can be regenerated");
+});

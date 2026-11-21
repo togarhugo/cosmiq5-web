@@ -143,7 +143,7 @@ export async function handleAuth(request, url, env, serveAsset) {
       if (!(await pendingMfaEmail(request, env))) return redirect("/auth/login");
       const r = serveAsset(request, "/auth/mfa.html"); r.headers.set("content-security-policy", LOGIN_CSP); return r;
     }
-    case "/auth/login.js": case "/auth/mfa.js": case "/auth/kdf.js": return serveAsset(request, url.pathname);
+    case "/auth/login.js": case "/auth/mfa.js": case "/auth/kdf.js": case "/auth/favicon.svg": case "/auth/apple-touch-icon.png": case "/auth/theme.js": case "/auth/theme.css": case "/auth/logo-light.png": case "/auth/logo-dark.png": return serveAsset(request, url.pathname);     // the sign-in pages show the app icon too
     case "/auth/google": return startLogin(url, env);
     case "/auth/callback": return finishLogin(request, url, env);
     case "/auth/logout": return page("Signed out", "You have been signed out.", [clearCookie(SESSION_COOKIE, "/")], 200);
