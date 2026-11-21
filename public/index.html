@@ -817,16 +817,23 @@
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
-                <button id="pgBtn" class="btn-main" type="button">Download dives over Bluetooth <span style="font-weight:400">(beta)</span></button>
-                <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
-                <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list. Only new dives are downloaded.</div>
-                <button id="pgCancel" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Cancel</button>
-                <h3 style="margin-top:16px">Or import a file</h3>
-                <p class="muted" style="margin:0 0 10px">If you prefer a file: export your dives from the Shearwater Cloud app as <b>UDDF</b> (Export &rsaquo; UDDF), then choose the file here. Dives you have already imported are skipped, so you can import the same or a newer file again.</p>
-                <label class="btn-set" for="impFile" style="display:inline-block;box-sizing:border-box;text-align:center;cursor:pointer">Choose UDDF file(s)</label>
-                <input id="impFile" type="file" accept=".uddf,.xml,application/xml,text/xml" multiple style="position:absolute;left:-9999px" />
+                <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
+                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:#495057">
+                    <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
+                    <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
+                    <li>Tap the button below and pick that file. A <b>UDDF</b> export works too.</li>
+                </ol>
+                <label class="btn-main" for="impFile" style="display:block;box-sizing:border-box;text-align:center;cursor:pointer">Choose Shearwater Cloud file</label>
+                <input id="impFile" type="file" accept=".db,.sqlite,.sqlite3,.zip,.uddf,.xml,application/zip,application/x-sqlite3,application/vnd.sqlite3,application/octet-stream,application/xml,text/xml" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
-                <p class="muted" style="margin:8px 0 0">The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+, whether they come from Bluetooth or a file. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
+                <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
+                    <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
+                    <button id="pgBtn" class="btn-main" type="button" style="background:#6c757d">Download dives over Bluetooth</button>
+                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                    <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
+                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Cancel</button>
+                </details>
             </div>
             <div id="syncCard" class="card">
                 <h3>Sync</h3>
@@ -1049,6 +1056,8 @@
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
         <script src="shearwater.js"></script>
+        <script src="sqlite-lite.js"></script>
+        <script src="shearwater-cloud.js"></script>
         <script src="dives.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>

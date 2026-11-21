@@ -117,7 +117,12 @@ the free plan's CPU limit.
   bytes: `header_hex`/`profile_hex` are empty and their decoded values + depth samples are JSON in `extra` (the Worker stores it as text,
   never parses it, caps it at 120 KB per dive and 700 KB per request). The file is parsed in the browser (UDDF, `public/dive-import.js`);
   the fingerprint is a hash of device + start minute so re-importing adds nothing. Totals de-duplicate overlapping dives from two devices.
-- **Peregrine over Bluetooth (beta, `public/shearwater.js`):** a port of libdivecomputer's Shearwater protocol (LGPL-2.1+, Jef Driesen):
+- **Peregrine from a Shearwater Cloud database (`public/sqlite-lite.js`, `public/shearwater-cloud.js`):** the export is a SQLite file (or a ZIP with `dive_data.db`).
+  A small read-only SQLite reader (table b-trees, overflow pages, bounds-checked) lists `log_data`; each `data_bytes_1` is a 4-byte little-endian size + gzip
+  (browser `DecompressionStream`, trailing junk tolerated) of the same Petrel Native Format records as over Bluetooth, decoded by `Shearwater.parseDive`;
+  `dive_details.DiveNumber` gives the logbook number; `DeletedLogs` and rows whose `format` is not `sw-pnf` are skipped. Layout taken from third-party readers
+  (divejson-py, divelog, Subsurface issue #4788), tested on databases written by real SQLite, **not yet on a real Shearwater Cloud export**.
+- **Peregrine over Bluetooth (experimental, `public/shearwater.js`):** a port of libdivecomputer's Shearwater protocol (LGPL-2.1+, Jef Driesen):
   GATT service `fe25c237-0ece-443c-b0aa-e02033e7029d`; the characteristic that can notify and be written is used (found at run time, as Subsurface does);
   SLIP framing over 20-byte writes with a 2-byte `[frames, index]` header; requests `FF 01 len+1 00 ...`; RDBI `0x22` (serial 0x8010, firmware 0x8011,
   model 0x8060, log layout 0x8021); manifest at 0xE0000000 (records `A5C4`, dive start time = fingerprint, address at +20); dive upload `0x35/0x36/0x37`

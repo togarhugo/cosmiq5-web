@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.9.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.10.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -108,21 +108,19 @@ A badge may appear on a dive:
 | **PARTIAL PROFILE** | The device had already overwritten the last minutes of the profile; the chart shows the gap. All summary numbers are still correct. |
 | **SUMMARY ONLY** | The device overwrote this dive's whole profile (it keeps roughly the last 128). Depth, duration and temperature are intact. |
 
-### Shearwater Peregrine: download over Bluetooth (beta)
-1. On the Peregrine open its **Bluetooth** menu (as for Shearwater Cloud) and keep it close to the phone.
-2. In Dive Manager open **Dive log → Shearwater Peregrine** and tap **Download dives over Bluetooth**.
-3. Choose your Peregrine in the list your browser shows (Chrome on Android, Bluefy on iPhone). Dives are downloaded **one at a time, oldest first, and only the ones you do not have yet**; each is saved as it arrives. **Cancel** stops safely.
-4. You are asked where you dived, as with the Cosmiq+.
+### Shearwater Peregrine: import from Shearwater Cloud
+The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager reads what Shearwater Cloud exports.
+1. Download your dives from the Peregrine into **Shearwater Cloud**, as you normally do.
+2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
+3. In Dive Manager open **Dive log → Shearwater Peregrine → Choose Shearwater Cloud file** and pick that file. Both the `.db` and the `.zip` work, and so does a **UDDF** export.
+4. You see *"3 new dives imported, 0 already there"* and are asked where you dived.
 
-This is **beta**: it follows the protocol of the open-source libdivecomputer (the library Subsurface uses) and is tested against a simulated Peregrine, but it had not yet run on a real one when it was released. If it fails, the message says why; then use **Account → Help → Copy diagnostics** and send me the text. The app never writes anything to the Peregrine (it only reads) and does not change its clock.
+Importing again later (a newer export) only adds the dives you do not have yet. Dives you **deleted** in Shearwater Cloud are skipped. The dive numbers are the ones of your Shearwater Cloud logbook. Your files stay on your device: they are read in the browser, and only the dives are saved to your account.
 
-### Shearwater Peregrine: import a file
-If Bluetooth does not work for you, import a file instead.
-1. In the **Shearwater Cloud** app (download your dives from the Peregrine there first), export your dives as **UDDF** (Export › UDDF) and keep the file on your phone or laptop.
-2. In Dive Manager open **Dive log → Shearwater Peregrine → Choose UDDF file(s)**.
-3. You see *"3 new dives imported, 0 already there"* and are asked where you dived. Importing the same file (or a newer export that includes the old dives) again only adds the new dives.
+If a message says a file could not be read, it names the reason. If the app cannot read your export at all, send me the message: I built this reader from other people's descriptions of Shearwater's file layout and tested it on files I made myself, not on a real Shearwater Cloud export.
 
-If a file cannot be read you get a plain message (for example "not a UDDF dive log"). Subsurface can also export UDDF, so any app that exports UDDF works.
+### Shearwater Peregrine: Bluetooth (experimental)
+Under **Bluetooth download (experimental)** the app can also read the Peregrine directly. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released: on the first real try the phone's list did not show the Peregrine. Use the file import above; the Bluetooth route is left in for further testing. It only reads: nothing is written to the Peregrine.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
 
@@ -215,7 +213,7 @@ Shows the **app version**, whether a newer one is available, **Check for update*
 * **Minimum temperature** comes from the dive header and is the true minimum, which can be a little lower than the lowest value on the chart.
 * **Time since last dive** is counted from the end of the previous dive to the start of this one.
 * **Profile memory is a ring.** The Cosmiq+ keeps depth profiles in a fixed-size memory (about the last 128 dives) and overwrites the oldest. Dive Manager matches every profile to the dive it really belongs to, recovers dives the device itself cannot read under their own number, and marks overwritten ones *summary only*. **Sync after every trip**: each new dive overwrites an old profile on the device.
-* **Peregrine dives** come from Bluetooth or from the file you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). With Bluetooth, the values are decoded from the dive computer's own records (depth, duration, temperature, first gas, depth samples); the dive number is the order of your downloaded dives.
+* **Peregrine dives** come from the Shearwater Cloud file (or Bluetooth) you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). From a Shearwater Cloud database the values are decoded from the dive computer's own records (depth, duration, temperature, first gas, depth samples) and the dive number is your Shearwater Cloud logbook number; from UDDF they are what Shearwater Cloud wrote.
 * **Two computers, one dive:** if you wore both and both logged the same dive, Summary totals and the regulator counter count it once (a dive from the other computer that starts before the first one has ended). Both stay visible in their own log.
 * **The Cosmiq+ dive log has no GPS** or location information; locations are what you type.
 * The device clock has no time zone: dive times are shown exactly as the dive computer recorded them.

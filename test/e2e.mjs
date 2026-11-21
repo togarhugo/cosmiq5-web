@@ -6,6 +6,7 @@ const P = req("../public/dive-protocol.js");
 const { chromium, devices } = req("playwright");
 import assert from "node:assert/strict";
 import { peregrine, pnfDive } from "./peregrine-sim.mjs";
+import { makeDb, dive as cloudDive, zip as makeZip } from "./cloud-fixture.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
@@ -635,7 +636,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
     assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth menu/);
     // a device that is not a Shearwater, and a cancelled chooser: clear messages, nothing saved
     await page.evaluate(() => { window.__pgMode = "wrong"; }); await page.click("#pgBtn");
@@ -663,6 +664,46 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.deepEqual(errs, [], "page errors");
     console.log("PASS peregrine bluetooth");
   } catch (e) { failed++; console.log("FAIL peregrine bluetooth\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-pg.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: import the Peregrine's dives from a Shearwater Cloud database (.db) or its ZIP ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.locator("#importCard").screenshot({ path: process.env.SHOT_IMPORT || "/tmp/shot-import.png" });
+    assert.match(await page.locator("#importCard").innerText(), /Export the database|export the database/i); assert.match(await page.locator("#importCard").innerText(), /Shearwater Cloud/);
+    const dbBytes = makeDb({ dives: [cloudDive(0), cloudDive(1), cloudDive(2, { deleted: true }), cloudDive(3, { format: "sw-clouddb" }), cloudDive(4, { blob: Buffer.from("this is not a dive, only text that is long enough") }), cloudDive(5)] });
+    await page.setInputFiles("#impFile", { name: "dive_data.db", mimeType: "application/octet-stream", buffer: Buffer.from(dbBytes) });
+    await page.waitForFunction(() => /3 new dives imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    const msg = await page.locator("#impMsg").innerText(); assert.match(msg, /2 skipped/); assert.match(msg, /3 uploaded/); assert.match(msg, /could not be read|implausible|unexpected/i, "the broken dive is reported: " + msg);
+    assert.equal(uploaded.length, 3); assert.ok(uploaded.every((d) => d.device === "peregrine" && d.headerHex === "" && JSON.parse(d.extra).s.length > 50));
+    assert.deepEqual(await page.locator("details.dive .dive-num").allInnerTexts(), ["105", "101", "100"], "logbook numbers from the Shearwater Cloud database, newest first");
+    await page.waitForSelector("#locPrompt input", { state: "visible" });
+    await page.locator("details.dive").last().locator("summary").click(); const svg = page.locator("details.dive[open] svg.chart"); await svg.waitFor();
+    assert.ok((await svg.locator("line").count()) >= 6); assert.match(await page.locator("details.dive[open]").innerText(), /28\.5 m[\s\S]*20 min[\s\S]*32%/);
+    // the same database again adds nothing; a ZIP (the account export) with one more dive adds just that one
+    await page.setInputFiles("#impFile", { name: "again.db", mimeType: "application/octet-stream", buffer: Buffer.from(dbBytes) });
+    await page.waitForFunction(() => /0 new dives imported, 3 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    const zipBytes = makeZip([["SyncReport.txt", Buffer.from("ok"), 8], ["dive_data.db", Buffer.from(makeDb({ dives: [cloudDive(0), cloudDive(6)] })), 8]]);
+    await page.setInputFiles("#impFile", { name: "account.zip", mimeType: "application/zip", buffer: Buffer.from(zipBytes) });
+    await page.waitForFunction(() => /1 new dive imported, 1 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    assert.equal(uploaded.length, 4); assert.equal(await page.locator("details.dive").count(), 4);
+    // not a Shearwater file: a plain message
+    await page.setInputFiles("#impFile", { name: "notes.db", mimeType: "application/octet-stream", buffer: Buffer.from("PK\u0003\u0004 nope".padEnd(100, " ")) });
+    await page.waitForFunction(() => /damaged|no database|neither/i.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.equal(uploaded.length, 4); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS shearwater cloud database");
+  } catch (e) { failed++; console.log("FAIL shearwater cloud database\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cloud.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

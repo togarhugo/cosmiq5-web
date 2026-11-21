@@ -140,6 +140,12 @@ const Dives = (() => {
   }
 
   // ---------- import a log exported from another dive computer's app ----------
+  /** A decoded dive (from a file or from Bluetooth) -> the record stored on the phone and in the cloud. */
+  const importedRecord = (d, deviceId) => ({
+    fingerprint: window.DiveImport.fingerprint(deviceId + "|" + d.startedAt.slice(0, 16)), device: deviceId, startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec,
+    maxDepthM: d.maxDepthM, o2Percent: d.o2Percent == null ? null : d.o2Percent, number: d.number == null ? null : d.number, minTempC: d.minTempC, intervalSec: d.intervalSec,
+    samples: window.DiveImport.thin(d.samples), headerHex: "", profileHex: "", uploaded: false });
+  /** Files: a Shearwater Cloud database (.db) or its ZIP, or a UDDF export (XML). The kind is recognised from the content, not the name. */
   async function importFiles(files, deviceId) {
     const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : "#2b8a3e"; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
@@ -147,21 +153,29 @@ const Dives = (() => {
     const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0; const problems = [];
     try {
       for (const f of files) {
-        if (f.size > 80_000_000) { problems.push(`${f.name}: too large (${Math.round(f.size / 1e6)} MB, limit 80 MB)`); continue; }
+        if (f.size > 400_000_000) { problems.push(`${f.name}: too large (${Math.round(f.size / 1e6)} MB, limit 400 MB)`); continue; }
         try {
-          const res = window.DiveImport.parseUddf(await f.text(), deviceId);
-          found += res.dives.length; skipped += res.skipped;
-          if (!res.dives.length) problems.push(`${f.name}: no dives found (${res.info})`);
-          for (const d of res.dives) {
-            if (seen.has(d.fingerprint)) { already++; continue; }
-            seen.add(d.fingerprint); const rec = { ...d, headerHex: "", profileHex: "", uploaded: false }; await put(rec); fresh.push(rec);
+          const bytes = new Uint8Array(await f.arrayBuffer()), kind = window.ShearwaterCloud.sniff(bytes);
+          let dives, note = "";
+          if (kind === "text") { const res = window.DiveImport.parseUddf(new TextDecoder().decode(bytes), deviceId); dives = res.dives; skipped += res.skipped; note = res.info; }
+          else {
+            const res = await window.ShearwaterCloud.readExport(bytes, (d, t) => say2(`Reading dive ${d} of ${t}\u2026`));
+            dives = res.dives; skipped += res.skipped.deleted + res.skipped.format; note = `${res.total} dive${res.total === 1 ? "" : "s"} in the database`;
+            for (const m of res.problems.slice(0, 3)) problems.push(`${f.name}: ${m}`); if (res.problems.length > 3) problems.push(`and ${res.problems.length - 3} more dives could not be read`);
+          }
+          found += dives.length;
+          if (!dives.length) problems.push(`${f.name}: no dives found (${note})`);
+          for (const d of dives) {
+            const rec = importedRecord(d, deviceId);
+            if (seen.has(rec.fingerprint)) { already++; continue; }
+            seen.add(rec.fingerprint); await put(rec); fresh.push(rec);
           }
         } catch (e) { problems.push(`${f.name}: ${e.message}`); }
         render();
       }
       const up = fresh.length ? await cloudPush() : 0;
       const parts = [`${fresh.length} new dive${fresh.length === 1 ? "" : "s"} imported`];
-      if (already) parts.push(`${already} already there`); if (skipped) parts.push(`${skipped} skipped (incomplete)`);
+      if (already) parts.push(`${already} already there`); if (skipped) parts.push(`${skipped} skipped (deleted or incomplete)`);
       if (fresh.length) parts.push(cloudState === "ok" ? `${up} uploaded` : "saved on this phone, cloud unavailable");
       say2(parts.join(", ") + "." + (problems.length ? " " + problems.join(" ") : ""), !fresh.length && !!problems.length);
       if (fresh.length) say(`${fresh.length} dive${fresh.length === 1 ? "" : "s"} imported`);
@@ -188,8 +202,7 @@ const Dives = (() => {
         onProgress: (m, f) => { say2(m); bar.style.width = Math.round(f * 100) + "%"; },
         onProblem: (m) => { problems++; log("Peregrine: could not read dive " + m, "log-err"); },
         onDive: async (d) => {
-          const rec = { fingerprint: fp(d.startedAt), device: "peregrine", startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec, maxDepthM: d.maxDepthM, o2Percent: d.o2Percent,
-            number: null, minTempC: d.minTempC, intervalSec: d.intervalSec, samples: window.DiveImport.thin(d.samples), headerHex: "", profileHex: "", uploaded: false };
+          const rec = importedRecord(d, "peregrine");
           await put(rec); seen.add(rec.fingerprint); fresh.push(rec); render();                      // saved the moment it arrives
         } });
       const up = fresh.length ? await cloudPush() : 0;
