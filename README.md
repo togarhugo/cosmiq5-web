@@ -1,51 +1,66 @@
-# **Deepblu Cosmiq 5 \- Web Controller**
+# **Dive Manager** — Deepblu Cosmiq+ (Gen 5) companion
 
-## **🌊 Project Overview**
+A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the official app has been discontinued: change its settings, download and keep your dive log, and track your diving, all from a phone or laptop browser over Bluetooth.
 
-This project provides a web-based controller for the **Deepblu Cosmiq 5** dive computer. Since the official app has been discontinued, this tool allows you to modify all settings on your device directly from a web browser using Bluetooth Low Energy (BLE).
+> **Current version: 0.7.0** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
 
-It runs entirely in your browser (client-side)—no data is sent to any external server.
+## What it does
 
-🤖 Vibe Coding Disclaimer  
-This entire project was "vibecoded" with Gemini Pro 3\. The code was generated through an iterative conversation between a human operator (providing logs and testing) and the AI (analyzing patterns and writing code). It represents a collaborative effort to preserve legacy hardware through modern AI assistance.
+| | |
+|---|---|
+| **Summary** | Your name, latest certification, **DAN membership and validity**, date of your last dive, **total dive time**, and a **regulator service counter** that turns orange at 70 dives and red at 90. |
+| **Dive log** | Downloads your dives over Bluetooth (only the new ones), grouped by year, month and date, with depth charts, minimum temperature, surface interval and a dive location you choose (e.g. *Komodo*). |
+| **Device settings** | Backlight, units, screen timeout, clock, gas mix, PPO₂, alarms, safety factor, freedive alarms. Every change is **read back from the dive computer and confirmed**. |
+| **Account** | Profile picture and name, change password, **dive certification files**, **DAN insurance** details and documents, regulator tracker, help and app version. |
+| **Sign-in** | Google, or email + password followed by a 6-digit authenticator code. |
 
-## **🚀 How to Use**
+The clock of the dive computer is set to your phone's time every time you connect.
 
-### **1\. Requirements**
+## Quick start
 
-* **Hardware:** Deepblu Cosmiq 5 Dive Computer.  
-* **Browser:** You need a browser that supports Web Bluetooth.  
-  * **PC/Mac/Android:** Google Chrome, Edge, or Opera.  
-  * **iOS (iPhone/iPad):** Safari **does not** support this. You must download a dedicated WebBLE browser like **Bluefy** from the App Store.
+1. Open your Dive Manager address (the one you deployed, see [DEPLOY.md](DEPLOY.md)) and sign in.
+2. On **Android / Windows / Mac / Linux** use **Chrome or Edge**. On **iPhone/iPad** Safari cannot use Bluetooth: open the page in the **Bluefy** browser.
+3. Turn on the dive computer, tap **Connect & Sync**, choose the device.
+4. New dives are downloaded, you are asked where you dived, and the Summary is up to date.
 
-### **2\. Connection Steps**
+The full walkthrough is in the **[user manual](MANUAL.md)**.
 
-1. Open the [Hosted Web Page](https://blue-notes-robot.github.io/cosmiq5-web/) (or your local index.html).  
-2. Turn on your Cosmiq 5 and ensure Bluetooth is active.  
-3. Click the big blue **"Connect & Sync"** button.  
-4. Select your device (usually named COSMIQ or Deepblu) from the list.  
-5. Wait for the green "Connected" status. The app will automatically read your current settings.
+## Project layout
 
-### **3\. Features**
+| Path | What is there |
+|---|---|
+| `public/` | The app: pages, scripts, sign-in screens (`auth/`), dive protocol and parser (`dive-protocol.js`), helpers (`dive-utils.js`) |
+| `src/` | The Cloudflare Worker: sign-in (Google and password + authenticator), dive log and account API |
+| `schema.sql`, `migrations/` | The D1 database layout and the one-off upgrade steps |
+| `test/` | Unit tests and browser tests (including a simulated dive computer) |
+| `index.html` | The **original** single-file controller from the upstream project, unchanged |
+| `DEPLOY.md` | How to deploy, how sign-in works, what the dive computer stores (decoded header, ring-buffer memory) |
+| `MANUAL.md` | User manual |
 
-* **General:** Set Time/Date format, Syc Time, Units (Metric/Imperial), Backlight intensity, Screen Timeout, and Power-Saving (Eco) mode.  
-* **Environment:** Configure High Altitude mode or High Salinity mode (Advanced).  
-* **Scuba:** Configure Air Mix (Nitrox), PPO2, Depth Alarms, Time Alarms, and Safety Factor.  
-* **Freedive:** Configure Max Time and 6 distinct Depth Alarms.  
-* **Diagnostics:** A "Byte Hunter" tab allows you to see the raw data packets coming from the device.
+Develop and test: `npm install`, `npm test`, `node test/e2e.mjs` (needs Playwright), `npm run deploy`.
 
-## **⚠️ Important Safety Warning**
+## Privacy
+
+Dive Manager runs in **your own Cloudflare account** (free plan). Your dives, picture, certification files, DAN details and regulator are stored in your private database and can only be read by accounts you allow (`ALLOWED_EMAILS`). Bluetooth is handled in your browser; Cloudflare never talks to the dive computer. The original `index.html` still runs entirely in the browser and sends nothing anywhere.
+
+## ⚠️ Important safety warning
 
 **This software is UNOFFICIAL and experimental.**
 
 Diving involves significant risks, including decompression sickness, oxygen toxicity, and drowning.
 
-1. **ALWAYS** verify your settings on the physical device screen before entering the water.  
-2. **NEVER** rely solely on this software to configure life-safety parameters.  
-3. The authors and the AI assistant accept **NO RESPONSIBILITY** for malfunctions, incorrect settings, or any safety incidents resulting from the use of this tool.
+1. **ALWAYS** verify your settings on the physical device screen before entering the water.
+2. **NEVER** rely solely on this software to configure life-safety parameters.
+3. Regulator and insurance reminders are conveniences, not a substitute for your service schedule, your insurer, or your training agency.
+4. The authors and the AI assistants accept **NO RESPONSIBILITY** for malfunctions, incorrect settings, or any safety incidents resulting from the use of this tool.
 
 *Dive safe. Always carry a backup.*
 
-## 📱 Mobile + Cloudflare version
+## Credits
 
-A mobile-friendly build with **dive-log download**, **automatic clock sync on every connect** and Google-login cloud storage lives in [`public/`](public/) with a Cloudflare Worker in [`src/`](src/). See [DEPLOY.md](DEPLOY.md). The original single-file `index.html` above is unchanged.
+- The original Web Bluetooth settings controller (`index.html`, `technical_documentation.md`) is by the upstream project, "vibecoded" with Gemini Pro 3 through an iterative conversation between a human operator (providing logs and testing) and the AI.
+- The dive-log download protocol was reimplemented from the public description in the **libdivecomputer** project's `deepblu_cosmiq` driver (LGPL-2.1+, © Linus Torvalds, Jef Driesen), then verified and extended against a real Cosmiq+ Gen 5 (header fields, and the 256-page profile-memory ring described in `DEPLOY.md`).
+- QR codes: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT).
+- Dive Manager's web app, Worker and tests were written with Claude (Anthropic).
+
+See [LICENSE](LICENSE).
