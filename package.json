@@ -9,9 +9,10 @@
   },
   "devDependencies": {
     "@xmldom/xmldom": "^0.8.10",
+    "geist": "^1.9.2",
     "leaflet": "^1.9.4",
     "qrcode-generator": "^2.0.4",
     "wrangler": "^4"
   },
-  "version": "0.14.0"
+  "version": "0.15.0"
 }

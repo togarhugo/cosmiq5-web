@@ -14,6 +14,8 @@
         <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
         <link rel="apple-touch-icon" href="apple-touch-icon.png" />
         <title>Dive Manager</title>
+        <link rel="preload" href="/auth/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="stylesheet" href="/auth/fonts.css" />
         <link rel="stylesheet" href="/auth/theme.css" />
         <link rel="stylesheet" href="vendor/leaflet.css" />
         <style>
@@ -24,12 +26,10 @@
                 --yellow: #ffc107;
                 --bg: #f8f9fa;
                 --text: #212529;
-                --mono:
-                    "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
-                    Courier, monospace;
+                --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
             }
             body {
-                font-family: -apple-system, sans-serif;
+                font-family: var(--font, "Geist", -apple-system, sans-serif);
                 background: var(--bg);
                 color: var(--text);
                 padding: 15px;
@@ -331,7 +331,9 @@
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: var(--tx-6c757d); min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
-            .nav { gap: 4px; } .nav button { flex: 1 1 auto; padding: 0 8px; font-size: 13px; white-space: nowrap; min-width: 0; }
+            .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
+            .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
+            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
             .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
@@ -484,9 +486,9 @@
         </div>
 
         <div class="nav">
-            <button id="navSummary" onclick="showView('summary')">Summary</button>
-            <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
-            <button id="navDevice" class="active" onclick="showView('device')">Device</button>
+            <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
+            <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
+            <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
         </div>
 
         <div id="summaryView" style="display:none">

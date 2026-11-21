@@ -10,7 +10,7 @@ import { makeDb, dive as cloudDive, zip as makeZip } from "./cloud-fixture.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
-const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const types = { ".woff2": "font/woff2", ".txt": "text/plain", ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
   if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -983,5 +983,34 @@ if (process.env.REAL_DB) {
     }
     assert.deepEqual(errs, [], "page errors"); console.log("PASS light/dark switch");
   } catch (e) { failed++; console.log("FAIL light/dark switch\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
+}
+// ---- scenario: tab icons and the Geist / Geist Mono fonts ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = [], bad = []; page.on("pageerror", (e) => errs.push(e.message)); page.on("response", (r) => { if (r.status() >= 400) bad.push(r.status() + " " + r.url()); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } }));
+  const mk = (when, n) => ({ fingerprint: (0x777000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: "Komodo", deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2)] } }));
+  await page.goto(base);
+  try {
+    await page.waitForFunction(() => /Dive log \(2\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
+    // 1. every tab has its icon above its label, painted in the label's colour (a one-colour mask), at the same size
+    const tabs = await page.evaluate(() => ["navSummary", "navLog", "navDevice"].map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
+      return { id, icon: (ci.webkitMaskImage || ci.maskImage), w: Math.round(r.width), h: Math.round(r.height), above: r.bottom <= s.top + 1, same: ci.backgroundColor === cb.color, text: b.innerText.trim(), aria: i.getAttribute("aria-hidden") }; }));
+    assert.deepEqual(tabs.map((t) => t.id), ["navSummary", "navLog", "navDevice"]); assert.match(tabs[0].icon, /icon-summary\.png/); assert.match(tabs[1].icon, /icon-log\.png/); assert.match(tabs[2].icon, /icon-device\.png/);
+    for (const t of tabs) { assert.equal(t.w, 30); assert.equal(t.h, 30); assert.ok(t.above, t.id + ": icon above the label"); assert.ok(t.same, t.id + ": icon has the label colour"); assert.equal(t.aria, "true", "decorative icon"); }
+    assert.deepEqual(tabs.map((t) => t.text), ["Summary", "Dive log (2)", "Device"], "labels unchanged, the count is still there");
+    await page.click("#navLog"); await page.waitForFunction(() => document.getElementById("navLog").classList.contains("active")); const active = await page.evaluate(() => { const b = document.getElementById("navLog"); return getComputedStyle(b.querySelector(".ti")).backgroundColor === getComputedStyle(b).color && getComputedStyle(b).color === "rgb(255, 255, 255)"; }); assert.ok(active, "the active tab's icon is white like its label");
+    // 2. the icon files load (not a broken mask), and the tab row still fits three tabs on a phone
+    for (const f of ["icon-summary", "icon-log", "icon-device"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
+    const row = await page.evaluate(() => ({ nav: document.querySelector(".nav").scrollWidth <= document.querySelector(".nav").clientWidth + 1, h: Math.round(document.getElementById("navSummary").getBoundingClientRect().height) })); assert.ok(row.nav, "no sideways scrolling in the tab row"); assert.ok(row.h >= 60 && row.h <= 76, "tab height " + row.h);
+    // 3. the fonts: Geist for text (buttons and inputs too), Geist Mono for numbers; loaded from this app
+    await page.locator("details.dive").first().locator("summary").click().catch(() => {}); await page.waitForTimeout(300);
+    const f = await page.evaluate(async () => { await document.fonts.ready; const fam = (s) => getComputedStyle(document.querySelector(s)).fontFamily.split(",")[0].replace(/"/g, ""); return { body: fam("body"), button: fam("#connectBtn"), input: fam("input"), mono: fam(".dive-num"), meta: fam(".dive-meta"), sans: document.fonts.check("16px Geist"), monoOk: document.fonts.check("16px 'Geist Mono'"), loaded: [...document.fonts].filter((x) => x.status === "loaded").map((x) => x.family.replace(/"/g, "")).sort() }; });
+    assert.equal(f.body, "Geist"); assert.equal(f.button, "Geist", "buttons use the page font"); assert.equal(f.input, "Geist", "inputs use the page font"); assert.equal(f.mono, "Geist Mono", "dive numbers in the mono font"); assert.equal(f.meta, "Geist Mono"); assert.ok(f.sans && f.monoOk, "both fonts are loaded"); assert.deepEqual(f.loaded, ["Geist", "Geist Mono"]);
+    assert.deepEqual(bad.filter((u) => !/photon|nominatim|tile\.openstreetmap|favicon/.test(u)), [], "no failed requests (fonts and icons are found)"); assert.deepEqual(errs, [], "page errors"); console.log("PASS tab icons and fonts");
+  } catch (e) { failed++; console.log("FAIL tab icons and fonts\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-tabs.png", fullPage: true }); }
+  await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

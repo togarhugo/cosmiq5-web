@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.14.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.15.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -55,6 +55,8 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 * While syncing, a **progress banner with Cancel** appears on every tab.
 * A small green/amber/red **message at the bottom** confirms what just happened.
 
+* **Tab icons:** each tab has an icon above its name (a gauge for Summary, a notebook for Dive log, a watch for Device). They take the colour of the tab text, so they follow the light / dark theme.
+* **Fonts:** the app uses **Geist** for text and **Geist Mono** for numbers such as dive numbers, depths and times. Both fonts are part of the app (nothing is loaded from another website) and are under the SIL Open Font License.
 * **Light / dark switch** at the top left of every page (also on the sign-in pages): **left = light, right = dark**. Until you use it, the app follows your phone's own light or dark setting; once you choose, your choice is remembered on that device. The map background and the dive charts follow the theme too.
 
 ---

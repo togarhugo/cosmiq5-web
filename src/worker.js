@@ -41,9 +41,10 @@ function serveAsset(request, pathname) {
   if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, 405);
   const a = ASSETS[pathname === "/" ? "/index.html" : pathname];
   if (!a) return json({ error: "not found" }, 404);
-  const bin = Uint8Array.from(atob(a.b), (c) => c.charCodeAt(0));
+  const raw = atob(a.b), bin = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);                       // a plain loop: far cheaper than Uint8Array.from(callback) for the 70 KB fonts
   return new Response(request.method === "HEAD" ? null : bin, {
-    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION, "x-frame-options": "DENY", "referrer-policy": "no-referrer" },
+    headers: { "content-type": a.t, "cache-control": pathname.startsWith("/auth/fonts/") ? "public, max-age=31536000, immutable" : "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION, "x-frame-options": "DENY", "referrer-policy": "no-referrer" },
   });
 }
 

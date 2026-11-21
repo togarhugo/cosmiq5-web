@@ -147,6 +147,11 @@ the free plan's CPU limit.
   48-colour palette, ~28 KB each). The header and both sign-in pages show the one matching the theme (`.brand .logo-light/.logo-dark`); the heading text "Dive Manager" is the image's alt text.
   They live under `/auth/` because the sign-in pages are public.
 
+- **Fonts and tab icons:** Geist and Geist Mono (variable WOFF2, SIL OFL, from the `geist` npm package, ~70 KB each) live in `public/auth/fonts/` with `public/auth/fonts.css`; the Worker serves them with
+  `cache-control: public, max-age=31536000, immutable` and the sign-in pages' CSP allows `style-src 'self'` and `font-src 'self'` for them. The tab icons are one-colour masks
+  (`public/auth/icon-summary|log|device.png`, cut from `design/tab-icons-source.png` by `scripts/make-tab-icons.py`) painted with `currentColor` through CSS `mask`. All of these are public paths
+  (`PUBLIC_ASSET` in `src/auth.js`) because the sign-in pages use them.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
