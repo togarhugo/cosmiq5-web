@@ -699,10 +699,17 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.setInputFiles("#impFile", { name: "account.zip", mimeType: "application/zip", buffer: Buffer.from(zipBytes) });
     await page.waitForFunction(() => /1 new dive imported, 1 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
     assert.equal(uploaded.length, 4); assert.equal(await page.locator("details.dive").count(), 4);
+    // drag and drop onto the card works like the chooser (the file need not be found in a folder dialog)
+    await page.locator("#importCard").evaluate((card) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(0)], "empty.db")); card.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); window.__dropClass = card.className; });
+    assert.match(await page.evaluate(() => window.__dropClass), /dropping/, "card highlights while a file is dragged over it");
+    const dropBytes = makeDb({ dives: [cloudDive(7)] });
+    await page.locator("#importCard").evaluate(async (card, arr) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(arr)], "dropped.db")); card.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); }, Array.from(dropBytes));
+    await page.waitForFunction(() => /1 new dive imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    assert.equal(uploaded.length, 5); assert.ok(!(await page.locator("#importCard").getAttribute("class")).includes("dropping"), "highlight cleared after the drop");
     // not a Shearwater file: a plain message
     await page.setInputFiles("#impFile", { name: "notes.db", mimeType: "application/octet-stream", buffer: Buffer.from("PK\u0003\u0004 nope".padEnd(100, " ")) });
     await page.waitForFunction(() => /damaged|no database|neither/i.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
-    assert.equal(uploaded.length, 4); assert.deepEqual(errs, [], "page errors");
+    assert.equal(uploaded.length, 5); assert.deepEqual(errs, [], "page errors");
     console.log("PASS shearwater cloud database");
   } catch (e) { failed++; console.log("FAIL shearwater cloud database\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cloud.png", fullPage: true }); }
   await ctx.close();

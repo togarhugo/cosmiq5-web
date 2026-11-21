@@ -446,6 +446,13 @@ const Dives = (() => {
     if (wired) return; wired = true;
     $("devTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-dev]"); if (b) pickDevice(b.dataset.dev); });
     $("pgBtn").addEventListener("click", syncPeregrine); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
+    const card = $("importCard");                                                                  // drop a file from Finder / Spotlight / Files onto the card
+    if (card) {
+      const over = (on) => card.classList.toggle("dropping", on);
+      card.addEventListener("dragenter", (e) => { e.preventDefault(); over(true); }); card.addEventListener("dragover", (e) => { e.preventDefault(); over(true); });
+      card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) over(false); });
+      card.addEventListener("drop", async (e) => { e.preventDefault(); over(false); const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (fs.length) await importFiles(fs, selDevice); });
+    }
     const pick = $("impFile");
     if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, selDevice); });
     list.addEventListener("click", async (e) => {

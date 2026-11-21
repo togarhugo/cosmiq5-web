@@ -398,6 +398,7 @@
             #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
             #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
             .chart { display: block; }
+            #importCard.dropping { outline: 3px dashed var(--blue); outline-offset: -3px; background: #e7f5ff; }
             .cert.latest { border-color: #2b8a3e; } .latest-tag { font-size: 11px; font-weight: 700; color: #2b8a3e; background: #ebfbee; border-radius: 10px; padding: 2px 8px; }
             .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
             p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
@@ -823,6 +824,7 @@
                     <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
                     <li>Tap the button below and pick that file. A <b>UDDF</b> export works too.</li>
                 </ol>
+                <p class="muted" style="margin:0 0 8px">On a computer you can also <b>drag the file onto this card</b>.</p>
                 <label class="btn-main" for="impFile" style="display:block;box-sizing:border-box;text-align:center;cursor:pointer">Choose Shearwater Cloud file</label>
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
