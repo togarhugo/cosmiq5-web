@@ -1,5 +1,6 @@
 import ASSETS from "./assets.generated.js";
 import { configError, currentUser, handleAuth } from "./auth.js";
+import { handleAccount, handlePasswordAuth } from "./password.js";
 import { VERSION } from "./version.js";
 
 // Cosmiq Manager: static app + dive-log API. Sign-in is Google OAuth inside this Worker
@@ -22,7 +23,7 @@ function serveAsset(request, pathname) {
   if (!a) return json({ error: "not found" }, 404);
   const bin = Uint8Array.from(atob(a.b), (c) => c.charCodeAt(0));
   return new Response(request.method === "HEAD" ? null : bin, {
-    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION },
+    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION, "x-frame-options": "DENY", "referrer-policy": "no-referrer" },
   });
 }
 
@@ -32,7 +33,14 @@ export default {
     const bad = configError(env);
     if (bad) return json({ error: bad }, 503);
 
-    const auth = await handleAuth(request, url, env);
+    // Same-origin check for every state-changing request (cookies are SameSite=Lax as well).
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({ error: "cross-origin request refused" }, 403);
+    }
+    if (request.method === "POST" && (url.pathname === "/auth/prelogin" || url.pathname === "/auth/password"))
+      return handlePasswordAuth(request, url, env);
+    const auth = await handleAuth(request, url, env, serveAsset);
     if (auth) return auth;
 
     const user = await currentUser(request, env);
@@ -42,15 +50,10 @@ export default {
     }
     const email = user.email;
 
-    // CSRF defence in depth (cookie is SameSite=Lax): state-changing calls must be same-origin.
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      const origin = request.headers.get("origin");
-      if (origin && origin !== url.origin) return json({ error: "cross-origin request refused" }, 403);
-    }
-
     if (!url.pathname.startsWith("/api/")) return serveAsset(request, url.pathname);
 
     if (url.pathname === "/api/me") return json({ email, name: user.name, version: VERSION });
+    if (url.pathname === "/api/account" || url.pathname.startsWith("/api/account/")) return handleAccount(request, url, env, user);
 
     if (url.pathname === "/api/dives" && request.method === "GET") {
       const { results } = await env.DB.prepare(

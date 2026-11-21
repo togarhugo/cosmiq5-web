@@ -326,6 +326,7 @@
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: #6c757d; min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+            #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
         </style>
     </head>
     <body>
@@ -351,6 +352,7 @@
         <div class="nav">
             <button id="navDevice" class="active" onclick="showView('device')">Device settings</button>
             <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
+            <button id="navAccount" onclick="showView('account')">Account</button>
         </div>
 
         <div id="deviceView">
@@ -702,10 +704,58 @@
             <a id="signOut" href="/auth/logout" style="display:none;margin-left:6px">Sign out</a>
         </div>
 
+        <div id="accountView" style="display:none">
+            <div class="card">
+                <h3>Sign-in methods</h3>
+                <div id="accVia" class="muted" style="margin-bottom:10px"></div>
+                <div class="opt" style="min-height:0">✓ Google account <span class="muted">(always on)</span></div>
+                <div class="opt" style="min-height:0">
+                    <span id="accPwIcon">○</span> Email + password + authenticator
+                    <span id="accPwState" class="muted"></span>
+                </div>
+                <div id="accMsg" role="status" style="font-size:13px;margin:10px 0"></div>
+                <div id="accBtns" class="row" style="margin-bottom:0">
+                    <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
+                    <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                </div>
+            </div>
+
+            <div id="accSetup" class="card" style="display:none">
+                <h3>Set up email login</h3>
+                <div id="accStep1">
+                    <span class="label">Choose a password (12+ characters)</span>
+                    <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <input id="accPw2" type="password" autocomplete="new-password" placeholder="Repeat password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <div id="accCurWrap" style="display:none">
+                        <span class="label">Current authenticator code (to confirm the change)</span>
+                        <input id="accCur" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    </div>
+                    <button id="accNext" class="btn-main" type="button">Continue</button>
+                </div>
+                <div id="accStep2" style="display:none">
+                    <span class="label">Scan this with Google Authenticator</span>
+                    <div id="accQr" style="max-width:240px;margin:0 auto 8px"></div>
+                    <div class="muted" style="text-align:center;margin-bottom:10px">Can't scan? Choose "Enter a setup key" and type:<br /><code id="accSecret" style="user-select:all;word-break:break-all"></code></div>
+                    <span class="label">Enter the 6-digit code it shows</span>
+                    <input id="accCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <button id="accFinish" class="btn-main" type="button">Turn on email login</button>
+                </div>
+                <div id="accRemove" style="display:none">
+                    <span class="label">Authenticator code to confirm removal</span>
+                    <input id="accRmCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <button id="accRmGo" class="btn-main" type="button" style="background:#dc3545">Remove email login</button>
+                </div>
+                <button id="accCancel" class="btn-set" type="button" style="background:#6c757d;margin-top:4px">Cancel</button>
+            </div>
+        </div>
+
         <details class="logwrap"><summary>Activity log</summary>
         <div id="log">Waiting for connection...</div></details>
         <script src="dive-protocol.js"></script>
         <script src="dives.js"></script>
+        <script src="/auth/kdf.js"></script>
+        <script src="vendor/qrcode.js"></script>
+        <script src="account.js"></script>
 
         <script>
             const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -744,10 +794,11 @@
                 if (btn) btn.classList.add("active");
             }
             function showView(v) {
-                document.getElementById("deviceView").style.display = v === "device" ? "" : "none";
-                document.getElementById("logView").style.display = v === "log" ? "" : "none";
-                document.getElementById("navDevice").classList.toggle("active", v === "device");
-                document.getElementById("navLog").classList.toggle("active", v === "log");
+                for (const [name, nav] of [["device", "navDevice"], ["log", "navLog"], ["account", "navAccount"]]) {
+                    document.getElementById(name + "View").style.display = v === name ? "" : "none";
+                    document.getElementById(nav).classList.toggle("active", v === name);
+                }
+                if (v === "account") Account.load();
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") Dives.render();
             }

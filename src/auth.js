@@ -55,10 +55,11 @@ export const allowedEmails = (env) => String(env.ALLOWED_EMAILS || "").toLowerCa
 
 /** Returns an error string if the Worker is not fully configured (fail closed). */
 export function configError(env) {
-  const missing = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "ALLOWED_EMAILS"]
+  const missing = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "ALLOWED_EMAILS", "DATA_KEY"]
     .filter((k) => !String(env[k] || "").trim() || String(env[k]).startsWith("REPLACE"));
   if (missing.length) return "Not configured: " + missing.join(", ");
   if (String(env.SESSION_SECRET).trim().length < 32) return "SESSION_SECRET must be at least 32 characters";
+  if (String(env.DATA_KEY).trim().length < 32) return "DATA_KEY must be at least 32 characters";
   return null;
 }
 
@@ -66,7 +67,13 @@ export function configError(env) {
 export async function currentUser(request, env) {
   const p = await verifySigned(readCookie(request, SESSION_COOKIE), env.SESSION_SECRET);
   if (!p || p.typ !== "session" || !allowedEmails(env).includes(p.email)) return null;
-  return { email: p.email, name: p.name || "" };
+  return { email: p.email, name: p.name || "", amr: p.amr || "google" };
+}
+
+/** Set-Cookie values that start a session (also clears any pending OAuth cookie). */
+export async function issueSession(env, { email, name, amr }) {
+  const session = await sign({ typ: "session", email, name: name || "", amr, exp: now() + SESSION_SECONDS }, env.SESSION_SECRET);
+  return [clearCookie(OAUTH_COOKIE, "/auth"), setCookie(SESSION_COOKIE, session, SESSION_SECONDS, "/")];
 }
 
 async function startLogin(url, env) {
@@ -105,15 +112,24 @@ async function finishLogin(request, url, env) {
   const email = String(claims.email || "").toLowerCase();
   if (!email || claims.email_verified !== true) return page("Sign-in failed", "Your Google email is not verified.", [clear]);
   if (!allowedEmails(env).includes(email)) return page("Access denied", `${email} is not allowed to use this app.`, [clear], 403);
-  const session = await sign({ typ: "session", email, name: claims.name || "", exp: now() + SESSION_SECONDS }, env.SESSION_SECRET);
-  return redirect("/", [clear, setCookie(SESSION_COOKIE, session, SESSION_SECONDS, "/")]);
+  return redirect("/", await issueSession(env, { email, name: claims.name, amr: "google" }));
 }
 
-/** Handles /auth/* routes; returns a Response, or null if the path is not an auth route. */
-export async function handleAuth(request, url, env) {
-  if (!url.pathname.startsWith("/auth/")) return null;
-  if (url.pathname === "/auth/logout") return page("Signed out", "You have been signed out.", [clearCookie(SESSION_COOKIE, "/")], 200);
-  if (url.pathname === "/auth/login") return startLogin(url, env);
-  if (url.pathname === "/auth/callback") return finishLogin(request, url, env);
-  return page("Not found", "Unknown page.", [], 404);
+const LOGIN_CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+
+/** Handles the GET /auth/* routes; returns a Response, or null if the path is not one of them.
+ *  (POST /auth/prelogin and /auth/password are handled in password.js.) */
+export async function handleAuth(request, url, env, serveAsset) {
+  if (!url.pathname.startsWith("/auth/") || request.method === "POST") return null;
+  switch (url.pathname) {
+    case "/auth/login": {                       // the first page: choose Google or email + password + authenticator
+      if (await currentUser(request, env)) return redirect("/");
+      const r = serveAsset(request, "/auth/login.html"); r.headers.set("content-security-policy", LOGIN_CSP); return r;
+    }
+    case "/auth/login.js": case "/auth/kdf.js": return serveAsset(request, url.pathname);
+    case "/auth/google": return startLogin(url, env);
+    case "/auth/callback": return finishLogin(request, url, env);
+    case "/auth/logout": return page("Signed out", "You have been signed out.", [clearCookie(SESSION_COOKIE, "/")], 200);
+    default: return page("Not found", "Unknown page.", [], 404);
+  }
 }

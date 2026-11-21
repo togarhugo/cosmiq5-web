@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#007bff">
+<title>Sign in · Cosmiq Manager</title>
+<style>
+  :root { --blue:#007bff; --bg:#f8f9fa; --text:#212529; --muted:#6c757d; --card:#fff; --line:#dee2e6; --red:#c92a2a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181b; --text:#e9ecef; --muted:#9aa3ab; --card:#212529; --line:#3b4148; --red:#ff8787; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text);
+         min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+  main { width:100%; max-width:380px; }
+  h1 { font-size:22px; text-align:center; margin:0 0 4px; }
+  .ver { text-align:center; color:var(--muted); font-size:12px; margin-bottom:22px; }
+  .card { background:var(--card); border-radius:14px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:48px; border:0; border-radius:10px;
+         font:600 16px inherit; font-family:inherit; text-decoration:none; cursor:pointer; touch-action:manipulation; }
+  .google { background:#fff; color:#3c4043; border:1px solid #dadce0; }
+  .primary { background:var(--blue); color:#fff; }
+  .btn:disabled { opacity:.6; cursor:default; }
+  .or { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:13px; margin:18px 0; }
+  .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line); }
+  label { display:block; font-size:13px; font-weight:600; margin:12px 0 6px; }
+  input { width:100%; min-height:48px; padding:10px 12px; font-size:16px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
+  input:focus { outline:2px solid var(--blue); outline-offset:1px; }
+  #code { letter-spacing:6px; text-align:center; font-variant-numeric:tabular-nums; font-size:20px; }
+  .err { color:var(--red); font-size:14px; min-height:20px; margin:12px 0 4px; }
+  .hint { color:var(--muted); font-size:12px; margin-top:12px; line-height:1.4; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cosmiq Manager</h1>
+  <div class="ver">v__APP_VERSION__</div>
+  <div class="card">
+    <a class="btn google" href="/auth/google">
+      <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      Continue with Google
+    </a>
+    <div class="or">or sign in with email</div>
+    <form id="form" autocomplete="on" novalidate>
+      <label for="email">Email</label>
+      <input id="email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="code">Authenticator code</label>
+      <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
+      <div id="err" class="err" role="alert" aria-live="polite"></div>
+      <button id="go" class="btn primary" type="submit">Sign in</button>
+    </form>
+    <p class="hint">Email sign-in needs the 6-digit code from your authenticator app (e.g. Google Authenticator). Turn it on from the Account tab after signing in with Google once.</p>
+  </div>
+</main>
+<script src="/auth/kdf.js"></script>
+<script src="/auth/login.js"></script>
+</body>
+</html>
