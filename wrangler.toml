@@ -3,7 +3,7 @@ main = "src/worker.js"  # the app files in public/ are bundled into the Worker b
 compatibility_date = "2025-01-01"
 
 # Serve on your own domain (the zone must be on this Cloudflare account).
-routes = [{ pattern = "cosmiq.thmlab.org", custom_domain = true }]
+routes = [{ pattern = "dive-comp.thmlab.org", custom_domain = true }]
 workers_dev = false
 preview_urls = false
 
