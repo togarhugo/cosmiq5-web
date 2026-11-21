@@ -40,9 +40,10 @@ npx wrangler d1 execute cosmiq --remote --file=schema.sql
 1. Google Cloud Console > APIs & Services > Credentials > *OAuth client ID* (Web). Authorized redirect URI:
    `https://<your-team>.cloudflareaccess.com/cdn-cgi/access/callback`
 2. Zero Trust > Settings > Authentication > Login methods > add **Google** with that client ID/secret.
-3. Edit `wrangler.toml`: set `TEAM_DOMAIN` (`<your-team>.cloudflareaccess.com`) and `ALLOWED_EMAILS`. Deploy once:
+3. Edit `wrangler.toml`: set `TEAM_DOMAIN` (`<your-team>.cloudflareaccess.com`). Deploy once, then store your allowed Google email as a secret (not committed):
    ```bash
    npx wrangler deploy
+   npx wrangler secret put ALLOWED_EMAILS   # type your Google email when prompted
    ```
 4. Zero Trust > Access > Applications > *Add self-hosted* for `cosmiq.thmlab.org`; policy **Allow** > Emails > your Google email.
    Copy the application's **Audience (AUD) tag** into `POLICY_AUD` in `wrangler.toml`, then `npx wrangler deploy` again.

@@ -21,5 +21,5 @@ database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
 TEAM_DOMAIN = "REPLACE_TEAM.cloudflareaccess.com"
 # Zero Trust > Access > Applications > your app > "Application Audience (AUD) Tag"
 POLICY_AUD = "REPLACE_WITH_AUD_TAG"
-# Defence in depth: only this Google account may use the API (comma-separated allowed).
-ALLOWED_EMAILS = "togar.h@gmail.com"
+# Defence in depth: only these Google accounts may use the API.
+# Set as a secret instead of committing it:  npx wrangler secret put ALLOWED_EMAILS  (your Google email; comma-separated for several)
