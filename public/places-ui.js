@@ -70,9 +70,12 @@ const PlacesUI = (() => {
 
   // ---------- the picker: search, tap, drag, save ----------
   let pk = null;
-  function open(names) {
+  const autoAsk = () => { try { return localStorage.getItem("mapAsk") !== "0"; } catch (e) { return true; } };
+  /** Places you have just entered: open the map search for them (unless you turned that off, or a map is already open). */
+  function offer(names) { if (autoAsk() && !pk && names.length) open(names, true); }
+  function open(names, fromEntry) {
     if (!hasMap()) { say("The map could not be loaded.", "warn"); return; }
-    const queue = names.slice(); pk = { queue, name: null, marker: null, map: null }; $("placePicker").hidden = false; document.body.classList.add("pp-open");
+    const queue = names.slice(); pk = { queue, name: null, marker: null, map: null, fromEntry: !!fromEntry }; $("placePicker").hidden = false; document.body.classList.add("pp-open");
     if (!pk.map) { pk.map = newMap($("ppMap")); pk.map.on("click", (e) => setPin(e.latlng.lat, e.latlng.lng)); }
     next();
   }
@@ -81,10 +84,11 @@ const PlacesUI = (() => {
     const name = pk.queue.shift(); if (!name) return close();
     const left = pk.queue.length; pk.name = name; setPin(null);
     $("ppTitle").textContent = `Where is “${name}”?` + (left ? ` (${left} more after this)` : ""); $("ppSkip").textContent = left ? "Skip this one" : "Cancel";
+    $("ppSkipAll").style.display = left ? "" : "none"; $("ppAuto").checked = autoAsk();
     $("ppQuery").value = name; $("ppResults").innerHTML = ""; $("ppSave").disabled = true;
     const have = P.get(name);
     if (have) { setPin(have.lat, have.lon); pk.map.setView([have.lat, have.lon], 10); $("ppHint").textContent = "Drag the pin or tap the map to move it."; }
-    else { pk.map.setView([0, 20], 2); $("ppHint").textContent = "Search for the place, or tap the map to drop the pin. You can drag it afterwards."; search(); }
+    else { pk.map.setView([0, 20], 2); $("ppHint").textContent = (pk.fromEntry ? "You just entered this location. " : "") + "Tap the right result, or tap the map to drop the pin. You can drag it afterwards."; search(); }
     setTimeout(() => pk && pk.map.invalidateSize(), 60);
   }
   function setPin(lat, lon) {
@@ -120,6 +124,8 @@ const PlacesUI = (() => {
     if (wired || !$("mapCard")) return; wired = true;
     $("ppGo").addEventListener("click", search); $("ppQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
     $("ppResults").addEventListener("click", (e) => { const b = e.target.closest(".res"); if (b && $("ppResults")._rows) choose($("ppResults")._rows[+b.dataset.i]); });
+    $("ppSkipAll").addEventListener("click", close);
+    $("ppAuto").addEventListener("change", (e) => { try { localStorage.setItem("mapAsk", e.target.checked ? "1" : "0"); } catch (err) {} say(e.target.checked ? "The map will open after you enter a new location" : "The map will no longer open by itself: use the orange buttons to place locations"); });
     $("ppSave").addEventListener("click", save); $("ppSkip").addEventListener("click", () => (pk && pk.queue.length ? next() : close())); $("ppClose").addEventListener("click", close);
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pk) close(); });
     const byKey = (k) => stats.find((s) => s.key === k);
@@ -133,5 +139,5 @@ const PlacesUI = (() => {
   }
   async function init() { wire(); await P.load(); if (typeof Dives !== "undefined") Dives.render(); }
 
-  return { render: renderFrom, shown, open, init, pins: () => pins, missing: () => missing };
+  return { render: renderFrom, shown, open, offer, init, pins: () => pins, missing: () => missing };
 })();

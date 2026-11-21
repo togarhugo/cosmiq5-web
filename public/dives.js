@@ -69,12 +69,15 @@ const Dives = (() => {
   // ---------- locations (free text per dive; edited per date) ----------
   /** map: fingerprint -> text ("" clears). Saved on this phone first, then sent to the cloud. */
   async function setLocations(map) {
-    const recs = await all(), known = U.knownLocations(recs);
+    const recs = await all(), known = U.knownLocations(recs), entered = [];
     for (const r of recs) if (Object.prototype.hasOwnProperty.call(map, r.fingerprint)) {
       const loc = U.normalizeLocation(map[r.fingerprint], known);
-      await put({ ...r, location: loc || undefined, locDirty: true });
+      await put({ ...r, location: loc || undefined, locDirty: true }); if (loc) entered.push(loc);
     }
     render(); await pushLocations(); render();
+    // a place you have just typed that is not on the map yet goes straight to the map search
+    const fresh = []; for (const n of entered) if (!fresh.some((f) => f.toLowerCase() === n.toLowerCase()) && !window.Places.get(n)) fresh.push(n);
+    if (fresh.length && typeof PlacesUI !== "undefined") PlacesUI.offer(fresh);
   }
   async function pushLocations() {
     const dirty = (await all()).filter((r) => r.locDirty && r.uploaded);                // a dive not yet in the cloud is uploaded (with its place) first

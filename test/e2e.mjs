@@ -81,6 +81,8 @@ const fakeBle = () => {
 };
 
 const browser = await chromium.launch();
+// The map opens by itself after a new location is saved (a user setting, on by default). Older scenarios are about other things and do not mock the map: switch it off for them.
+{ const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); } catch (e) {} }); return c; }; }
 let failed = 0;
 for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKit UA, fake BLE)", "iPhone 13"]]) {
   const ctx = await browser.newContext({ ...devices[devName], serviceWorkers: "block" });
@@ -809,6 +811,59 @@ if (process.env.REAL_DB) {
     await page.screenshot({ path: process.env.SHOT_MAP || "/tmp/shot-map.png", fullPage: true });
     assert.deepEqual(errs, [], "page errors"); console.log("PASS places on a map");
   } catch (e) { failed++; console.log("FAIL places on a map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-map.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: entering a location in the dive log goes straight to the map search ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], searches = []; page.on("pageerror", (e) => errs.push(e.message));
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await ctx.addInitScript(() => { try { localStorage.removeItem("mapAsk"); } catch (e) {} });          // the default: on
+  await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); searches.push(q);
+    const hit = (n, lat, lon) => [{ name: n, display_name: n + ", Indonesia", lat: String(lat), lon: String(lon) }];
+    return r.fulfill({ json: { Tulamben: hit("Tulamben", -8.29, 115.59), Komodo: hit("Komodo", -8.55, 119.49), Wakatobi: hit("Wakatobi", -5.3, 123.6) }[q] || [], headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") return r.fulfill({ json: { deleted: 0 } }); return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, n) => ({ fingerprint: (0xdef000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: null, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2), mk("2025-03-16T09:00:00", 3), mk("2025-03-17T09:00:00", 4)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const picker = () => page.locator("#placePicker"); const titleIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("ppTitle").textContent), re.source, { timeout: 8000 });
+    await page.waitForFunction(() => /Dive log \(4\)/.test(document.getElementById("navLog").textContent)); await page.click("#navLog");
+    // 1. add locations for two dates in the question: after Save the map search opens for each new place, one after the other
+    await page.locator("#locBannerBtn").click(); await page.waitForSelector("#locPrompt .locask input", { state: "visible" });
+    const ins = page.locator("#locPrompt .locask input"); await ins.nth(0).fill("Tulamben"); await ins.nth(1).fill("Komodo"); await ins.nth(2).fill("tulamben");
+    await page.click("#locSave"); await page.waitForSelector("#placePicker", { state: "visible" });
+    await titleIs(/Where is .Tulamben.\? \(1 more after this\)/); assert.match(await page.locator("#ppHint").innerText(), /You just entered this location/); assert.equal(await page.inputValue("#ppQuery"), "Tulamben");
+    await page.waitForSelector("#ppResults .res"); assert.deepEqual(searches, ["Tulamben"], "the new place was searched, once (the spelling variant is the same place)");
+    await page.locator("#ppResults .res").first().click(); await page.click("#ppSave"); await titleIs(/Where is .Komodo.\?/);
+    assert.deepEqual(places.map((p) => p.name), ["Tulamben"]); assert.equal(await page.locator("#ppSkipAll").isVisible(), false, "no 'Skip all' on the last one");
+    await page.waitForSelector("#ppResults .res"); await page.locator("#ppResults .res").first().click(); await page.click("#ppSave"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    assert.deepEqual(places.map((p) => p.name), ["Tulamben", "Komodo"]);
+    // 2. a place that is already on the map does not open the map again (edit one dive's location)
+    await page.locator("details.dive").first().locator("summary").click(); const one = page.locator("details.dive[open] .dive-loc");
+    await one.fill("Tulamben"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForFunction(() => /Location saved/.test(document.getElementById("toast").textContent));
+    await page.waitForTimeout(500); assert.ok(!(await picker().isVisible()), "Tulamben is already on the map"); assert.equal(searches.length, 2, "no extra search");
+    // 3. a new place in the per-date editor opens the map; 'Skip all' / the switch: it can be turned off
+    await one.fill("Wakatobi"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForSelector("#placePicker", { state: "visible" }); await titleIs(/Where is .Wakatobi.\?/);
+    assert.equal(await page.locator("#ppAuto").isChecked(), true, "on by default"); await page.locator("#ppAuto").uncheck(); await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    assert.equal(await page.evaluate(() => localStorage.getItem("mapAsk")), "0"); assert.equal(places.length, 2, "skipped: not saved");
+    await one.fill("Raja Ampat"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForFunction(() => /Location saved/.test(document.getElementById("toast").textContent));
+    await page.waitForTimeout(500); assert.ok(!(await picker().isVisible()), "switched off: the map stays closed"); assert.equal(searches.length, 3, "and no search is made");
+    // 4. what was skipped is still offered: the bar in the dive log and the orange buttons under the Summary map
+    await page.waitForFunction(() => /2 places are not on the map yet/.test(document.getElementById("placeBannerText").textContent), null, { timeout: 5000 });
+    await page.click("#navSummary"); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.equal(await page.locator("#mapUnplaced .chip").count(), 1, "Wakatobi was replaced by Raja Ampat on that dive, so only that one is left");
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS location entry opens the map");
+  } catch (e) { failed++; console.log("FAIL location entry opens the map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-entry.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);
