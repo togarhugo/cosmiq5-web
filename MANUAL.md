@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.16.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.17.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -10,7 +10,7 @@
 5. [Dive log](#5-dive-log)
 6. [Dive locations](#6-dive-locations)
 7. [Device settings](#7-device-settings)
-8. [Account](#8-account)
+8. [Account](#8-account) (including [API access](#api-access-let-other-tools-read-your-dive-log))
 9. [Understanding your dive data](#9-understanding-your-dive-data)
 10. [Privacy and security](#10-privacy-and-security)
 11. [Troubleshooting](#11-troubleshooting)
@@ -236,6 +236,45 @@ One regulator is tracked. **Edit** changes its name, type or starting count; **R
 Shows the **app version**, whether a newer one is available, **Check for update** (clears the cached copy and reloads), **Copy diagnostics**, and quick tips.
 
 **Sign out** is at the bottom of the Account page.
+
+### API access (let other tools read your dive log)
+Account → **API access** lets another program (a dashboard, a script, a spreadsheet, a phone shortcut) **read** your dives. A key can only read: it cannot change or delete anything, and it cannot sign in to this app.
+
+**Make a key**
+1. Open **Account → API access**.
+2. Under **Generate a key** write what it is for (for example *Home dashboard*) and choose how long it works: **7 days, 14 days, 30 days or Unlimited**. Prefer a time limit: an unlimited key keeps working until you revoke it.
+3. Tap **Generate key**. The key (it starts with `dm_`) appears in a green box. **Copy it now**: it is shown **only once**. The app keeps only a one-way fingerprint of it, so nobody (not even you or the app) can show it again. Lose it? **Rotate** the key to get a new one.
+
+**Your keys**
+Each key is listed with its description, the first letters of the key, when it was made, when it was **last used** (updated at most once an hour) and its state: **Active** (with the date it expires, orange in the last 3 days), **Expired** or **Revoked**.
+* **Rotate** (tap twice): the same key gets a **new secret and a fresh time limit** (a 7-day key is good for 7 more days). **The old secret stops working at once**, so update your tool with the new key. An expired key can be rotated back to life.
+* **Revoke** (tap twice): switches the key off for good. It stays in the list, greyed out, until you **Delete** it.
+* You can have **10 active keys** (one for each tool is a good habit: then you can cut one off without touching the others).
+
+**Using the API**
+The menu itself shows your own address and a ready-to-copy example. In short:
+* **Base address:** `https://<your address>/api/v1`
+* **Send the key in a header:** `Authorization: Bearer dm_...` (or `X-API-Key: dm_...`). Never put it in the web address.
+* **Endpoints** (all read-only `GET`):
+  * `/ping`: checks that the key works.
+  * `/summary`: number of dives and dive time per computer (Cosmiq+, Peregrine) and kind (scuba, freedive), and the time of the last dive.
+  * `/dives`: your dives, newest first. Options: `limit` (1-500, default 100; at most 10 with `include`), `cursor` (the `nextCursor` of the last answer: next page), `order=asc|desc`, `from` and `to` (days like `2025-03-14`), `device=cosmiq|peregrine`, `kind=scuba|freedive`, `location=Tulamben`, `uploadedSince=2025-04-01T10:00:00Z` (only dives added after that: fetch just what is new), `include=samples` (adds the depth profile) or `include=raw` (also the Cosmiq+ device bytes).
+  * `/dives/{id}`: one dive with its depth samples (`?include=raw` for the raw bytes).
+* **A dive looks like:** `id`, `device`, `kind`, `mode`, `startedAt`, `durationSec`, `maxDepthM`, `minTempC`, `o2Percent`, `diveNumber`, `location`, `position` (`{lat, lon}` where you put the place on the map, else `null`) and `uploadedAt`.
+* **Example:**
+  ```bash
+  curl -H "Authorization: Bearer dm_YOUR_KEY" "https://<your address>/api/v1/dives?kind=scuba&limit=2"
+  ```
+* Errors come as `{"error": "invalid_key", "message": "..."}` with status 400 (bad option), 401 (missing, invalid, expired or revoked key), 404 or 405 (this API only reads).
+
+**Good to know**
+* Depth is in metres, temperature in °C, durations in seconds. `startedAt` is the dive computer's own clock (no time zone).
+* A dive recorded by **both** computers appears **once per computer** (see `device`); the app's Summary counts it once, the API leaves that choice to your tool.
+* A **Cosmiq+** dive has `samples` only when the depth profile stored for it really belongs to it (`profileStatus`: `complete`, `partial` or `unavailable`). The app can recover some older profiles that the Cosmiq+ itself overwrote; the API does not, so a few old dives have `unavailable` there.
+* Treat a key like a password: do not post it online. If it leaks, **Revoke** it. If you remove your email from the list of allowed users, all your keys stop.
+* Please keep it to a few requests per second: the app runs on free hosting.
+
+---
 
 ---
 

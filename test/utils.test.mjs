@@ -268,3 +268,22 @@ test("scuba and freedive: told apart in the totals and on the map, each dive cou
   // durations as text
   for (const [sec, txt] of [[0, "0 s"], [45, "45 s"], [193, "3 min 13 s"], [599, "9 min 59 s"], [600, "10 min"], [2520, "42 min"], [3599, "60 min"], [12000, "3 h 20 min"], [null, "0 s"]]) assert.equal(U.durText(sec), txt, String(sec));
 });
+
+test("theme: every colour variable the app uses is defined in the light and the dark palette", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), css = fs.readFileSync(new URL("auth/theme.css", root), "utf8");
+  const light = css.slice(css.indexOf(":root"), css.indexOf('html[data-theme="dark"]')), dark = css.slice(css.indexOf('html[data-theme="dark"] {'), css.indexOf('html[data-theme="light"]'));
+  const used = new Set(); for (const f of ["index.html", "dives.js", "account-area.js", "account.js", "places-ui.js", "api-keys.js", "dive-utils.js"]) for (const m of fs.readFileSync(new URL(f, root), "utf8").matchAll(/var\(--((?:bg|tx|bd)-[0-9a-f]{3,6})\)/g)) used.add(m[1]);
+  assert.ok(used.size > 50, "found the colour variables: " + used.size);
+  for (const v of used) { assert.ok(light.includes(`--${v}:`), "--" + v + " has a light value"); assert.ok(dark.includes(`--${v}:`), "--" + v + " has a dark value"); }
+});
+
+test("api access: the account page has the menu, the script and the endpoint information", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), main = fs.readFileSync(new URL("index.html", root), "utf8");
+  assert.match(main, /<details class="card acc" data-sec="api">\s*<summary>API access/); assert.match(main, /<script src="api-keys\.js"><\/script>/); assert.match(main, /ApiKeys\.init\(\)/);
+  for (const id of ["apiBase", "apiCurl", "apiExample", "apiDesc", "apiDays", "apiGen", "apiNew", "apiKeyText", "apiCopy", "apiHide", "apiList", "apiCount", "apiMsg", "apiUnlimitedWarn"]) assert.ok(main.includes(`id="${id}"`), id);
+  assert.match(main, /<option value="7">7 days<\/option><option value="14">14 days<\/option><option value="30" selected>30 days<\/option><option value="0">Unlimited<\/option>/);
+  for (const ep of ["/ping", "/summary", "/dives", "/dives/{id}"]) assert.ok(main.includes(`<code>${ep}</code>`), ep); for (const opt of ["limit", "cursor", "order", "from</code>, <code>to", "device", "kind", "location", "uploadedSince", "include"]) assert.ok(main.includes(`<code>${opt}</code>`), opt);
+  const js = fs.readFileSync(new URL("api-keys.js", root), "utf8"); assert.ok(!/localStorage|sessionStorage/.test(js), "a key is never kept in browser storage");
+  assert.ok(fs.readFileSync(new URL("sw.js", root), "utf8").includes('"api-keys.js"')); assert.ok(fs.existsSync(new URL("../migrations/0007_api_keys.sql", root)));
+  assert.match(fs.readFileSync(new URL("../schema.sql", root), "utf8"), /CREATE TABLE IF NOT EXISTS api_keys[\s\S]*key_hash\s+TEXT NOT NULL UNIQUE/);
+});

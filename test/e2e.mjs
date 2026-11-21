@@ -1056,4 +1056,54 @@ if (process.env.REAL_DB) {
     console.log("PASS scuba and freedive");
   } catch (e) { failed++; console.log("FAIL scuba and freedive\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
 }
+// ---- scenario: Account > API access (generate, show once, copy, rotate, revoke, delete, endpoint information) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
+  const iso = (d) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 19) + "Z"; let seq = 0; const calls = [];
+  let keys = [{ id: "a".repeat(16), description: "Home dashboard", prefix: "dm_Qx7Lm2p", lifetimeDays: 30, createdAt: iso(-12), expiresAt: iso(18), lastUsedAt: iso(0), revokedAt: null, status: "active", rotatedFrom: null }];
+  const mkKey = (b) => ({ id: (++seq).toString(16).padStart(16, "0"), description: b.description, prefix: "dm_Ab3xK9m", lifetimeDays: b.days || null, createdAt: iso(0), expiresAt: b.days ? iso(b.days) : null, lastUsedAt: null, revokedAt: null, status: "active", rotatedFrom: null });
+  const SECRET = (n) => "dm_" + String(n).repeat(43).slice(0, 43);
+  await page.route("**/api/keys", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { keys, max: 10 } }); const b = JSON.parse(r.request().postData()); calls.push(["create", b]); if (keys.filter((k) => k.status === "active").length >= 10) return r.fulfill({ status: 409, json: { error: "You can have 10 active keys. Revoke one first." } }); const it = mkKey(b); keys = [it, ...keys]; return r.fulfill({ json: { key: SECRET(1), item: it } }); });
+  await page.route(/\/api\/keys\/[0-9a-f]{16}(\/(rotate|revoke))?$/, (r) => { const m = r.request().method(), u = new URL(r.request().url()).pathname.split("/"), id = u[3], act = u[4]; calls.push([act || "delete", id]);
+    if (act === "rotate") { const old = keys.find((k) => k.id === id); old.status = "revoked"; old.revokedAt = iso(0); const it = mkKey({ description: old.description, days: old.lifetimeDays }); keys = [it, ...keys]; return r.fulfill({ json: { key: SECRET(2), item: it } }); }
+    if (act === "revoke") { const k = keys.find((x) => x.id === id); k.status = "revoked"; k.revokedAt = iso(0); return r.fulfill({ json: { ok: true } }); }
+    keys = keys.filter((k) => k.id !== id); return r.fulfill({ json: { ok: true } }); });
+  await page.goto(base);
+  try {
+    await page.waitForFunction(() => /1 key/.test(document.getElementById("apiBadge").textContent), null, { timeout: 8000 });
+    await page.click("#acctBtn"); const sec = page.locator('details.acc[data-sec="api"]'); await sec.locator("> summary").click();
+    // 1. the endpoint information: this site's own address, the header, the endpoints, the options, an example
+    assert.equal(await page.locator("#apiBase").innerText(), base.replace(/\/$/, "") + "/api/v1", "the base address of this very site"); assert.match(await page.locator("#apiDocs").innerText(), /Authorization: Bearer dm_/); assert.match(await page.locator("#apiDocs").innerText(), /never in the web address/);
+    const eps = await page.locator("#apiDocs table.apitable").first().locator("tr").evaluateAll((rows) => rows.map((r) => r.querySelector("td").textContent)); assert.deepEqual(eps, ["/ping", "/summary", "/dives", "/dives/{id}"]);
+    await page.locator("#apiDocs .apimore > summary").click(); const opts = await page.locator("#apiDocs .apimore table.apitable td:first-child").allInnerTexts(); for (const o of ["limit", "cursor", "order", "from, to", "device", "kind", "location", "uploadedSince", "include"]) assert.ok(opts.includes(o), "option " + o + " documented: " + opts.join("|"));
+    assert.match(await page.locator("#apiCurl").innerText(), new RegExp(`curl -H "Authorization: Bearer dm_YOUR_KEY"[\\s\\S]*${base.replace(/[.\\/]/g, "\\$&").replace(/\/$/, "")}/api/v1/dives`)); const ex = JSON.parse(await page.locator("#apiExample").innerText()); assert.deepEqual(Object.keys(ex.dives[0]).slice(0, 5), ["id", "device", "kind", "mode", "startedAt"]); assert.ok("nextCursor" in ex);
+    await page.click("#apiCopyBase"); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), base.replace(/\/$/, "") + "/api/v1", "copies the address");
+    // 2. the form: the four lifetimes, 30 days preselected, a warning for unlimited, a description is required
+    assert.deepEqual(await page.locator("#apiDays option").evaluateAll((o) => o.map((x) => [x.value, x.textContent])), [["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["0", "Unlimited"]]); assert.equal(await page.inputValue("#apiDays"), "30");
+    assert.ok(!(await page.locator("#apiUnlimitedWarn").isVisible())); await page.selectOption("#apiDays", "0"); assert.match(await page.locator("#apiUnlimitedWarn").innerText(), /until you revoke it/); await page.selectOption("#apiDays", "14");
+    await page.click("#apiGen"); assert.match(await page.locator("#apiMsg").innerText(), /Describe what the key is for/); assert.equal(calls.length, 0, "nothing was sent without a description");
+    // 3. generate: the key is shown once, with a warning; copy works; the list gets the new key with its description and lifetime
+    await page.fill("#apiDesc", "  Garmin watch sync  "); await page.click("#apiGen"); await page.waitForSelector("#apiNew", { state: "visible" });
+    assert.deepEqual(calls.at(-1), ["create", { description: "Garmin watch sync", days: 14 }]); assert.equal(await page.locator("#apiKeyText").innerText(), SECRET(1)); assert.match(await page.locator("#apiNew").innerText(), /cannot be shown again/); assert.equal(await page.inputValue("#apiDesc"), "", "the form is cleared");
+    await page.click("#apiCopy"); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), SECRET(1), "the key is copied"); assert.equal(await page.locator("#apiCopy").innerText(), "Copied ✓");
+    assert.match(await page.locator("#apiList .keyrow").first().innerText(), /Garmin watch sync[\s\S]*Active . expires .* \(in 14 days\)[\s\S]*dm_Ab3xK9m.*never used/); assert.ok(!(await page.locator("#apiList").innerText()).includes(SECRET(1)), "the list never shows the key");
+    await page.click("#apiHide"); assert.ok(!(await page.locator("#apiNew").isVisible())); assert.equal(await page.locator("#apiKeyText").innerText(), "", "gone from the page, not just hidden"); assert.ok(!(await page.content()).includes(SECRET(1)), "the key is nowhere in the page any more");
+    // 4. rotate: needs a second tap; shows the new key once; the old one is listed as revoked
+    const first = page.locator("#apiList .keyrow").first(); await first.locator(".k-rotate").click(); assert.equal(await first.locator(".k-rotate").innerText(), "Tap again to rotate"); assert.equal(calls.filter((c) => c[0] === "rotate").length, 0, "one tap does nothing");
+    await first.locator(".k-rotate").click(); await page.waitForSelector("#apiNew", { state: "visible" }); assert.equal(await page.locator("#apiKeyText").innerText(), SECRET(2)); assert.match(await page.locator("#apiNewTitle").innerText(), /Rotated: Garmin watch sync.*old key stopped working/);
+    assert.equal(await page.locator("#apiList .keyrow.revoked").count(), 1, "the old key is revoked"); assert.match(await page.locator("#apiList .keyrow.revoked").innerText(), /Revoked/); assert.equal(await page.locator("#apiList .keyrow.revoked .k-rotate").count(), 0, "a revoked key cannot be rotated"); assert.equal(await page.locator("#apiList .keyrow.revoked .k-delete").count(), 1);
+    // 5. revoke (two taps) and delete (two taps)
+    await page.click("#apiHide"); const home = page.locator("#apiList .keyrow", { hasText: "Home dashboard" }); await home.locator(".k-revoke").click(); await home.locator(".k-revoke").click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow.revoked").length === 2); assert.ok(calls.some((c) => c[0] === "revoke"));
+    const rv = page.locator("#apiList .keyrow.revoked").first(); await rv.locator(".k-delete").click(); await rv.locator(".k-delete").click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow").length === 2); assert.ok(calls.some((c) => c[0] === "delete"));
+    assert.equal(await page.locator("#apiCount").innerText(), "1 of 10 active keys"); assert.equal(await page.locator("#apiBadge").innerText(), "1 key");
+    // 6. a server refusal (10 keys) is explained; a reload shows no key
+    keys = Array.from({ length: 10 }, (_, i) => ({ ...mkKey({ description: "k" + i, days: 30 }) })); await page.reload(); await page.click("#acctBtn"); await page.locator('details.acc[data-sec="api"] > summary').click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow").length === 10);
+    await page.fill("#apiDesc", "one too many"); await page.click("#apiGen"); await page.waitForFunction(() => /10 active keys/.test(document.getElementById("apiMsg").textContent)); assert.ok(!(await page.locator("#apiNew").isVisible()), "no key box after a refusal");
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS api access");
+  } catch (e) { failed++; console.log("FAIL api access\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-api.png", fullPage: true }); }
+  await ctx.close();
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

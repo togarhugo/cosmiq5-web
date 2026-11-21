@@ -446,6 +446,19 @@
             .maplegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--tx-6c757d); margin: 2px 0 4px; }
             .maplegend .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
             .kind-scuba-dot { background: #228be6; } .kind-freedive-dot { background: #12b886; } .kind-both-dot { background: linear-gradient(90deg, #228be6 50%, #12b886 50%); }
+            .apiline { display: flex; gap: 8px; align-items: flex-start; } .apiline code, .apiline pre { flex: 1; min-width: 0; margin: 0; }
+            #apiDocs code { font-family: var(--mono); font-size: 12.5px; background: var(--bg-f1f3f5); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+            #apiDocs pre { font-family: var(--mono); font-size: 12px; background: var(--bg-f1f3f5); padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: pre; } #apiDocs pre.apiexample { margin: 8px 0 0; max-height: 220px; }
+            .apitable { width: 100%; border-collapse: collapse; font-size: 13px; } .apitable td { padding: 5px 4px; border-bottom: 1px solid var(--bd-e9ecef); vertical-align: top; } .apitable td:first-child { white-space: nowrap; padding-right: 10px; }
+            .apimore { margin-top: 10px; } .apimore > summary { cursor: pointer; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+            .keybox { border: 2px solid var(--bd-2b8a3e); background: var(--bg-ebfbee); border-radius: 12px; padding: 12px; margin: 12px 0; } .kb-title { font-weight: 700; margin-bottom: 6px; }
+            .keybox code { display: block; font-family: var(--mono); font-size: 13px; word-break: break-all; background: var(--bg-fff); border: 1px solid var(--bd-ced4da); border-radius: 8px; padding: 10px; user-select: all; -webkit-user-select: all; }
+            .kb-warn { margin-top: 8px; font-size: 12.5px; color: var(--tx-d9480f); }
+            .apihead { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 6px; }
+            .keyrow { border: 1px solid var(--bd-e9ecef); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-fff); } .keyrow.revoked, .keyrow.expired { opacity: .75; }
+            .kr-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+            .kchip { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; } .kchip.active { background: var(--bg-ebfbee); color: var(--tx-2b8a3e); } .kchip.soon { background: var(--bg-fff4e6); color: var(--tx-d9480f); } .kchip.expired { background: var(--bg-fff5f5); color: var(--tx-c92a2a); } .kchip.revoked { background: var(--bg-e9ecef); color: var(--tx-6c757d); }
+            .kprefix { font-family: var(--mono); }
             .chart { display: block; }
             .chart .g-axis { stroke: var(--bd-adb5bd); } .chart .g-grid { stroke: var(--bd-dee2e6); } .chart .g-grid2 { stroke: var(--bd-e9ecef); } .chart .g-lbl { fill: var(--tx-6c757d); } .chart .g-gap { fill: var(--tx-adb5bd); }
 
@@ -1098,6 +1111,74 @@
                 </div>
             </details>
 
+            <details class="card acc" data-sec="api">
+                <summary>API access <span id="apiBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Let another tool (a dashboard, a script, a spreadsheet) <b>read</b> your dive log. A key can only read dives: it cannot change or delete anything and it cannot open this app.</p>
+
+                    <div class="subcard" id="apiDocs" style="margin-top:0">
+                        <h4>How to use it</h4>
+                        <div class="muted" style="margin-bottom:4px">Base address</div>
+                        <div class="apiline"><code id="apiBase"></code><button id="apiCopyBase" class="btn-set" type="button">Copy</button></div>
+                        <div class="muted" style="margin:10px 0 4px">Send your key in a header (never in the web address)</div>
+                        <div class="apiline"><code>Authorization: Bearer dm_&hellip;</code></div>
+                        <div class="muted" style="margin:10px 0 4px">Endpoints (read only, GET)</div>
+                        <table class="apitable">
+                            <tr><td><code>/ping</code></td><td>Check that your key works.</td></tr>
+                            <tr><td><code>/summary</code></td><td>Number of dives and dive time per computer, scuba and freedive.</td></tr>
+                            <tr><td><code>/dives</code></td><td>Your dives, newest first, 100 at a time.</td></tr>
+                            <tr><td><code>/dives/{id}</code></td><td>One dive with its depth samples.</td></tr>
+                        </table>
+                        <details class="apimore"><summary>Options, example and notes</summary>
+                            <div class="muted" style="margin:8px 0 4px">Options for <code>/dives</code></div>
+                            <table class="apitable">
+                                <tr><td><code>limit</code></td><td>1 to 500 (default 100; at most 10 with <code>include</code>).</td></tr>
+                                <tr><td><code>cursor</code></td><td>The <code>nextCursor</code> of the previous page: asks for the next page.</td></tr>
+                                <tr><td><code>order</code></td><td><code>desc</code> (default) or <code>asc</code>.</td></tr>
+                                <tr><td><code>from</code>, <code>to</code></td><td>Days, like <code>2025-03-14</code>, both included.</td></tr>
+                                <tr><td><code>device</code></td><td><code>cosmiq</code> or <code>peregrine</code>.</td></tr>
+                                <tr><td><code>kind</code></td><td><code>scuba</code> (includes gauge mode) or <code>freedive</code>.</td></tr>
+                                <tr><td><code>location</code></td><td>A place name, any capital letters.</td></tr>
+                                <tr><td><code>uploadedSince</code></td><td>Only dives added after this time, like <code>2025-04-01T10:00:00Z</code>: to fetch just what is new.</td></tr>
+                                <tr><td><code>include</code></td><td><code>samples</code> adds the depth profile; <code>raw</code> also the device bytes (Cosmiq+).</td></tr>
+                            </table>
+                            <div class="muted" style="margin:10px 0 4px">Example</div>
+                            <div class="apiline"><pre id="apiCurl"></pre><button id="apiCopyCurl" class="btn-set" type="button">Copy</button></div>
+                            <pre id="apiExample" class="apiexample"></pre>
+                            <ul class="help" style="margin-top:8px">
+                                <li>Depth is in metres, temperature in &deg;C, times in seconds. <code>startedAt</code> is the dive computer's own clock (no time zone).</li>
+                                <li>A dive recorded by both computers appears once per computer (see <code>device</code>); the Summary in the app counts it once.</li>
+                                <li>A Cosmiq+ dive has <code>samples</code> only when its stored depth profile really belongs to it (<code>profileStatus</code>: <code>complete</code>, <code>partial</code> or <code>unavailable</code>).</li>
+                                <li><code>position</code> is where you put the place on the map, or <code>null</code>.</li>
+                                <li>Errors come as <code>{"error": "code", "message": "..."}</code> with status 400, 401, 404 or 405. Please keep it to a few requests per second.</li>
+                            </ul>
+                        </details>
+                    </div>
+
+                    <div id="apiNew" class="keybox" style="display:none" role="alert">
+                        <div id="apiNewTitle" class="kb-title"></div>
+                        <code id="apiKeyText" tabindex="0"></code>
+                        <div class="row wrap" style="margin:8px 0 0"><button id="apiCopy" class="btn-set" type="button">Copy key</button><button id="apiHide" class="btn-set" type="button" style="background:var(--bg-6c757d)">I have saved it</button></div>
+                        <div class="kb-warn">Copy it now. For your safety the key is not stored and <b>cannot be shown again</b>. If you lose it, rotate the key to get a new one.</div>
+                    </div>
+
+                    <div class="subcard" id="apiForm">
+                        <h4>Generate a key</h4>
+                        <label class="label" for="apiDesc">What is it for?</label>
+                        <input id="apiDesc" class="fld" maxlength="60" placeholder="e.g. Home dashboard" autocomplete="off" />
+                        <label class="label" for="apiDays">Works for</label>
+                        <select id="apiDays" class="fld"><option value="7">7 days</option><option value="14">14 days</option><option value="30" selected>30 days</option><option value="0">Unlimited</option></select>
+                        <div id="apiUnlimitedWarn" class="muted" style="display:none;color:var(--tx-d9480f)">An unlimited key works until you revoke it. A key with a time limit is safer: rotate it when it runs out.</div>
+                        <button id="apiGen" class="btn-set" type="button" style="margin-top:8px">Generate key</button>
+                    </div>
+
+                    <div class="apihead"><b>Your keys</b><span id="apiCount" class="muted"></span></div>
+                    <div id="apiList"></div>
+                    <div id="apiMsg" class="msg" role="status"></div>
+                    <p class="muted" style="margin:6px 0 0"><b>Rotate</b> gives the same key a new secret and a fresh time limit, and the old secret stops working at once. <b>Revoke</b> switches a key off for good.</p>
+                </div>
+            </details>
+
             <details class="card acc" data-sec="help">
                 <summary>Help / app version</summary>
                 <div class="acc-body">
@@ -1149,6 +1230,7 @@
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
         <script src="account-area.js"></script>
+        <script src="api-keys.js"></script>
 
         <script>
             const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -1831,6 +1913,7 @@
             window.addEventListener("load", () => {
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
                 PlacesUI.init();                                                             // map pins of the places you have dived
+                ApiKeys.init();                                                              // Account > API access
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });

@@ -2,6 +2,7 @@ import ASSETS from "./assets.generated.js";
 import { configError, currentUser, handleAuth } from "./auth.js";
 import { handleAccount, handlePasswordAuth } from "./password.js";
 import { handlePlaces } from "./places.js";
+import { handleApiV1, handleKeys } from "./apikeys.js";
 import { handleAccountData } from "./account-data.js";
 import { VERSION } from "./version.js";
 
@@ -54,6 +55,9 @@ export default {
     const bad = configError(env);
     if (bad) return json({ error: bad }, 503);
 
+    // The read-only API for other tools: authenticated by a key in a header (never a cookie), so it comes before the cookie checks below.
+    if (url.pathname === "/api/v1" || url.pathname.startsWith("/api/v1/")) return handleApiV1(request, url, env);
+
     // Same-origin check for every state-changing request (cookies are SameSite=Lax as well).
     if (request.method !== "GET" && request.method !== "HEAD") {
       const origin = request.headers.get("origin");
@@ -81,6 +85,7 @@ export default {
     }
 
     if (url.pathname === "/api/places") return handlePlaces(request, url, env, email);
+    if (url.pathname === "/api/keys" || url.pathname.startsWith("/api/keys/")) { const r = await handleKeys(request, url, env, email); if (r) return r; }
 
     // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.
     if (url.pathname === "/api/dives/location" && request.method === "POST") {

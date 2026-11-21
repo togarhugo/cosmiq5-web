@@ -152,6 +152,19 @@ the free plan's CPU limit.
   (`public/auth/icon-summary|log|device.png`, cut from `design/tab-icons-source.png` by `scripts/make-tab-icons.py`) painted with `currentColor` through CSS `mask`. All of these are public paths
   (`PUBLIC_ASSET` in `src/auth.js`) because the sign-in pages use them.
 
+- **API keys and the read-only API** (`src/apikeys.js`, `public/api-keys.js`, table `api_keys`):
+  * A key is `dm_` + 43 random URL-safe characters (256 bits). Only its **SHA-256** is stored (`key_hash`, unique), plus a 10-character `prefix` for the list. One fast hash is enough for a random key and keeps the free plan's 10 ms CPU limit
+    safe (no slow KDF per request). The key is returned once, by `POST /api/keys` or `.../rotate`, and never again.
+  * Management (needs the signed-in session, same-origin): `GET/POST /api/keys`, `POST /api/keys/{id}/rotate|revoke`, `DELETE /api/keys/{id}`. Lifetimes 7, 14, 30 days or unlimited (`days: 0`); at most 10 active keys; rotating revokes the old key and
+    inserts a new one in one batch (same description and lifetime, fresh expiry); another user's key id answers 404.
+  * Read API (`/api/v1/*`, routed before the cookie checks): `GET /ping`, `/summary`, `/dives` (filters `device`, `kind`, `from`, `to`, `location`, `uploadedSince`; keyset pagination `cursor` on `(started_at, fingerprint)`;
+    `limit` <= 500, <= 10 with `include=samples|raw`), `/dives/{id}`. Authentication is `Authorization: Bearer` or `X-API-Key` only (a key in the URL is refused: it ends up in logs), never a cookie; the owner must still be in
+    `ALLOWED_EMAILS`; revoked or expired keys answer 401 with `key_revoked` / `key_expired`. Everything else is 405. CORS is open (`*`) because no cookie is involved. `last_used_at` is written at most once an hour.
+  * Cosmiq+ depth samples are decoded in the Worker with the same `public/dive-protocol.js` as the browser (bundled by wrangler) and only when `profileCheck` says the stored profile belongs to the dive (`complete` / `partial`);
+    profiles the app recovers from other rows after the device's memory wrapped are not recovered by the API. Peregrine samples come from the stored JSON (`extra`).
+  * Checked on a local `wrangler dev` Worker (workerd): the bundle works, 10 dives with samples took ~11 ms wall time.
+  * Security note: a key gives read access to ALL of the owner's dive data until it expires or is revoked. Deleting `ALLOWED_EMAILS` entries disables the keys of those users.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
@@ -160,6 +173,7 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql 
 npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql   # name, DAN details, certification kind/date (run once)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_latest_cert.sql   # dives.device/extra, pinned latest certification (run once)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0007_api_keys.sql                   # API keys (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)
