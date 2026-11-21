@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS dives (
   o2_percent   INTEGER,
   header_hex   TEXT NOT NULL,          -- raw 36-byte header: source of truth
   profile_hex  TEXT NOT NULL,          -- raw profile bytes: source of truth
+  location     TEXT,                   -- free-text dive area ("Komodo"); NULL = not set
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, fingerprint)
 );

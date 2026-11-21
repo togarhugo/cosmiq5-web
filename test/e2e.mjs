@@ -37,6 +37,21 @@ const fakeBle = () => {
     if (page >= 256) return new Array(len).fill(255);                                  // the device cannot read wrapped pages
     if (page === 0) { const p = prof3.slice(); while (p.length < len) p.push(255); return p.slice(0, len); }   // slot 0 now holds dive #3
     return d.p; };
+  // stateful settings, laid out like the real read packets (see technical_documentation.md)
+  const st = { env: 0, blEco: 5, mode: 0, depth: 30, tAlarm: 60, air: 21, timeout: 3, date: 0, units: 1, fdTime: 6, safety: 1, ppo2: 14, a: [0, 25, 30, 35, 40, 45, 50] };
+  const settingsReply = (cmd) => ({
+    0x5f: [0, st.env, st.blEco, 0, 0, 0],
+    0x5c: [(st.depth * 100 + 1000) >> 8, (st.depth * 100 + 1000) & 255, st.tAlarm >> 8, st.tAlarm & 255, st.air, st.mode],
+    0x5b: [0, 0, 0, st.timeout, st.date, st.units],
+    0x5d: [st.a[2] - 5, st.a[1] - 5, 0, st.fdTime, st.safety, st.ppo2],
+    0x60: [st.a[4] - 5, st.a[3] - 5, st.a[6] - 5, st.a[5] - 5],
+  })[cmd];
+  const writeSetting = (cmd, p) => { const last = p[p.length - 1];
+    if (cmd === 0x30) st.env = last; else if (cmd === 0x2e) st.blEco = p[0]; else if (cmd === 0x21) st.safety = last; else if (cmd === 0x2b) st.mode = p[0];
+    else if (cmd === 0x2a) st.timeout = last; else if (cmd === 0x22) st.air = p[0]; else if (cmd === 0x2d) st.ppo2 = p[0]; else if (cmd === 0x23) st.units = p[0];
+    else if (cmd === 0x24) st.date = p[0]; else if (cmd === 0x27) st.depth = (((p[0] << 8) | p[1]) - 1000) / 100;
+    else if (cmd === 0x28) st.tAlarm = (p[0] << 8) | p[1]; else if (cmd === 0x26) st.fdTime = p[1];
+    else if (cmd === 0x25) { st.a[2] = p[0] + 5; st.a[1] = p[1] + 5; } else if (cmd === 0x31) { st.a[4] = p[0] + 5; st.a[3] = p[1] + 5; } else if (cmd === 0x32) { st.a[6] = p[0] + 5; st.a[5] = p[1] + 5; } };
   let handler = null; const out = [];
   const chunks = (str) => { for (let i = 0; i < str.length; i += 20) out.push(str.slice(i, i + 20)); };
   const flush = () => { while (out.length) { const c = enc.encode(out.shift()); handler && handler({ target: { value: new DataView(c.buffer) } }); } };
@@ -44,7 +59,11 @@ const fakeBle = () => {
     const raw = line.trim().slice(1).match(/../g).map((x) => parseInt(x, 16)); const cmd = raw[0], n = raw[3];
     if (cmd === 0x58) chunks(frame(0x58, [0x42]));
     else if (cmd === 0x5a) chunks(frame(0x5a, [1, 2, 3, 4, 5, 6]));
-    else if ([0x5f, 0x5b, 0x5c, 0x5d, 0x60].includes(cmd)) chunks(frame(cmd, [0, 0, 5, 20, 1, 14]));
+    else if ([0x5f, 0x5b, 0x5c, 0x5d, 0x60].includes(cmd)) chunks(frame(cmd, settingsReply(cmd)));
+    else if (cmd >= 0x21 && cmd <= 0x32 && cmd !== 0x20) {                       // a setting is being written
+      if (window.__rejectWrites) chunks("$800000\n");
+      else if (!window.__ignoreWrites) writeSetting(cmd, raw.slice(3));
+    }
     else if (cmd === 0x40) chunks(frame(0x40, [dives.length]));
     else if (cmd === 0x41) { chunks(frame(0x41, [36])); for (let i = 0; i < 36; i += 6) chunks(frame(0x42, dives[n - 1].h.slice(i, i + 6))); }
     else if (cmd === 0x43 && n === 2 && window.__stall) { /* device goes silent */ }
@@ -139,7 +158,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // progress is visible on the Device tab (banner), with the dive being fetched
     await page.waitForFunction(() => /Downloading dive 2 of 2/.test(document.getElementById("bannerText").textContent), null, { timeout: 15000 });
     assert.ok(await page.locator("#syncBanner").isVisible(), "banner visible while syncing, on every tab");
-    assert.ok(await page.locator("#deviceView").isVisible(), "still on the Device tab");
+    assert.ok(await page.locator("#summaryView").isVisible() && !(await page.locator("#logView").isVisible()), "still on the tab you were on (Summary)");
     assert.match(await page.locator("#navLog").innerText(), /\(1\)/, "dive 1 already counted while dive 2 is still downloading");
     await page.click("#cancelSync");
     await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("diveProgress").textContent), null, { timeout: 10000 });
@@ -184,6 +203,133 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     console.log("  last log:", (await page.evaluate(() => (window.__diag || []).slice(-14))).join("\n            "));
     await page.screenshot({ path: "/tmp/fail-wrap.png", fullPage: true });
   }
+  await ctx.close();
+}
+// ---- scenario: every change on the dive computer is confirmed (or honestly reported) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.route("**/api/**", (r) => r.fulfill({ status: 404, body: "{}" }));
+  await page.addInitScript(() => { localStorage.setItem("optDives", "0"); }); await page.addInitScript(fakeBle);
+  await page.goto(base);
+  const toastText = async () => (await page.locator("#toast").innerText()).replace(/\s+/g, " ").trim();
+  const waitToast = (re, cls) => page.waitForFunction(([src, c]) => { const t = document.getElementById("toast"); return new RegExp(src).test(t.textContent) && t.classList.contains(c); }, [re.source, cls], { timeout: 8000 });
+  try {
+    await page.click("#connectBtn"); await page.click("#navDevice"); await page.waitForSelector("#app", { state: "visible" });
+    await page.waitForFunction(() => document.getElementById("clockStatus").textContent.includes("clock set"));
+    // 1. a successful change: "Applying..." first, then a green confirmation that names what changed; the button flashes
+    await page.locator("#bl7").tap();
+    await waitToast(/Setting backlight/, "pending");
+    await waitToast(/Backlight set to level 5/, "ok");
+    assert.ok(await page.locator("#toast").evaluate((e) => e.classList.contains("show")), "toast visible");
+    assert.ok(await page.locator("#bl7").evaluate((e) => e.classList.contains("applied") && e.classList.contains("selected")), "button flashed and selected");
+    // 2. more kinds of settings
+    await page.locator("#unit0").tap(); await waitToast(/Units set to Imperial/, "ok");
+    await page.locator("#ecoOff").tap(); await waitToast(/Power-saving mode off/, "ok");
+    await page.locator("#date1").tap(); await waitToast(/Date display set to last dive date/, "ok");
+    await page.selectOption("#timeoutSel", "60"); await page.locator("#timeoutSel + button").tap(); await waitToast(/Screen timeout set to 1 min/, "ok");
+    await page.locator(".tab", { hasText: "Environment" }).tap();
+    await page.locator("#env1").tap(); await waitToast(/Environment set to High salinity/, "ok");
+    await page.locator(".tab", { hasText: "Scuba" }).tap();
+    await page.fill("#scubaDepth", "35"); await page.locator("#scubaDepth + button").tap(); await waitToast(/Depth alarm set to 35 m/, "ok");
+    await page.fill("#scubaTime", "45"); await page.locator("#scubaTime + button").tap(); await waitToast(/Time alarm set to 45 min/, "ok");
+    await page.locator("#safeGroup .btn-opt", { hasText: "Prog" }).tap(); await waitToast(/Safety factor set to Progressive/, "ok");
+    await page.locator(".tab", { hasText: "Freedive" }).tap();
+    await page.fill("#fd3", "22"); await page.locator("#fd3 + button").tap(); await waitToast(/Freedive depth alarm 3 set to 22 m/, "ok");
+    await page.fill("#fd6", "48"); await page.locator("#fd6 + button").tap(); await waitToast(/Freedive depth alarm 6 set to 48 m/, "ok");
+    // the partner of a paired alarm must not be disturbed (alarms are written in pairs)
+    assert.equal(await page.inputValue("#fd4"), "40"); assert.equal(await page.inputValue("#fd5"), "45");
+    // 3. clock: no read-back exists, so the message says what is actually known
+    await page.locator(".tab", { hasText: "General" }).tap();
+    await page.locator("button", { hasText: "Sync Now" }).tap(); await waitToast(/Clock set to \d\d:\d\d:\d\d.* \(phone time\)/, "ok");
+    // 4. the device does NOT apply the change: an honest warning, and the screen goes back to what the device really has
+    await page.evaluate(() => { window.__ignoreWrites = true; });
+    await page.locator("#unit1").tap();
+    await waitToast(/Not applied: the dive computer still shows Imperial/, "warn");
+    assert.ok(await page.locator("#unit0").evaluate((e) => e.classList.contains("selected")), "UI reverted to the device's real value");
+    assert.ok(!(await page.locator("#unit1").evaluate((e) => e.classList.contains("selected"))));
+    // 5. the device rejects the change
+    await page.evaluate(() => { window.__ignoreWrites = false; window.__rejectWrites = true; });
+    await page.locator("#unit1").tap(); await waitToast(/rejected/, "err");
+    // 6. back to normal: the next change confirms again; rapid taps are applied one after another, all confirmed
+    await page.evaluate(() => { window.__rejectWrites = false; });
+    await page.locator("#unit1").tap(); await waitToast(/Units set to Metric/, "ok");
+    await page.locator("#bl3").tap(); await page.locator("#bl4").tap(); await waitToast(/Backlight set to level 2/, "ok");
+    assert.ok(await page.locator("#bl4").evaluate((e) => e.classList.contains("selected")));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    await page.screenshot({ path: process.env.SHOT_TOAST || "/tmp/shot-toast.png" });
+    console.log("PASS setting confirmations");
+  } catch (e) { failed++; console.log("FAIL setting confirmations\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  toast now:", await toastText().catch(() => "?")); await page.screenshot({ path: "/tmp/fail-settings.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: summary page + dive locations (asked after each sync, per date) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2025, 2, 17, 12, 0, 0) });
+  const uploaded = [], locCalls = [];
+  await page.route("**/api/dives/location", (r) => { locCalls.push(JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+  await page.route("**/api/dives", async (r) => {
+    if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    uploaded.push(...JSON.parse(r.request().postData()).dives); return r.fulfill({ json: { stored: uploaded.length } });
+  });
+  await page.addInitScript(fakeBle); await page.goto(base);
+  const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
+  const chips = () => page.locator(".dh-loc").allInnerTexts().then((a) => a.map((t) => t.replace(/\s+/g, " ").trim()));
+  const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+  try {
+    // the app opens on the Summary tab; with no dives it says so
+    assert.ok(await page.locator("#summaryView").isVisible()); assert.match(await page.locator("#sumEmpty").innerText(), /No dives yet/);
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    // 1. after the sync we are asked where we dived, one row per DATE, oldest first
+    assert.ok(await page.locator("#logView").isVisible(), "switched to the Dive log"); await page.waitForSelector("#locPrompt", { state: "visible", timeout: 5000 });
+    assert.match(await page.locator("#locPrompt h3").innerText(), /Where did you dive\?/);
+    const rows = page.locator("#locPrompt .locask"); assert.equal(await rows.count(), 2);
+    assert.match(await rows.nth(0).locator("label").innerText(), /14.*2025|2025.*14/); assert.match(await rows.nth(1).locator("label").innerText(), /15.*2025|2025.*15/);
+    assert.equal(await page.locator("#locPrompt .same").count(), 1, "no 'same as above' on the first row");
+    await page.fill("#locIn0", "  Komodo "); await page.locator("#locPrompt .same").tap();
+    assert.equal(await page.inputValue("#locIn1"), "  Komodo ", "same as above copies the value");
+    await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
+    assert.ok(!(await page.locator("#locPrompt").isVisible()), "question closed");
+    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    await until(() => locCalls.length >= 1, "the location update to reach the cloud");
+    assert.equal(locCalls.length, 1); assert.deepEqual(locCalls[0].map((i) => i.location), ["Komodo", "Komodo"]); assert.equal(locCalls[0].length, 2);
+    assert.ok(uploaded.every((d) => /^[0-9a-f]{12}$/.test(d.fingerprint)), "dives were uploaded before their location");
+    // 2. summary: last dive date (with how long ago and where) and total dive time
+    await page.click("#navSummary");
+    assert.match(await page.locator("#sumLastDate").innerText(), /March 15, 2025|15 March 2025/);
+    assert.match(await page.locator("#sumLastSub").innerText(), /2 days ago.*Komodo/);
+    assert.equal(await page.locator("#sumHours").innerText(), "0 h 42 min"); assert.match(await page.locator("#sumCount").innerText(), /across 2 dives/);
+    // 3. it survives a reload (stored on the phone)
+    await page.reload(); await page.click("#navLog"); await page.waitForSelector(".dh-loc");
+    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    // 4. change the place of one date from its header; a known place is always written with its existing spelling
+    await page.locator(".dh-loc").last().tap(); await page.waitForSelector(".dh-edit input");
+    assert.ok(await page.locator("#locList option[value='Komodo']").count(), "known places are suggested");
+    await page.evaluate(() => Dives.render());                                              // a background refresh must not wipe what is being typed
+    await page.fill(".dh-edit input", "Banda"); await page.evaluate(() => Dives.render());
+    assert.equal(await page.inputValue(".dh-edit input"), "Banda", "typing is not interrupted by a refresh");
+    await page.locator(".dh-save").tap(); await toastIs(/Location saved/); await until(() => locCalls.length >= 2, "the date edit to reach the cloud");
+    const after = await chips(); assert.ok(after.includes("\u{1F4CD} Banda") && after.includes("\u{1F4CD} Komodo"), after.join(" | "));
+    assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Banda"]);
+    await page.locator(".dh-loc", { hasText: "Banda" }).tap(); await page.fill(".dh-edit input", "KOMODO"); await page.locator(".dh-save").tap(); await toastIs(/Location saved/);
+    await until(() => locCalls.length >= 3, "the second date edit to reach the cloud"); assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Komodo"], "re-uses the existing spelling");
+    // 5. per-dive field inside the dive
+    await page.locator("details.dive").first().locator("summary").tap(); await page.waitForSelector("details.dive[open] .dive-loc");
+    await page.fill("details.dive[open] .dive-loc", "Tulamben"); await page.locator("details.dive[open] .dive-loc-save").tap(); await toastIs(/Location saved/);
+    await until(async () => (await chips()).filter((c) => /Tulamben/.test(c)).length === 1, "the date header to show Tulamben");
+    assert.ok(await page.locator("details.dive[open]").count(), "the dive you are editing stays open");
+    // 6. clearing a place brings up the 'no location' banner; it opens the same question, pre-filled from other dives of that day where possible
+    await page.locator(".dh-loc", { hasText: "Tulamben" }).tap(); await page.fill(".dh-edit input", ""); await page.locator(".dh-save").tap(); await toastIs(/Location cleared/);
+    await page.waitForSelector("#locBanner", { state: "visible", timeout: 5000 }); assert.match(await page.locator("#locBannerText").innerText(), /1 dive has no location/);
+    await page.click("#locBannerBtn"); await page.waitForSelector("#locPrompt .locask", { timeout: 5000 }); assert.equal(await page.locator("#locPrompt .locask").count(), 1);
+    assert.ok(!(await page.locator("#locBanner").isVisible()), "the banner steps aside while its question is open");
+    assert.doesNotMatch(await page.locator("#locPrompt p").innerText(), /same/, "no same-as-above hint for a single row");
+    await page.locator("#locPrompt input").fill("Banda"); await page.click("#locSave"); await toastIs(/Location saved for 1 dive/);
+    assert.ok(!(await page.locator("#locBanner").isVisible()), "banner gone when every dive has a place");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    await page.screenshot({ path: process.env.SHOT_LOC || "/tmp/shot-loc.png", fullPage: true });
+    console.log("PASS summary + locations");
+  } catch (e) { failed++; console.log("FAIL summary + locations\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-loc.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

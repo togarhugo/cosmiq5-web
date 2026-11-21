@@ -5,7 +5,7 @@
 "use strict";
 
 const Dives = (() => {
-  const P = window.CosmiqDive;
+  const P = window.CosmiqDive, U = window.DiveUtils;
   const DB_NAME = "cosmiq", STORE = "dives";
   let dbp = null, busy = false, cloudState = "unknown";
   const failState = (e) => (e && e.status === 401 ? "signedout" : navigator.onLine ? "unavailable" : "offline");
@@ -30,7 +30,7 @@ const Dives = (() => {
     return { fingerprint: raw.fingerprint, deviceMac: deviceMac || raw.deviceMac || null,
       headerHex: raw.headerHex, profileHex: raw.profileHex, startedAt: d.startedAt, mode: d.mode,
       durationSec: d.durationSec, maxDepthM: +d.maxDepthM.toFixed(2), o2Percent: d.o2Percent,
-      uploaded: !!raw.uploaded };
+      uploaded: !!raw.uploaded, location: raw.location || undefined };
   }
 
   // ---------- cloud ----------
@@ -39,11 +39,42 @@ const Dives = (() => {
       const r = await fetch("/api/dives", { credentials: "same-origin", redirect: "error" });
       if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
       const { dives } = await r.json();
-      const have = new Set((await all()).map((d) => d.fingerprint));
-      for (const d of dives) if (!have.has(d.fingerprint)) await put({ ...toRecord(d), uploaded: true });
+      const local = new Map((await all()).map((d) => [d.fingerprint, d]));
+      for (const d of dives) {
+        const mine = local.get(d.fingerprint);
+        if (!mine) await put({ ...toRecord(d), uploaded: true });
+        else if (!mine.locDirty && (mine.location || "") !== (d.location || "")) await put({ ...mine, location: d.location || undefined });   // edited on another device
+      }
       cloudState = "ok";
     } catch (e) { cloudState = failState(e); }
+    await pushLocations();                                                            // retry edits that could not be sent earlier
     render();
+  }
+
+  // ---------- locations (free text per dive; edited per date) ----------
+  /** map: fingerprint -> text ("" clears). Saved on this phone first, then sent to the cloud. */
+  async function setLocations(map) {
+    const recs = await all(), known = U.knownLocations(recs);
+    for (const r of recs) if (Object.prototype.hasOwnProperty.call(map, r.fingerprint)) {
+      const loc = U.normalizeLocation(map[r.fingerprint], known);
+      await put({ ...r, location: loc || undefined, locDirty: true });
+    }
+    render(); await pushLocations(); render();
+  }
+  async function pushLocations() {
+    const dirty = (await all()).filter((r) => r.locDirty && r.uploaded);                // a dive not yet in the cloud is uploaded (with its place) first
+    if (!dirty.length) return 0;
+    try {
+      for (let i = 0; i < dirty.length; i += 100) {
+        const batch = dirty.slice(i, i + 100);
+        const r = await fetch("/api/dives/location", { method: "POST", credentials: "same-origin", redirect: "error", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ items: batch.map((d) => ({ fingerprint: d.fingerprint, location: d.location || null })) }) });
+        if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
+        for (const d of batch) await put({ ...d, locDirty: false });
+      }
+      cloudState = "ok";
+    } catch (e) { cloudState = failState(e); }
+    return dirty.length;
   }
   async function cloudPush() {
     const pending = (await all()).filter((d) => !d.uploaded);
@@ -70,12 +101,12 @@ const Dives = (() => {
   async function syncFromDevice(io, opts) {
     if (busy) return;
     busy = true; setBusy(true); showBanner(true);
-    let saved = 0, info = {};
+    let saved = 0, info = {}; const savedRecs = [];
     try {
       const known = new Set((await all()).map((d) => d.fingerprint));
       let lastRender = 0;
       const res = await P.readDives(io, known, (m, p) => progress(m, p), async (raw, r) => {
-        await put(toRecord(raw, r.mac)); saved++;                      // saved the moment it arrives
+        const rec = toRecord(raw, r.mac); await put(rec); savedRecs.push(rec); saved++;       // saved the moment it arrives
         if (Date.now() - lastRender > 400) { lastRender = Date.now(); render(); }
       }, opts);
       info = { count: res.count, newDives: res.dives.length, skipped: res.skipped, fw: res.firmware, mac: res.mac };
@@ -89,6 +120,7 @@ const Dives = (() => {
       progress(msg, 0); log(msg, "log-err"); saveLast({ ok: false, msg, saved, ...info });
       if (saved) await cloudPush();
     } finally { if (io.end) io.end(); busy = false; setBusy(false); showBanner(false); render(); }
+    if (savedRecs.length) openPrompt(savedRecs, "Where did you dive?", `${savedRecs.length} new dive${savedRecs.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
     return { saved };
   }
 
@@ -161,7 +193,7 @@ const Dives = (() => {
     const depths = d.samples.map((x) => x.depthM).filter((m) => m > 0.3);
     const avg = depths.length ? (depths.reduce((a, b) => a + b, 0) / depths.length).toFixed(1) + " m" : "\u2013";
     const note = STATUS_TEXT[res.status] ? STATUS_TEXT[res.status](res.missing, d.sampleIntervalSec) : "";
-    return `${usable ? chart(d, res.status === "truncated" ? res.missing : 0) : ""}${note ? `<p class="note">${esc(note)}</p>` : ""}<div class="stats">
+    return `${locEditor(rec)}${usable ? chart(d, res.status === "truncated" ? res.missing : 0) : ""}${note ? `<p class="note">${esc(note)}</p>` : ""}<div class="stats">
       <div><b>${d.maxDepthM.toFixed(1)} m</b><span>max depth</span></div>
       <div><b>${fmtDur(d.durationSec)}</b><span>duration</span></div>
       <div><b>${d.minTempC.toFixed(1)} \u00b0C</b><span>min temp</span></div>
@@ -176,16 +208,103 @@ const Dives = (() => {
 
   const YEARS_KEY = "yearsOpen";
   const loadYears = () => { try { return JSON.parse(localStorage.getItem(YEARS_KEY) || "null"); } catch (e) { return null; } };
+  const say = (t, kind) => { if (window.toast) window.toast(t, kind || "ok"); };
+  const dayOf = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmtDayShort = (key) => dayOf(key).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const fmtDayLong = (key) => dayOf(key).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  // ---------- summary page ----------
+  function renderSummary(recs) {
+    if (!$("sumHours")) return;
+    const sm = U.summarize(recs, new Date());
+    $("sumEmpty").style.display = sm.count ? "none" : "";
+    $("sumCards").style.display = sm.count ? "" : "none";
+    if (!sm.count) return;
+    $("sumLastDate").textContent = fmtDayLong(sm.last.date);
+    $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
+    $("sumHours").textContent = U.hoursText(sm.totalSec);
+    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}`;
+  }
+
+  // ---------- locations: the question after a sync, the banner, date headers, per-dive field ----------
+  const locEditor = (rec) => `<div class="loc1"><span aria-hidden="true">\ud83d\udccd</span><input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
+  async function fillSuggestions() { const known = U.knownLocations(await all()); $("locList").innerHTML = known.map((k) => `<option value="${esc(k)}">`).join(""); return known; }
+
+  /** Ask for the area of each date among `targets`. One row per date; "same as above" copies the row before it. */
+  async function openPrompt(targets, heading, sub) {
+    const el = $("locPrompt"); if (!el) return;
+    const recs = await all(), asks = U.locationAsks(targets.map((t) => recs.find((r) => r.fingerprint === t.fingerprint) || t), recs);
+    if (!asks.length) { el.style.display = "none"; return; }
+    const known = await fillSuggestions();
+    const hint = (sub || "Just the area, for example Banda, Komodo or Tulamben.") + (asks.length > 1 ? " Tap \u201c\u2191 same\u201d to repeat the place above." : "");
+    el.innerHTML = `<h3>${esc(heading)}</h3><p class="muted" style="margin:0 0 10px">${esc(hint)}</p><div class="locrows">` +
+      asks.map((a, i) => `<div class="locask"><label for="locIn${i}">${esc(fmtDayLong(a.date))} <span class="muted">\u00b7 ${a.count} dive${a.count === 1 ? "" : "s"}</span></label>
+        <div class="row" style="margin-bottom:10px"><input id="locIn${i}" data-i="${i}" list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(a.prefill)}">${i ? `<button class="btn-set same" type="button" data-i="${i}" title="Use the place above">\u2191 same</button>` : ""}</div></div>`).join("") +
+      `</div><div class="row" style="margin:0"><button id="locSave" class="btn-set" type="button">Save</button><button id="locLater" class="btn-set" type="button" style="background:#6c757d">Later</button></div>`;
+    el.style.display = "block"; updateBanner(recs); el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.onclick = async (e) => {
+      const same = e.target.closest(".same");
+      if (same) { const i = +same.dataset.i; $("locIn" + i).value = $("locIn" + (i - 1)).value; return; }
+      if (e.target.id === "locLater") { el.style.display = "none"; updateBanner(await all()); return; }
+      if (e.target.id !== "locSave") return;
+      const map = {}; let n = 0;
+      asks.forEach((a, i) => { const v = U.normalizeLocation($("locIn" + i).value, known); if (v) { a.fps.forEach((fp) => { map[fp] = v; }); n += a.fps.length; } });
+      el.style.display = "none";
+      if (n) { await setLocations(map); say(`Location saved for ${n} dive${n === 1 ? "" : "s"}`); } else updateBanner(await all());
+    };
+    const first = el.querySelector("input:not([value=''])") || el.querySelector("input"); if (first && !first.value) first.focus({ preventScroll: true });
+  }
+  function revealPrompt() { const el = $("locPrompt"); if (el && el.style.display !== "none") el.scrollIntoView({ block: "start" }); }
+  function updateBanner(recs) {
+    const b = $("locBanner"); if (!b) return;
+    const missing = recs.filter((r) => !r.location);
+    const promptOpen = $("locPrompt") && $("locPrompt").style.display !== "none";
+    b.style.display = missing.length && !promptOpen ? "flex" : "none";
+    $("locBannerText").textContent = `${missing.length} dive${missing.length === 1 ? " has" : "s have"} no location`;
+    $("locBannerBtn").onclick = () => openPrompt(missing, "Add dive locations", "Just the area, for example Banda, Komodo or Tulamben.");
+  }
+
+  let renderPending = false, wired = false;
+  function wireList(list) {
+    if (wired) return; wired = true;
+    list.addEventListener("click", async (e) => {
+      const head = e.target.closest(".dh-loc");
+      if (head) {                                                                // swap the chip for an editor
+        const date = head.dataset.date, cur = head.classList.contains("empty") || head.dataset.mixed ? "" : head.dataset.loc || "";
+        await fillSuggestions();
+        const span = document.createElement("span"); span.className = "dh-edit";
+        span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:#6c757d" aria-label="Cancel">\u2715</button>`;
+        head.replaceWith(span); span.querySelector("input").focus(); return;
+      }
+      if (e.target.closest(".dh-cancel")) { renderPending = false; render(); return; }
+      const dsave = e.target.closest(".dh-save");
+      if (dsave) {
+        const date = dsave.dataset.date, v = dsave.parentElement.querySelector("input").value, rs = (await all()).filter((r) => U.dateKey(r) === date);
+        await setLocations(Object.fromEntries(rs.map((r) => [r.fingerprint, v]))); say(U.normalizeLocation(v) ? "Location saved" : "Location cleared"); return;
+      }
+      const vsave = e.target.closest(".dive-loc-save");
+      if (vsave) { await setLocations({ [vsave.dataset.fp]: vsave.parentElement.querySelector("input").value }); say("Location saved"); }
+    });
+    list.addEventListener("keydown", (e) => {
+      if (e.target.tagName !== "INPUT") return;
+      if (e.key === "Enter") { const b = e.target.parentElement.querySelector("button.btn-set"); if (b) b.click(); }
+      if (e.key === "Escape" && e.target.closest(".dh-edit")) { renderPending = false; render(); }
+    });
+    document.addEventListener("focusout", () => { if (renderPending) { renderPending = false; setTimeout(render, 60); } });
+  }
 
   async function render() {
     const list = $("diveList"); if (!list) return;
     const recs = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
+    renderSummary(recs); updateBanner(recs); wireList(list);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
     if (!recs.length) { list.innerHTML = "<p class='muted'>No dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>"; return; }
+    const ae = document.activeElement;                                              // never rebuild the list under someone who is typing
+    if (ae && ae.tagName === "INPUT" && (list.contains(ae) || ($("locPrompt") && $("locPrompt").contains(ae)))) { renderPending = true; return; }
 
     const resolved = P.reconcileProfiles(recs);                                      // which profile really belongs to which dive
     const asc = recs.slice().reverse(), gapBefore = new Map();
@@ -195,25 +314,30 @@ const Dives = (() => {
     for (const r of recs) { const y = r.startedAt.slice(0, 4); if (!byYear.has(y)) byYear.set(y, []); byYear.get(y).push(r); }
     const years = [...byYear.keys()];                                                // newest first
     const openNow = list.querySelector("details.year") ? new Set([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year)) : null;
+    const openDives = new Set([...list.querySelectorAll("details.dive[open]")].map((e) => e.dataset.fp));
     const saved = loadYears(), open = openNow || new Set(saved || [years[0]]);
 
     const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
     const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
+    const rowHtml = (r) => {
+      const st = resolved[r.fingerprint].status, num = P.parseDive(P.fromHex(r.headerHex), new Uint8Array(0)).number;
+      return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
+        <span class="dive-num">#${num}</span><span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
+        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}
+        <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
+        <div class="dive-body"></div></details>`;
+    };
     let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"} \u00b7 ${full} with full depth profile` +
       `${partial ? ` \u00b7 ${partial} partial` : ""}${summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : ""}</p>`;
     for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
-        g.map((r) => {
-          const st = resolved[r.fingerprint].status, num = P.parseDive(P.fromHex(r.headerHex), new Uint8Array(0)).number;
-          return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
-            <span class="dive-num">#${num}</span><span class="dive-date">${esc(fmtDate(r.startedAt))}</span>
-            <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}
-            <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
-            <div class="dive-body"></div></details>`;
+        U.groupByDate(g).map(({ date, recs: rs }) => {
+          const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
+          return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
         }).join("") + `</details>`;
     }
-    list.innerHTML = html;
+    list.innerHTML = html; fillSuggestions();
     list.querySelectorAll("details.year").forEach((el) => el.addEventListener("toggle", () => {
       try { localStorage.setItem(YEARS_KEY, JSON.stringify([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year))); } catch (e) {}
     }));
@@ -223,6 +347,7 @@ const Dives = (() => {
       try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null); el.dataset.done = 1; }
       catch (e) { el.querySelector(".dive-body").textContent = "Cannot parse this dive: " + e.message; }
     }));
+    list.querySelectorAll("details.dive").forEach((el) => { if (openDives.has(el.dataset.fp)) el.open = true; });     // keep what you had open
   }
 
   async function exportBackup() {
@@ -251,5 +376,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { syncFromDevice, render, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { syncFromDevice, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();

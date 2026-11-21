@@ -145,3 +145,32 @@ test("logout clears the session cookie", async () => {
   const r = await call(makeEnv(), "/auth/logout");
   assert.equal(r.status, 200); assert.match(r.headers.getSetCookie().find((c) => c.startsWith("dc_session=")), /Max-Age=0/);
 });
+
+test("dive locations: stored cleaned, returned, updatable, clearable, validated, and private to each user", async () => {
+  const env = makeEnv(); const { cookie: me } = await googleSession(env); const { cookie: other } = await googleSession(env, { email: "other@example.com" });
+  const dive = (fp, extra = {}) => ({ fingerprint: fp, headerHex: "00".repeat(36), profileHex: "", startedAt: "2025-03-14T09:30:00", ...extra });
+  const send = (cookie, path, body, h = {}) => post(env, path, body, { cookie, ...h });
+  const list = async (cookie) => (await (await call(env, "/api/dives", { headers: { cookie } })).json()).dives;
+  assert.equal((await send(me, "/api/dives", { dives: [dive("aaaaaaaaaaaa", { location: "  Komodo   National  Park " }), dive("bbbbbbbbbbbb")] })).status, 200);
+  let rows = await list(me); const byFp = (fp) => rows.find((r) => r.fingerprint === fp);
+  assert.equal(byFp("aaaaaaaaaaaa").location, "Komodo National Park", "trimmed and single-spaced"); assert.equal(byFp("bbbbbbbbbbbb").location, null, "no location = null");
+  // update several at once, including clearing one
+  assert.deepEqual(await (await send(me, "/api/dives/location", { items: [{ fingerprint: "aaaaaaaaaaaa", location: null }, { fingerprint: "bbbbbbbbbbbb", location: "Banda" }] })).json(), { updated: 2 });
+  rows = await list(me); assert.equal(byFp("aaaaaaaaaaaa").location, null); assert.equal(byFp("bbbbbbbbbbbb").location, "Banda");
+  assert.equal((await send(me, "/api/dives/location", { items: [{ fingerprint: "bbbbbbbbbbbb", location: "   " }] })).status, 200);
+  assert.equal(byFp((rows = await list(me), "bbbbbbbbbbbb")).location, null, "blank clears");
+  // validation
+  for (const [name, items] of [["too long", [{ fingerprint: "aaaaaaaaaaaa", location: "x".repeat(61) }]], ["control char", [{ fingerprint: "aaaaaaaaaaaa", location: "Ban\u0000da" }]],
+    ["newline", [{ fingerprint: "aaaaaaaaaaaa", location: "a\nb" }]], ["not a string", [{ fingerprint: "aaaaaaaaaaaa", location: 5 }]],
+    ["bad fingerprint", [{ fingerprint: "../../../..", location: "Banda" }]], ["missing fingerprint", [{ location: "Banda" }]]])
+    assert.equal((await send(me, "/api/dives/location", { items })).status, 400, name);
+  assert.equal((await send(me, "/api/dives/location", { items: Array(201).fill({ fingerprint: "aaaaaaaaaaaa", location: "x" }) })).status, 413);
+  assert.equal((await send(me, "/api/dives", { dives: [dive("cccccccccccc", { location: "x".repeat(61) })] })).status, 400, "also validated on upload");
+  // another user can neither read nor change my dives' locations
+  await send(me, "/api/dives/location", { items: [{ fingerprint: "aaaaaaaaaaaa", location: "Tulamben" }] });
+  assert.deepEqual(await (await send(other, "/api/dives/location", { items: [{ fingerprint: "aaaaaaaaaaaa", location: "HACKED" }] })).json(), { updated: 0 });
+  assert.equal(byFp((rows = await list(me), "aaaaaaaaaaaa")).location, "Tulamben"); assert.equal((await list(other)).length, 0);
+  // not signed in / cross-origin
+  assert.equal((await post(env, "/api/dives/location", { items: [] })).status, 401);
+  assert.equal((await send(me, "/api/dives/location", { items: [] }, { origin: "https://evil.example" })).status, 403);
+});

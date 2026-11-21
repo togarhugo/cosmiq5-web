@@ -81,6 +81,23 @@ download and upload. Tap **Download raw backup** after the first sync.
 - **Copy / Save diagnostics** (Dive log tab) exports the app version, device traffic and stored dive headers: attach it when
   reporting a problem. Each dive's **Technical details** shows the raw 36-byte header with undecoded bytes highlighted.
 
+### Summary, locations and setting changes
+- **Summary tab** (opens first): the date of your last dive (and how long ago, and where) and your total dive time.
+- **Locations** are free text, just the area (Banda, Komodo, Tulamben), one per date. After every sync that brings in new
+  dives the app asks "Where did you dive?" with one row per date (oldest first, **same** repeats the row above; places you
+  used before are suggested, and a date that already has a place is pre-filled). Each date header in the log has a chip to
+  add or change the place for that day, each dive has its own field, and a banner offers to fill in dives that have none.
+  Locations are saved on the phone first and sent to the cloud (`POST /api/dives/location`).
+- **Changing a setting** on the dive computer shows "Applying...", then reads the value back from the device and confirms
+  ("Backlight set to level 3"), or says the device did not apply or rejected it. The clock cannot be read back, so its
+  message only says it was sent and not rejected.
+
+### Upgrading an existing database
+Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
+```bash
+npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql   # adds dives.location
+```
+
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)
 Header (36 bytes): 0-1 dive number, 2 mode, 3 O2 %, 4-5 surface pressure (13 bits) + 3 flag bits, 6-11 date/time,
 12-13 duration, 22-23 max depth (raw pressure), **24-25 minimum temperature (0.1 C)**, 26 sample interval,
@@ -99,7 +116,7 @@ wraps over them: each new dive overwrites an old one.
 
 ## Develop / test
 ```bash
-npm test               # protocol, Google + password/TOTP sign-in, API tests (build runs first)
+npm test               # protocol, Google + password/TOTP sign-in, API, locations, summary helpers (build runs first)
 node test/e2e.mjs      # mobile browser e2e against a simulated dive computer (needs Playwright)
 node test/e2e-real.mjs # real Worker + local D1 + browser: Account setup and password/TOTP login
                        # (needs a .dev.vars with the secrets above and `npx wrangler dev --local --port 8799`)

@@ -10,6 +10,13 @@ const json = (o, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", "cache-control": "no-store", "x-app-version": VERSION } });
 
 const HEX = /^[0-9a-f]*$/;
+/** Dive area label: trimmed, single-spaced, no control characters, at most 60 chars. Returns null for "none", false if invalid. */
+function cleanLocation(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string" || /[\u0000-\u001f\u007f]/.test(v)) return false;
+  const t = v.replace(/\s+/g, " ").trim();
+  return t.length > 60 ? false : t || null;
+}
 function validDive(d) {
   return d && typeof d.fingerprint === "string" && /^[0-9a-f]{12}$/.test(d.fingerprint) &&
     typeof d.headerHex === "string" && d.headerHex.length === 72 && HEX.test(d.headerHex) &&
@@ -55,9 +62,22 @@ export default {
     if (url.pathname === "/api/me") return json({ email, name: user.name, version: VERSION });
     if (url.pathname === "/api/account" || url.pathname.startsWith("/api/account/")) return handleAccount(request, url, env, user);
 
+    // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.
+    if (url.pathname === "/api/dives/location" && request.method === "POST") {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (items.length > 200) return json({ error: "max 200 dives per request" }, 413);
+      if (!items.every((i) => i && typeof i.fingerprint === "string" && /^[0-9a-f]{12}$/.test(i.fingerprint) && cleanLocation(i.location) !== false))
+        return json({ error: "invalid location update" }, 400);
+      const stmt = env.DB.prepare("UPDATE dives SET location = ? WHERE user_email = ? AND fingerprint = ?");
+      const res = await env.DB.batch(items.map((i) => stmt.bind(cleanLocation(i.location), email, i.fingerprint)));
+      return json({ updated: res.reduce((n, r) => n + (r.meta.changes || 0), 0) });
+    }
+
     if (url.pathname === "/api/dives" && request.method === "GET") {
       const { results } = await env.DB.prepare(
-        "SELECT fingerprint, device_mac AS deviceMac, started_at AS startedAt, mode, duration_sec AS durationSec, max_depth_m AS maxDepthM, o2_percent AS o2Percent, header_hex AS headerHex, profile_hex AS profileHex FROM dives WHERE user_email = ? ORDER BY started_at DESC LIMIT 2000"
+        "SELECT fingerprint, device_mac AS deviceMac, started_at AS startedAt, mode, duration_sec AS durationSec, max_depth_m AS maxDepthM, o2_percent AS o2Percent, header_hex AS headerHex, profile_hex AS profileHex, location FROM dives WHERE user_email = ? ORDER BY started_at DESC LIMIT 2000"
       ).bind(email).all();
       return json({ dives: results });
     }
@@ -67,12 +87,12 @@ export default {
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
       const dives = Array.isArray(body.dives) ? body.dives : [];
       if (dives.length > 50) return json({ error: "max 50 dives per request" }, 413);
-      if (!dives.every(validDive)) return json({ error: "invalid dive record" }, 400);
+      if (!dives.every(validDive) || !dives.every((d) => cleanLocation(d.location) !== false)) return json({ error: "invalid dive record" }, 400);
       const stmt = env.DB.prepare(
-        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex) VALUES (?,?,?,?,?,?,?,?,?,?)"
+        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
       );
       const res = await env.DB.batch(dives.map((d) => stmt.bind(email, d.fingerprint, d.deviceMac ?? null, d.startedAt,
-        d.mode ?? null, d.durationSec ?? null, d.maxDepthM ?? null, d.o2Percent ?? null, d.headerHex, d.profileHex)));
+        d.mode ?? null, d.durationSec ?? null, d.maxDepthM ?? null, d.o2Percent ?? null, d.headerHex, d.profileHex, cleanLocation(d.location))));
       return json({ stored: res.reduce((n, r) => n + (r.meta.changes || 0), 0), received: dives.length });
     }
 
