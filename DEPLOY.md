@@ -117,7 +117,13 @@ the free plan's CPU limit.
   bytes: `header_hex`/`profile_hex` are empty and their decoded values + depth samples are JSON in `extra` (the Worker stores it as text,
   never parses it, caps it at 120 KB per dive and 700 KB per request). The file is parsed in the browser (UDDF, `public/dive-import.js`);
   the fingerprint is a hash of device + start minute so re-importing adds nothing. Totals de-duplicate overlapping dives from two devices.
-  Direct Bluetooth download from the Peregrine is **not** implemented: it needs Shearwater's own BLE protocol and could not be tested without the device.
+- **Peregrine over Bluetooth (beta, `public/shearwater.js`):** a port of libdivecomputer's Shearwater protocol (LGPL-2.1+, Jef Driesen):
+  GATT service `fe25c237-0ece-443c-b0aa-e02033e7029d`; the characteristic that can notify and be written is used (found at run time, as Subsurface does);
+  SLIP framing over 20-byte writes with a 2-byte `[frames, index]` header; requests `FF 01 len+1 00 ...`; RDBI `0x22` (serial 0x8010, firmware 0x8011,
+  model 0x8060, log layout 0x8021); manifest at 0xE0000000 (records `A5C4`, dive start time = fingerprint, address at +20); dive upload `0x35/0x36/0x37`
+  with 9-bit run-length + 32-byte XOR compression; Petrel Native Format records (opening 0x10-, samples 0x01, closing 0x20-, final 0xFF). Only the V1
+  protocol (Peregrine, Perdix, Teric, Tern) and the PNF layout are supported, and nothing is written except the end-of-session message libdivecomputer sends.
+  Tested against a simulator (`test/peregrine-sim.mjs`) written from the same source, **not yet against a real Peregrine**.
 - **Latest certification:** `profiles.latest_cert_id` (empty = newest by date); deleting that file clears it.
 
 ### Upgrading an existing database

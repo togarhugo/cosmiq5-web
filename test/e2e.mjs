@@ -5,6 +5,7 @@ const req = createRequire(import.meta.url);
 const P = req("../public/dive-protocol.js");
 const { chromium, devices } = req("playwright");
 import assert from "node:assert/strict";
+import { peregrine, pnfDive } from "./peregrine-sim.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
@@ -604,6 +605,64 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.deepEqual(errors2, [], "page errors");
     console.log("PASS second dive computer");
   } catch (e) { failed++; console.log("FAIL second dive computer\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-peregrine.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: Shearwater Peregrine over (fake) Web Bluetooth: connect, download only new dives, errors are explained ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  const T = (d, h) => Date.UTC(2026, 4, d, h, 30) / 1000, mk = (ticks, d10, n) => ({ ticks, blob: pnfDive({ ticks, maxDepth10: d10, duration: 2400 + n * 60, samples: [[0, 50, 28], [0, d10 / 2, 28], [0, d10, 27], [0, 30, 27]] }) });
+  const sim = peregrine({ dives: [mk(T(2, 9), 285, 1), mk(T(2, 14), 190, 2), mk(T(3, 9), 240, 3)] });
+  await page.exposeFunction("__pgWrite", async (arr) => { await sim.io.write(Uint8Array.from(arr)); return sim.drain().map((a) => Array.from(a)); });
+  await page.addInitScript(() => {
+    window.__pgMode = "ok";
+    const dev = { name: "Peregrine", addEventListener() {}, gatt: { connect: async () => server, disconnect() { window.__pgDisconnected = true; } } };
+    let onChange = null;
+    const ch = { properties: { notify: true, writeWithoutResponse: true }, addEventListener(t, f) { if (t === "characteristicvaluechanged") onChange = f; }, async startNotifications() {},
+      async writeValueWithoutResponse(v) { if (v.byteLength > 20) throw new Error("write longer than 20 bytes"); const notes = await window.__pgWrite(Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)));
+        setTimeout(() => notes.forEach((n) => onChange({ target: { value: new DataView(Uint8Array.from(n).buffer) } })), 0); } };
+    const server = { getPrimaryService: async (u) => { if (window.__pgMode === "wrong") throw new Error("no service"); if (u !== "fe25c237-0ece-443c-b0aa-e02033e7029d") throw new Error("bad uuid"); return { getCharacteristics: async () => [{ properties: { read: true }, uuid: "x" }, ch] }; } };
+    Object.defineProperty(navigator, "bluetooth", { configurable: true, value: { requestDevice: async (o) => {
+      if (window.__pgMode === "cancel") throw Object.assign(new Error("User cancelled"), { name: "NotFoundError" });
+      if (!o.optionalServices || !o.optionalServices.includes("fe25c237-0ece-443c-b0aa-e02033e7029d")) throw new Error("service not requested"); window.__pgAsked = o; return dev; } } });
+  });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth menu/);
+    // a device that is not a Shearwater, and a cancelled chooser: clear messages, nothing saved
+    await page.evaluate(() => { window.__pgMode = "wrong"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /not a Shearwater dive computer/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => window.__pgDisconnected), true, "disconnected again after the wrong device");
+    await page.evaluate(() => { window.__pgMode = "cancel"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /No dive computer was chosen/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    assert.equal(await page.locator("#pgMsg").evaluate((e) => getComputedStyle(e).color !== "rgb(201, 42, 42)"), true, "cancelling is not shown as an error");
+    // the real thing
+    await page.evaluate(() => { window.__pgMode = "ok"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /Peregrine: 3 on the dive computer, 3 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
+    assert.match(await page.locator("#pgMsg").innerText(), /3 uploaded/);
+    assert.equal(uploaded.length, 3); assert.deepEqual(uploaded.map((d) => d.startedAt).sort(), ["2026-05-02T09:30:00", "2026-05-02T14:30:00", "2026-05-03T09:30:00"]);
+    const u = uploaded.find((d) => d.startedAt === "2026-05-02T09:30:00"); assert.equal(u.device, "peregrine"); assert.equal(u.maxDepthM, 28.5); assert.equal(u.durationSec, 2460); assert.equal(u.o2Percent, 32); assert.equal(u.headerHex, "");
+    const x = JSON.parse(u.extra); assert.equal(x.s.length, 4); assert.equal(x.iv, 10); assert.deepEqual(x.s[2], [30, 28.5, 27]);
+    assert.equal(await page.evaluate(() => window.__pgDisconnected), true); assert.equal(await page.locator("#pgBtn").isDisabled(), false);
+    assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 4, "1 manifest + 3 dives were requested"); assert.equal(sim.log.at(-1), "shutdown");
+    assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/); assert.equal(await page.locator("details.dive").count(), 3);
+    await page.waitForSelector("#locPrompt input", { state: "visible" }); assert.match(await page.locator("#locPrompt").innerText(), /3 new Peregrine dives/);
+    await page.locator("details.dive").first().locator("summary").click(); await page.waitForSelector("details.dive[open] svg.chart");
+    // second run: nothing new, no dive is downloaded again
+    sim.log.length = 0; await page.click("#pgBtn");
+    await page.waitForFunction(() => /Peregrine: 3 on the dive computer, 0 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
+    assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 1, "only the manifest is read"); assert.equal(uploaded.length, 3);
+    assert.deepEqual(errs, [], "page errors");
+    console.log("PASS peregrine bluetooth");
+  } catch (e) { failed++; console.log("FAIL peregrine bluetooth\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-pg.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

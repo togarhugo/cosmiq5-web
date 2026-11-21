@@ -816,12 +816,17 @@
             <datalist id="locList"></datalist>
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
             <div id="importCard" class="card" style="display:none">
-                <h3 id="impTitle">Import from Shearwater Peregrine</h3>
-                <p class="muted" style="margin:0 0 10px">Export your dives from the Shearwater Cloud app as <b>UDDF</b> (Export &rsaquo; UDDF), then choose the file here. Dives you have already imported are skipped, so you can import the same or a newer file again.</p>
+                <h3 id="impTitle">Shearwater Peregrine</h3>
+                <button id="pgBtn" class="btn-main" type="button">Download dives over Bluetooth <span style="font-weight:400">(beta)</span></button>
+                <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list. Only new dives are downloaded.</div>
+                <button id="pgCancel" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Cancel</button>
+                <h3 style="margin-top:16px">Or import a file</h3>
+                <p class="muted" style="margin:0 0 10px">If you prefer a file: export your dives from the Shearwater Cloud app as <b>UDDF</b> (Export &rsaquo; UDDF), then choose the file here. Dives you have already imported are skipped, so you can import the same or a newer file again.</p>
                 <label class="btn-set" for="impFile" style="display:inline-block;box-sizing:border-box;text-align:center;cursor:pointer">Choose UDDF file(s)</label>
                 <input id="impFile" type="file" accept=".uddf,.xml,application/xml,text/xml" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
-                <p class="muted" style="margin:8px 0 0">The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
+                <p class="muted" style="margin:8px 0 0">The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+, whether they come from Bluetooth or a file. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
             </div>
             <div id="syncCard" class="card">
                 <h3>Sync</h3>
@@ -1043,6 +1048,7 @@
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
+        <script src="shearwater.js"></script>
         <script src="dives.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>

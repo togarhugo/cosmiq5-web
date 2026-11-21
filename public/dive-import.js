@@ -96,6 +96,6 @@
     return { dives, skipped, info };
   }
 
-  const api = { parseUddf, fingerprint, localStart, MAX_SAMPLES };
+  const api = { parseUddf, fingerprint, localStart, thin, MAX_SAMPLES };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveImport = api;
 })(typeof self !== "undefined" ? self : this);

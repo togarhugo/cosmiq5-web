@@ -170,6 +170,41 @@ const Dives = (() => {
     return { imported: fresh.length, already, skipped, found };
   }
 
+  // ---------- Shearwater Peregrine over Bluetooth (beta) ----------
+  let pgCancel = false;
+  async function syncPeregrine() {
+    const out = $("pgMsg"), bar = $("pgBar"), btn = $("pgBtn"), cancel = $("pgCancel");
+    const say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : ""; } };
+    if (busy) { say2("Wait for the running sync to finish first.", true); return; }
+    busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0";
+    const fp = (startedAt) => window.DiveImport.fingerprint("peregrine|" + startedAt.slice(0, 16));
+    const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0;
+    const trace = (l) => { if (typeof diag === "function") diag("PG " + l); };
+    try {
+      say2("Choose your Peregrine in the list\u2026"); conn = await window.Shearwater.connect(trace);
+      say2("Connected to " + conn.name + ".");
+      const res = await window.Shearwater.readDives(conn.io, {
+        known: (startedAt) => seen.has(fp(startedAt)), cancelled: () => pgCancel,
+        onProgress: (m, f) => { say2(m); bar.style.width = Math.round(f * 100) + "%"; },
+        onProblem: (m) => { problems++; log("Peregrine: could not read dive " + m, "log-err"); },
+        onDive: async (d) => {
+          const rec = { fingerprint: fp(d.startedAt), device: "peregrine", startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec, maxDepthM: d.maxDepthM, o2Percent: d.o2Percent,
+            number: null, minTempC: d.minTempC, intervalSec: d.intervalSec, samples: window.DiveImport.thin(d.samples), headerHex: "", profileHex: "", uploaded: false };
+          await put(rec); seen.add(rec.fingerprint); fresh.push(rec); render();                      // saved the moment it arrives
+        } });
+      const up = fresh.length ? await cloudPush() : 0;
+      const msg = `Peregrine: ${res.total} on the dive computer, ${fresh.length} new` + (problems ? `, ${problems} could not be read (see diagnostics)` : "") +
+        (fresh.length ? (cloudState === "ok" ? `, ${up} uploaded` : ", saved on this phone, cloud unavailable") : "");
+      say2(msg, !!problems && !fresh.length); bar.style.width = "100%"; log(msg, "log-info"); saveLast({ ok: !problems, msg });
+    } catch (e) {
+      const m = e && e.name === "NotFoundError" ? "No dive computer was chosen." : e && e.message ? e.message : String(e);
+      say2(m + (fresh.length ? ` ${fresh.length} dive(s) were saved before it stopped: run it again to continue.` : ""), !(e && e.name === "NotFoundError"));
+      log("Peregrine sync stopped: " + m, "log-err"); if (fresh.length) await cloudPush();
+    } finally { if (conn) conn.close(); busy = false; btn.disabled = false; cancel.style.display = "none"; render(); }
+    if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} new Peregrine dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    return { saved: fresh.length };
+  }
+
   // ---------- UI ----------
   const $ = (id) => document.getElementById(id);
   const fmtDur = (s) => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 120 ? `${Math.round(s / 60)} min` : `${s} s`;
@@ -388,7 +423,7 @@ const Dives = (() => {
       return `<button type="button" role="tab" aria-selected="${x.id === selDevice}" class="${x.id === selDevice ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
     const sync = $("syncCard"), imp = $("importCard");
     if (sync) sync.style.display = selDevice === "cosmiq" ? "" : "none";
-    if (imp) { imp.style.display = selDevice === "cosmiq" ? "none" : ""; const t = $("impTitle"); if (t) t.textContent = "Import from " + deviceName(selDevice); }
+    if (imp) { imp.style.display = selDevice === "cosmiq" ? "none" : ""; }
     return selDevice;
   }
   function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
@@ -397,6 +432,7 @@ const Dives = (() => {
   function wireList(list) {
     if (wired) return; wired = true;
     $("devTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-dev]"); if (b) pickDevice(b.dataset.dev); });
+    $("pgBtn").addEventListener("click", syncPeregrine); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
     const pick = $("impFile");
     if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, selDevice); });
     list.addEventListener("click", async (e) => {
@@ -532,5 +568,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { syncFromDevice, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { syncFromDevice, syncPeregrine, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();
