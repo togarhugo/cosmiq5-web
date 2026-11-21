@@ -10,7 +10,7 @@
         <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
         <link rel="apple-touch-icon" href="icon-192.png" />
         <link rel="icon" href="icon-192.png" />
-        <title>Cosmiq Manager</title>
+        <title>Dive Manager</title>
         <style>
             :root {
                 --blue: #007bff;
@@ -325,14 +325,87 @@
             .opt input { width: 22px; height: 22px; min-height: 0; }
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: #6c757d; min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
+            .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
+            .nav { gap: 4px; } .nav button { flex: 1 1 auto; padding: 0 8px; font-size: 13px; white-space: nowrap; min-width: 0; }
+            #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+            .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
+            .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; margin-bottom: 6px; }
+            .sum-big { font-size: 28px; font-weight: 700; line-height: 1.15; margin-bottom: 4px; }
+            #locPrompt { border: 2px solid var(--blue); } #locPrompt h3 { border: 0; padding: 0; margin: 0 0 4px; font-size: 16px; text-transform: none; color: var(--text); }
+            .locask label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+            .locask input, .dh-edit input, .loc1 input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            #locList { display: none; }
+            .datehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 2px 6px; flex-wrap: wrap; }
+            .dh-date { font-size: 13px; font-weight: 700; color: #495057; }
+            .dh-loc { background: #e7f5ff; color: #1864ab; border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .dh-loc.empty { background: #f1f3f5; color: #868e96; font-weight: 500; }
+            .dh-edit { display: flex; gap: 6px; flex: 1; justify-content: flex-end; }
+            .loc1 { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+            header { position: relative; } #signOut { box-sizing: border-box; }
+            .avatar { width: 40px; height: 40px; border-radius: 50%; padding: 0; overflow: hidden; background: #dee2e6; color: #868e96; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; }
+            header .avatar { position: absolute; right: 0; top: 0; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+            header .avatar.active { box-shadow: 0 0 0 2px var(--blue); }
+            .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; } .avatar img[hidden] { display: none; }
+            .avatar.big { width: 80px; height: 80px; flex: none; min-height: 80px; cursor: default; }
+            .prof { display: flex; gap: 14px; align-items: center; } .prof-side { flex: 1; min-width: 0; word-break: break-all; }
+            details.acc { padding: 0; } details.acc > summary { list-style: none; cursor: pointer; padding: 16px; min-height: 44px; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+            details.acc > summary::-webkit-details-marker { display: none; }
+            details.acc > summary::after { content: "\25B8"; margin-left: auto; color: #868e96; } details.acc[open] > summary::after { content: "\25BE"; }
+            .acc-body { padding: 0 16px 16px; }
+            .subcard { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 12px; margin-top: 12px; } .subcard h4 { margin: 0 0 8px; font-size: 14px; }
+            .fld { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; margin-bottom: 8px; min-height: 44px; }
+            .row.wrap { flex-wrap: wrap; } .msg { font-size: 13px; margin: 8px 0; min-height: 0; }
+            .filebtn { display: inline-flex; align-items: center; cursor: pointer; }
+            .cert { border: 1px solid #e9ecef; border-radius: 10px; padding: 10px; margin-bottom: 8px; } .cert .cert-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+            .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid #dee2e6; }
+            .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: #495057; line-height: 1.45; } ul.help li { margin-bottom: 6px; }
+            .reg-title { font-size: 15px; } .reg-count { font-size: 30px; font-weight: 700; margin: 2px 0; }
+            .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #2b8a3e; color: #fff; }
+            .regbadge.orange { background: #e67700; } .regbadge.red { background: #c92a2a; }
+            .regbar { position: relative; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; margin: 10px 0 6px; overflow: visible; }
+            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: #2b8a3e; width: 0; transition: width .3s; }
+            .regbar i { position: absolute; left: 77.78%; top: -3px; width: 2px; height: 14px; background: rgba(0,0,0,.35); }
+            .reg-msg { font-size: 13px; font-weight: 600; }
+            .sum.reg-ok { border-left: 5px solid #2b8a3e; } .sum.reg-ok .reg-msg { color: #2b8a3e; }
+            .sum.reg-orange { border-left: 5px solid #e67700; background: #fff4e6; } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: #d9480f; } .sum.reg-orange #sumRegBar { background: #e67700; }
+            .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
+            .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed #ced4da; flex-wrap: wrap; }
+            .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: #1864ab; font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
+            .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; }
+            .mh-edit .chk { font-size: 13px; display: flex; gap: 8px; align-items: center; min-height: 36px; } .mh-edit .chk input { width: 20px; height: 20px; min-height: 0; }
+            .monthask { background: #f1f3f5; border-radius: 8px; padding: 10px; margin: 8px 0 12px; } .monthask label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+            #bannerBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
+            #syncBanner { border: 1px solid #b2dfdb; }
+            details.tech { margin-top: 10px; } details.tech summary { cursor: pointer; font-size: 13px; color: #495057; min-height: 36px; display: flex; align-items: center; }
+            table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+            table.hdr td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+            table.hdr tr.unk td { background: #fff8e1; }
+            details.year { margin-bottom: 10px; }
+            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid #dee2e6; margin-bottom: 8px; }
+            details.year > summary::-webkit-details-marker { display: none; }
+            details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
+            .dive-num { font-family: var(--mono); font-size: 12px; color: #6c757d; min-width: 34px; }
+            .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
+            p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
+            #toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none;
+                     max-width: min(92vw, 420px); padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; color: #fff; background: #343a40;
+                     box-shadow: 0 6px 20px rgba(0,0,0,.28); transition: opacity .2s, transform .2s; z-index: 60; display: flex; gap: 10px; align-items: center; }
+            #toast.show { opacity: 1; transform: translate(-50%, 0); }
+            #toast.ok { background: #2b8a3e; } #toast.warn { background: #e67700; } #toast.err { background: #c92a2a; }
+            #toast .spin { flex: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .btn-opt.applied { animation: appliedFlash 1.2s ease-out; }
+            @keyframes appliedFlash { 0% { box-shadow: 0 0 0 0 rgba(43,138,62,.7); background: #d3f9d8; } 100% { box-shadow: 0 0 0 10px rgba(43,138,62,0); } }
+            @media (prefers-reduced-motion: reduce) { #toast, .btn-opt.applied, #toast .spin { animation: none; transition: none; } }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
             #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
         </style>
     </head>
     <body>
         <header>
-            <h1>Cosmiq Manager <span id="verTop" class="muted"></span></h1>
+            <h1>Dive Manager</h1>
             <div id="status" class="status">Disconnected</div>
+            <button id="acctBtn" class="avatar" type="button" aria-label="Account" onclick="showView('account')"><img id="acctImg" alt="" hidden /><span id="acctIcon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></button>
         </header>
 
         <button id="connectBtn" class="btn-main" onclick="connect()">
@@ -348,22 +421,52 @@
 
         <div id="btBanner" class="banner"></div>
         <div id="clockStatus" class="muted" style="text-align:center;margin-bottom:10px"></div>
+        <div id="syncBanner" class="card" style="display:none">
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Syncing dive log</div>
+            <div id="bannerText" class="muted">Starting&hellip;</div>
+            <div class="bar"><div id="bannerBar"></div></div>
+            <button id="cancelSync" class="btn-set" type="button" style="background:#6c757d;margin-top:6px">Cancel</button>
+        </div>
 
         <div class="nav">
-            <button id="navDevice" class="active" onclick="showView('device')">Device settings</button>
+            <button id="navSummary" onclick="showView('summary')">Summary</button>
             <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
-            <button id="navAccount" onclick="showView('account')">Account</button>
+            <button id="navDevice" class="active" onclick="showView('device')">Device</button>
+        </div>
+
+        <div id="summaryView" style="display:none">
+            <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
+            <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
+                <div class="sum-label">Regulator service</div>
+                <div class="sum-big"><span id="sumRegCount">0</span> dives</div>
+                <div id="sumRegName" class="muted"></div>
+                <div class="regbar" aria-hidden="true"><div id="sumRegBar"></div><i></i></div>
+                <div id="sumRegMsg" class="reg-msg"></div>
+            </div>
+            <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
+            <div id="sumCards" style="display:none">
+                <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
+                    <div class="sum-label">Last dive</div>
+                    <div id="sumLastDate" class="sum-big">&ndash;</div>
+                    <div id="sumLastSub" class="muted"></div>
+                </div>
+                <div class="card sum">
+                    <div class="sum-label">Total dive time</div>
+                    <div id="sumHours" class="sum-big">&ndash;</div>
+                    <div id="sumCount" class="muted"></div>
+                </div>
+            </div>
         </div>
 
         <div id="deviceView">
         <div id="notConnected" class="card muted">Connect to your dive computer to view or change its settings.</div>
         <div id="app" style="display: none; margin-top: 20px">
             <div class="tabs">
-                <button class="tab active" onclick=\"tab('gen', this)\">General</button>
-                <button class="tab" onclick=\"tab('env', this)\">Environment</button>
-                <button class="tab" onclick=\"tab('scuba', this)\">Scuba</button>
-                <button class="tab" onclick=\"tab('free', this)\">Freedive</button>
-                <button class="tab" onclick=\"tab('hunter', this)\">Diagnostics</button>
+                <button class="tab active" onclick="tab('gen', this)">General</button>
+                <button class="tab" onclick="tab('env', this)">Environment</button>
+                <button class="tab" onclick="tab('scuba', this)">Scuba</button>
+                <button class="tab" onclick="tab('free', this)">Freedive</button>
+                <button class="tab" onclick="tab('hunter', this)">Diagnostics</button>
             </div>
 
             <div id="gen" class="section active">
@@ -686,6 +789,10 @@
         </div><!-- /deviceView -->
 
         <div id="logView" style="display:none">
+            <div id="locPrompt" class="card" style="display:none" role="region" aria-label="Dive locations"></div>
+            <div id="locBanner" class="card" style="display:none"><span aria-hidden="true">&#128205;</span> <span id="locBannerText"></span>
+                <button id="locBannerBtn" class="btn-set" type="button" style="margin-left:8px">Add locations</button></div>
+            <datalist id="locList"></datalist>
             <div class="card">
                 <h3>Sync</h3>
                 <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
@@ -694,34 +801,68 @@
                 <label class="opt"><input type="checkbox" id="optClock" /> Set dive computer clock to this phone's time on every connect</label>
                 <label class="opt"><input type="checkbox" id="optDives" /> Download new dives on every connect</label>
                 <div class="muted"><span id="cloudState"></span></div>
+                <div id="lastSync" class="muted" style="margin-top:6px"></div>
+                <div class="muted" style="margin-top:8px">Only dives you don't have yet are downloaded. <a href="#" id="diveFullBtn">Re-check every dive</a> if something seems missing.</div>
+                <div class="row" style="margin:10px 0 0">
+                    <button id="diagCopy" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
+                    <button id="diagSave" class="btn-set" type="button" style="background:#6c757d">Save diagnostics</button>
+                </div>
+                <div id="diagMsg" class="muted"></div>
             </div>
             <div id="diveList"></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
         </div>
 
-        <div id="appFooter" class="muted" style="text-align:center;margin-top:18px">
-            Cosmiq Manager <span id="appVer"></span><span id="who"></span>
-            <a id="signOut" href="/auth/logout" style="display:none;margin-left:6px">Sign out</a>
-        </div>
-
         <div id="accountView" style="display:none">
-            <div class="card">
-                <h3>Sign-in methods</h3>
-                <div id="accVia" class="muted" style="margin-bottom:10px"></div>
-                <div class="opt" style="min-height:0">✓ Google account <span class="muted">(always on)</span></div>
-                <div class="opt" style="min-height:0">
-                    <span id="accPwIcon">○</span> Email + password + authenticator
-                    <span id="accPwState" class="muted"></span>
+            <details class="card acc" data-sec="profile">
+                <summary>Profile picture</summary>
+                <div class="acc-body">
+                    <div class="prof">
+                        <div class="avatar big"><img id="profImg" alt="Profile picture" hidden /><span id="profIcon"><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></div>
+                        <div class="prof-side">
+                            <div id="who" class="muted"></div>
+                            <div class="row" style="margin:8px 0 0">
+                                <label class="btn-set filebtn" tabindex="0">Upload picture<input id="avatarFile" type="file" accept="image/*" hidden /></label>
+                                <button id="avatarRemove" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="profMsg" class="msg" role="status"></div>
                 </div>
-                <div id="accMsg" role="status" style="font-size:13px;margin:10px 0"></div>
-                <div id="accBtns" class="row" style="margin-bottom:0">
-                    <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
-                    <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
-                </div>
-            </div>
+            </details>
 
-            <div id="accSetup" class="card" style="display:none">
-                <h3>Set up email login</h3>
+            <details class="card acc" data-sec="password">
+                <summary>Change password</summary>
+                <div class="acc-body">
+                    <div id="accVia" class="muted" style="margin-bottom:10px"></div>
+                    <div class="opt" style="min-height:0">&#10003; Google account <span class="muted">(always on)</span></div>
+                    <div class="opt" style="min-height:0">
+                        <span id="accPwIcon">&#9675;</span> Email + password + authenticator
+                        <span id="accPwState" class="muted"></span>
+                    </div>
+                    <div id="accMsg" role="status" class="msg"></div>
+                    <div id="accBtns" class="row wrap" style="margin-bottom:0">
+                        <button id="accChangeBtn" class="btn-set" type="button" style="display:none">Change password</button>
+                        <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
+                        <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                    </div>
+                    <div id="accChange" class="subcard" style="display:none">
+                        <h4>Change password</h4>
+                        <label class="label" for="pwCur">Current password</label>
+                        <input id="pwCur" type="password" autocomplete="current-password" class="fld" />
+                        <label class="label" for="pwNew1">New password (12+ characters)</label>
+                        <input id="pwNew1" type="password" autocomplete="new-password" class="fld" />
+                        <input id="pwNew2" type="password" autocomplete="new-password" placeholder="Repeat new password" class="fld" aria-label="Repeat new password" />
+                        <label class="label" for="pwCode">Authenticator code (6 digits)</label>
+                        <input id="pwCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" class="fld" />
+                        <div class="row wrap" style="margin:0">
+                            <button id="pwChangeGo" class="btn-set" type="button">Change password</button>
+                            <button id="pwChangeCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                        </div>
+                        <div class="muted" style="margin-top:6px">Your authenticator stays the same: no new QR code.</div>
+                    </div>
+            <div id="accSetup" class="subcard" style="display:none">
+                <h4>Email login setup</h4>
                 <div id="accStep1">
                     <span class="label">Choose a password (12+ characters)</span>
                     <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
@@ -747,15 +888,96 @@
                 </div>
                 <button id="accCancel" class="btn-set" type="button" style="background:#6c757d;margin-top:4px">Cancel</button>
             </div>
+
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="certs">
+                <summary>Dive certifications</summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
+                    <div id="certList"></div>
+                    <div class="subcard" style="margin-top:10px">
+                        <h4>Add a certification</h4>
+                        <label class="label" for="certLabel">Name</label>
+                        <input id="certLabel" class="fld" maxlength="80" placeholder="e.g. PADI Advanced Open Water" autocomplete="off" />
+                        <label class="label" for="certNumber">Certificate / diver number (optional)</label>
+                        <input id="certNumber" class="fld" maxlength="40" autocomplete="off" />
+                        <div class="row wrap" style="margin:0 0 6px">
+                            <label class="btn-set filebtn" tabindex="0">Choose file<input id="certFile" type="file" accept="application/pdf,image/*" hidden /></label>
+                            <span id="certFileName" class="muted"></span>
+                        </div>
+                        <button id="certAdd" class="btn-set" type="button">Upload</button>
+                    </div>
+                    <div id="certMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="regulator">
+                <summary>Regulator <span id="regBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) so you know when to service it: orange from 70 dives, red from 90.</p>
+                    <div id="regStatus" style="display:none">
+                        <div class="reg-title"><b id="regShownName"></b> <span id="regShownType" class="muted"></span></div>
+                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span></div>
+                        <div class="row wrap" style="margin:8px 0 0">
+                            <button id="regReset" class="btn-set" type="button">Reset to 0</button>
+                            <button id="regEdit" class="btn-set" type="button" style="background:#6c757d">Edit</button>
+                            <button id="regRemove" class="btn-set" type="button" style="background:#6c757d">Remove</button>
+                        </div>
+                    </div>
+                    <div id="regForm" class="subcard" style="display:none">
+                        <label class="label" for="regName">Regulator name</label>
+                        <input id="regName" class="fld" maxlength="60" placeholder="e.g. Apeks XTX50" autocomplete="off" />
+                        <label class="label" for="regType">Type</label>
+                        <input id="regType" class="fld" maxlength="40" list="regTypes" placeholder="e.g. Balanced piston" autocomplete="off" />
+                        <datalist id="regTypes"><option value="Balanced piston"><option value="Unbalanced piston"><option value="Balanced diaphragm"><option value="Unbalanced diaphragm"><option value="Other"></datalist>
+                        <label class="label" for="regBase">Dives already on it</label>
+                        <div class="row" style="margin-bottom:6px"><input id="regBase" class="fld" type="number" min="0" max="99999" value="0" inputmode="numeric" style="margin:0" />
+                            <button id="regUseLogged" class="btn-set" type="button" style="background:#6c757d;white-space:nowrap">Use my logged dives</button></div>
+                        <div class="row wrap" style="margin:0">
+                            <button id="regSave" class="btn-set" type="button">Save regulator</button>
+                            <button id="regCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                        </div>
+                    </div>
+                    <button id="regAdd" class="btn-set" type="button" style="display:none">Add my regulator</button>
+                    <div id="regMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="help">
+                <summary>Help / app version</summary>
+                <div class="acc-body">
+                    <div class="ver-row"><span>Dive Manager</span><b id="appVer">v?</b></div>
+                    <div id="serverVer" class="muted"></div>
+                    <div class="row wrap" style="margin:10px 0">
+                        <button id="updateBtn" class="btn-set" type="button">Check for update</button>
+                        <button id="helpDiag" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
+                    </div>
+                    <div id="helpMsg" class="msg" role="status"></div>
+                    <ul class="help">
+                        <li><b>iPhone:</b> Safari cannot use Bluetooth. Open this page in the Bluefy browser to connect. Android: use Chrome.</li>
+                        <li><b>Sync:</b> turn the dive computer on and keep it close. Only new dives are downloaded, and each one is saved as it arrives.</li>
+                        <li><b>Depth profiles:</b> the dive computer keeps profiles for about the last 128 dives and overwrites older ones, so sync after each trip.</li>
+                        <li><b>Your data</b> (dives, picture, certifications, regulator) is stored in your private account and is only visible to you.</li>
+                    </ul>
+                </div>
+            </details>
+
+            <a id="signOut" class="btn-main" href="/auth/logout" style="background:#6c757d;text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
+
+        <div id="toast" role="status" aria-live="polite"></div>
 
         <details class="logwrap"><summary>Activity log</summary>
         <div id="log">Waiting for connection...</div></details>
         <script src="dive-protocol.js"></script>
+        <script src="dive-utils.js"></script>
         <script src="dives.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
+        <script src="account-area.js"></script>
 
         <script>
             const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -791,30 +1013,37 @@
                     .querySelectorAll(".tab")
                     .forEach((e) => e.classList.remove("active"));
                 document.getElementById(id).classList.add("active");
-                if (btn) btn.classList.add("active");
+                if (btn) { btn.classList.add("active"); try { btn.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (e) {} }
             }
+            let currentView = "summary";
             function showView(v) {
-                for (const [name, nav] of [["device", "navDevice"], ["log", "navLog"], ["account", "navAccount"]]) {
+                currentView = v;
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
-                    document.getElementById(nav).classList.toggle("active", v === name);
+                    if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
-                if (v === "account") Account.load();
+                document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
+                if (v === "account") { Account.load(); AccountArea.show(); }
                 try { localStorage.setItem("view", v); } catch (e) {}
-                if (v === "log") Dives.render();
+                if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
+                if (v === "summary") Dives.render();
             }
             const isConnected = () => !!(dev && dev.gatt && dev.gatt.connected && txChar);
             function opt(id, def) { try { const v = localStorage.getItem(id); return v === null ? def : v === "1"; } catch (e) { return def; } }
             function setOpt(id, v) { try { localStorage.setItem(id, v ? "1" : "0"); } catch (e) {} }
-            async function syncDivesNow() {
+            async function syncDivesNow(full) {
                 if (!isConnected()) return connect();
-                await Dives.syncFromDevice(diveIO);
+                await Dives.syncFromDevice(diveIO, { full: !!full });
             }
             function upd(id, val) {
                 document.getElementById(id).innerText = val;
             }
 
+            window.__diag = [];
+            function diag(line) { const d = window.__diag; d.push(new Date().toISOString().slice(11, 23) + " " + line); if (d.length > 6000) d.shift(); }
             function log(m, type = "") {
                 console.log(m);
+                diag(String(m).replace(/<[^>]*>/g, ""));
                 const el = document.getElementById("log");
                 let span = `<span class="${type}">${m}</span>`;
                 el.innerHTML += "\n" + span;
@@ -868,9 +1097,12 @@
                     await readAllSettings();
                     await new Promise((r) => setTimeout(r, 600)); // let late replies land
                     if (opt("optClock", true)) {
-                        try { await setSystemTime(); } catch (e) { log("Clock sync failed: " + e, "log-err"); }
+                        try { await setSystemTime(true); } catch (e) { log("Clock sync failed: " + e, "log-err"); }
                     }
-                    if (opt("optDives", true)) await Dives.syncFromDevice(diveIO);
+                    if (opt("optDives", true)) {
+                        const r = await Dives.syncFromDevice(diveIO);
+                        if (r && r.saved > 0 && (currentView === "device" || currentView === "summary")) showView("log");   // show the result instead of leaving you on settings
+                    }
                 } catch (e) {
                     log("Error: " + e, "log-err");
                 }
@@ -892,7 +1124,7 @@
             }
 
             // RX: BLE notifications are <=20 bytes; reassemble into newline-terminated lines.
-            let lineBuf = "", lineQ = [], lineWaiter = null, inTransfer = false;
+            let lineBuf = "", lineQ = [], lineWaiter = null, inTransfer = false, cancelFlag = false;
             function handleRX(event) {
                 lineBuf += new TextDecoder("utf-8").decode(event.target.value);
                 if (lineBuf.length > 400 && lineBuf.indexOf("\n") < 0) lineBuf = ""; // junk guard
@@ -901,6 +1133,7 @@
                     const line = lineBuf.slice(0, i + 1);
                     lineBuf = lineBuf.slice(i + 1);
                     if (inTransfer) {
+                        diag("RX " + line.trim());
                         if (lineWaiter) lineWaiter(line); else lineQ.push(line);
                     } else handleLine(line);
                 }
@@ -909,18 +1142,22 @@
                 if (lineQ.length) return Promise.resolve(lineQ.shift());
                 return new Promise((res, rej) => {
                     const t = setTimeout(() => { lineWaiter = null; rej(new Error("Timed out waiting for the dive computer")); }, ms);
-                    lineWaiter = (l) => { clearTimeout(t); lineWaiter = null; l === null ? rej(new Error("Disconnected")) : res(l); };
+                    lineWaiter = (l) => { clearTimeout(t); lineWaiter = null; l === null ? rej(new Error(cancelFlag ? "Cancelled by you" : "Disconnected")) : res(l); };
                 });
             }
             // Transport used by CosmiqDive.readDives (read-only commands)
             const diveIO = {
                 async send(cmd, data) {
-                    if (!inTransfer) { inTransfer = true; lineQ = []; lineBuf = ""; }
-                    await txChar.writeValue(new TextEncoder().encode(CosmiqDive.buildCommand(cmd, data)));
+                    if (!inTransfer) { inTransfer = true; lineQ = []; lineBuf = ""; cancelFlag = false; }
+                    if (cancelFlag) throw new Error("Cancelled by you");
+                    const line = CosmiqDive.buildCommand(cmd, data);
+                    diag("TX " + line.trim());
+                    await txChar.writeValue(new TextEncoder().encode(line));
                 },
                 async recv(cmd, n) {
                     const out = []; let strays = 0;
                     while (out.length < n) {
+                        if (cancelFlag) throw new Error("Cancelled by you");
                         const line = await nextLine(4000);
                         let fr;
                         try { fr = CosmiqDive.parseFrame(line); } catch (e) { fr = { bad: e.message }; }
@@ -942,6 +1179,7 @@
                     let clean = text.replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
 
                     if (clean.startsWith("80")) {
+                        lastRejectAt = Date.now();
                         log("!!! COMMAND REJECTED !!!", "log-err");
                         return;
                     }
@@ -1193,8 +1431,10 @@
 
             // --- FUNCTIONS ---
 
-            async function setSystemTime() {
+            async function setSystemTime(quiet) {
                 if (!isConnected()) { log("Not connected", "log-err"); return; }
+                const t0 = Date.now();
+                if (quiet !== true) toast("Setting the clock\u2026", "pending");
                 let now = new Date();
                 let y = (now.getFullYear() % 100).toString().padStart(2, "0");
                 let m = (now.getMonth() + 1).toString().padStart(2, "0");
@@ -1217,231 +1457,176 @@
                 );
                 document.getElementById("clockStatus").textContent =
                     "Dive computer clock set to " + now.toLocaleString() + " (phone time)";
+                if (quiet !== true) {
+                    // the clock cannot be read back from the dive computer, so the best we can confirm is that it did not reject the command
+                    await sleep(450);
+                    if (lastRejectAt >= t0) toast("The dive computer rejected the clock change", "err");
+                    else toast("Clock set to " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " (phone time)", "ok");
+                }
             }
 
+            // ---- confirmation of changes made on the dive computer ----
+            // Every change is written, then READ BACK from the dive computer and compared with what was asked for.
+            // The user sees: "Applying..." -> "✓ Backlight set to 3" (or a clear warning when the device did not accept it).
+            let lastRejectAt = 0, toastTimer = null, settingChain = Promise.resolve();
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            function toast(text, kind = "info", ms) {
+                const el = document.getElementById("toast");
+                const icon = { pending: '<span class="spin"></span>', ok: '<span aria-hidden="true">\u2713</span>', warn: '<span aria-hidden="true">\u26a0</span>', err: '<span aria-hidden="true">\u2715</span>' }[kind] || "";
+                el.className = "show " + kind;
+                el.innerHTML = icon + "<span></span>";
+                el.lastChild.textContent = text;
+                clearTimeout(toastTimer);
+                if (kind !== "pending") toastTimer = setTimeout(() => el.classList.remove("show"), ms || (kind === "ok" ? 2800 : 6000));
+            }
+            const QUERY = { "5F": "#5f9f0200", "5C": "#5ca20200", "5B": "#5ba30200", "5D": "#5da10200", "60": "#609e0200" };
+            // byte i / big-endian 16-bit value i of the payload of the last reply to a read command (payload starts after the 3-byte header)
+            const pByte = (cmd, i) => (memMap[cmd] ? parseInt(memMap[cmd].substr(6 + 2 * i, 2), 16) : NaN);
+            const pU16 = (cmd, i) => (pByte(cmd, i) << 8) | pByte(cmd, i + 1);
+            async function readBack(cmd) {
+                delete memMap[cmd];
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    await sendStatic(QUERY[cmd], "Verify");
+                    const t0 = Date.now();
+                    while (Date.now() - t0 < 1500) { if (memMap[cmd]) return true; await sleep(60); }
+                }
+                return false;
+            }
+            /** doing/done: texts; write(): sends the command; cmd: which read packet shows the value; test(): is the device's value the requested one;
+             *  shows(): what the device reports instead; flashId: button to flash on success. */
+            function applySetting({ doing, done, write, cmd, test, shows, flashId }) {
+                settingChain = settingChain.then(async () => {
+                    if (!isConnected()) { toast("Not connected to the dive computer", "err"); return; }
+                    toast(doing + "\u2026", "pending");
+                    const t0 = Date.now();
+                    try {
+                        await write(); await sleep(450);
+                        const got = await readBack(cmd);
+                        if (lastRejectAt >= t0) toast("The dive computer rejected this change", "err");
+                        else if (!got) toast("Sent, but the dive computer did not confirm it. Try again.", "warn");
+                        else if (test()) {
+                            toast(done, "ok");
+                            const b = flashId && document.getElementById(flashId);
+                            if (b) { b.classList.remove("applied"); void b.offsetWidth; b.classList.add("applied"); }
+                        } else toast("Not applied: the dive computer still shows " + shows(), "warn");
+                    } catch (e) { toast("Could not send: " + e.message, "err"); }
+                });
+            }
+
+            const ENV_NAMES = ["Normal / sea water", "High salinity", "Altitude > 300 m"];
             function setEnv(v) {
-                document
-                    .getElementById("envGroup")
-                    .querySelectorAll(".btn-opt")
-                    .forEach((b) => b.classList.remove("selected"));
+                document.getElementById("envGroup").querySelectorAll(".btn-opt").forEach((b) => b.classList.remove("selected"));
                 document.getElementById("env" + v).classList.add("selected");
-
-                document.getElementById("salinityWarn").style.display =
-                    v === 1 ? "block" : "none";
-
-                let h = "0" + v;
-                sendCalcSum("30", 208, "000" + v, "04", "Set Environment " + v);
-                verify("sys");
+                document.getElementById("salinityWarn").style.display = v === 1 ? "block" : "none";
+                applySetting({ doing: "Setting environment", done: "Environment set to " + ENV_NAMES[v], cmd: "5F", flashId: "env" + v,
+                    write: () => sendCalcSum("30", 208, "000" + v, "04", "Set Environment " + v),
+                    test: () => pByte("5F", 1) === v, shows: () => ENV_NAMES[pByte("5F", 1)] || "another value" });
             }
-
             function setBL(l) {
                 highlightBtn("blGroup", "bl" + l);
                 sysState.bl = l;
-                sendBLEcoPacket();
+                sendBLEcoPacket("Backlight set to level " + (l - 2), "Setting backlight", "bl" + l);
             }
-
             function setEco(isOn) {
                 sysState.eco = isOn;
                 document.getElementById("ecoOn").classList.remove("selected");
                 document.getElementById("ecoOff").classList.remove("selected");
-                if (isOn)
-                    document.getElementById("ecoOn").classList.add("selected");
-                else
-                    document.getElementById("ecoOff").classList.add("selected");
-
-                sendBLEcoPacket();
+                document.getElementById(isOn ? "ecoOn" : "ecoOff").classList.add("selected");
+                sendBLEcoPacket("Power-saving mode " + (isOn ? "on" : "off"), "Setting power-saving mode", isOn ? "ecoOn" : "ecoOff");
             }
-
-            function sendBLEcoPacket() {
-                let blBits = sysState.bl;
-                let ecoFlag = sysState.eco ? 0x00 : 0x10;
-                let total = blBits | ecoFlag;
-                let hex = total.toString(16).padStart(2, "0");
-                sendCalcSum("2e", 210, hex, "02", "Set Sys/BL " + hex);
-                verify("sys");
+            function sendBLEcoPacket(done, doing, flashId) {
+                const bl = sysState.bl, eco = sysState.eco;
+                const hex = (bl | (eco ? 0x00 : 0x10)).toString(16).padStart(2, "0");
+                applySetting({ doing, done, cmd: "5F", flashId,
+                    write: () => sendCalcSum("2e", 210, hex, "02", "Set Sys/BL " + hex),
+                    test: () => (pByte("5F", 2) & 0x0f) === bl && ((pByte("5F", 2) & 0x10) === 0) === eco,
+                    shows: () => "backlight level " + ((pByte("5F", 2) & 0x0f) - 2) + ", power-saving " + ((pByte("5F", 2) & 0x10) === 0 ? "on" : "off") });
             }
-
+            const SAFE_NAMES = ["Conservative", "Normal", "Progressive"];
             function setSafe(s, btn) {
                 highlightBtn("safeGroup", btn.id);
-                let valStr = "000" + s;
-                sendCalcSum("21", 223, valStr, "04", "Set Safety " + s);
-                verify("free");
+                applySetting({ doing: "Setting safety factor", done: "Safety factor set to " + SAFE_NAMES[s], cmd: "5D", flashId: btn.id,
+                    write: () => sendCalcSum("21", 223, "000" + s, "04", "Set Safety " + s),
+                    test: () => pByte("5D", 4) === s, shows: () => SAFE_NAMES[pByte("5D", 4)] || "another value" });
             }
-
+            const MODE_NAMES = { 0: "Scuba", 2: "Freedive", 1: "Gauge" };
             function setMode(m, btn) {
                 highlightBtn("modeGroup", btn.id);
-                let c =
-                    m === 0 ? "#2bd30200" : m === 2 ? "#2bd10202" : "#2bd20201";
-                sendStatic(c, "Set Mode");
-                verify("scuba1");
+                const c = m === 0 ? "#2bd30200" : m === 2 ? "#2bd10202" : "#2bd20201";
+                applySetting({ doing: "Setting default mode", done: "Default mode set to " + MODE_NAMES[m], cmd: "5C", flashId: btn.id,
+                    write: () => sendStatic(c, "Set Mode"),
+                    test: () => pByte("5C", 5) === m, shows: () => MODE_NAMES[pByte("5C", 5)] || "another value" });
             }
-
             function setTimeoutIndex() {
-                let val = parseInt(document.getElementById("timeoutSel").value);
-                let devVal = TIMEOUT_MAP[val];
-                if (devVal === undefined) devVal = 1;
-
-                let h = devVal.toString(16).padStart(4, "0");
-                sendCalcSum("2a", 214, h, "04", "Set Timeout " + val + "s");
-                verify("scuba2");
+                const val = parseInt(document.getElementById("timeoutSel").value);
+                const devVal = TIMEOUT_MAP[val] === undefined ? 1 : TIMEOUT_MAP[val];
+                const h = devVal.toString(16).padStart(4, "0");
+                const nice = val >= 60 ? val / 60 + " min" : val + " s";
+                applySetting({ doing: "Setting screen timeout", done: "Screen timeout set to " + nice, cmd: "5B",
+                    write: () => sendCalcSum("2a", 214, h, "04", "Set Timeout " + val + "s"),
+                    test: () => pByte("5B", 3) === devVal, shows: () => { const k = Object.keys(TIMEOUT_MAP).find((x) => TIMEOUT_MAP[x] === pByte("5B", 3)); return k ? k + " s" : "another value"; } });
             }
-
             function setAir() {
-                let v = parseInt(document.getElementById("airRange").value);
-                sendCalcSum(
-                    "22",
-                    222,
-                    v.toString(16).padStart(2, "0"),
-                    "02",
-                    "Set Air " + v + "%",
-                );
-                verify("scuba1");
+                const v = parseInt(document.getElementById("airRange").value);
+                applySetting({ doing: "Setting gas mix", done: "Gas mix set to " + v + "% O\u2082", cmd: "5C",
+                    write: () => sendCalcSum("22", 222, v.toString(16).padStart(2, "0"), "02", "Set Air " + v + "%"),
+                    test: () => pByte("5C", 4) === v, shows: () => pByte("5C", 4) + "% O\u2082" });
             }
-
             function setPPO2() {
-                let v = parseFloat(document.getElementById("ppo2Range").value);
-                sendCalcSum(
-                    "2d",
-                    211,
-                    Math.round(v * 10)
-                        .toString(16)
-                        .padStart(2, "0"),
-                    "02",
-                    "Set PPO2 " + v,
-                );
-                verify("free");
+                const v = parseFloat(document.getElementById("ppo2Range").value);
+                applySetting({ doing: "Setting max PPO\u2082", done: "Max PPO\u2082 set to " + v.toFixed(1), cmd: "5D",
+                    write: () => sendCalcSum("2d", 211, Math.round(v * 10).toString(16).padStart(2, "0"), "02", "Set PPO2 " + v),
+                    test: () => pByte("5D", 5) === Math.round(v * 10), shows: () => (pByte("5D", 5) / 10).toFixed(1) });
             }
-
             function setUnits(m) {
-                sendCalcSum("23", 221, "0" + m, "02", "Set Units " + m);
-                verify("scuba2");
+                highlightBtn("unitGroup", "unit" + m);
+                applySetting({ doing: "Setting units", done: "Units set to " + (m ? "Metric" : "Imperial"), cmd: "5B", flashId: "unit" + m,
+                    write: () => sendCalcSum("23", 221, "0" + m, "02", "Set Units " + m),
+                    test: () => pByte("5B", 5) === m, shows: () => (pByte("5B", 5) ? "Metric" : "Imperial") });
             }
-
             function setDate(m) {
-                sendCalcSum("24", 220, "0" + m, "02", "Set DateFmt " + m);
-                verify("scuba2");
+                highlightBtn("dateGroup", "date" + m);
+                applySetting({ doing: "Setting date display", done: "Date display set to " + (m ? "last dive date" : "current date"), cmd: "5B", flashId: "date" + m,
+                    write: () => sendCalcSum("24", 220, "0" + m, "02", "Set DateFmt " + m),
+                    test: () => pByte("5B", 4) === m, shows: () => (pByte("5B", 4) ? "last dive date" : "current date") });
             }
-
             function setScubaDepth() {
-                let m = parseInt(document.getElementById("scubaDepth").value);
-                sendCalcSum(
-                    "27",
-                    217,
-                    (m * 100 + 1000).toString(16).padStart(4, "0"),
-                    "04",
-                    "Set Depth " + m + "m",
-                );
-                verify("scuba1");
+                const m = parseInt(document.getElementById("scubaDepth").value);
+                if (isNaN(m)) { toast("Enter a depth first", "warn"); return; }
+                applySetting({ doing: "Setting depth alarm", done: "Depth alarm set to " + m + " m", cmd: "5C",
+                    write: () => sendCalcSum("27", 217, (m * 100 + 1000).toString(16).padStart(4, "0"), "04", "Set Depth " + m + "m"),
+                    test: () => pU16("5C", 0) === m * 100 + 1000, shows: () => (pU16("5C", 0) - 1000) / 100 + " m" });
             }
             function setScubaTime() {
-                let m = parseInt(document.getElementById("scubaTime").value);
-                sendCalcSum(
-                    "28",
-                    216,
-                    m.toString(16).padStart(4, "0"),
-                    "04",
-                    "Set Time " + m + "min",
-                );
-                verify("scuba1");
+                const m = parseInt(document.getElementById("scubaTime").value);
+                if (isNaN(m)) { toast("Enter a time first", "warn"); return; }
+                applySetting({ doing: "Setting time alarm", done: "Time alarm set to " + m + " min", cmd: "5C",
+                    write: () => sendCalcSum("28", 216, m.toString(16).padStart(4, "0"), "04", "Set Time " + m + "min"),
+                    test: () => pU16("5C", 2) === m, shows: () => pU16("5C", 2) + " min" });
             }
-
             function setFdTime() {
-                let s = parseInt(document.getElementById("fdTimeRange").value);
-                sendCalcSum(
-                    "26",
-                    218,
-                    "14" + ((s - 30) / 5).toString(16).padStart(2, "0"),
-                    "04",
-                    "Set FD Time " + s + "s",
-                );
-                setTimeout(async () => {
-                    await sendStatic("#5da10200", "Verify FD Time");
-                }, 600);
+                const sec = parseInt(document.getElementById("fdTimeRange").value);
+                applySetting({ doing: "Setting freedive time alarm", done: "Freedive time alarm set to " + sec + " s", cmd: "5D",
+                    write: () => sendCalcSum("26", 218, "14" + ((sec - 30) / 5).toString(16).padStart(2, "0"), "04", "Set FD Time " + sec + "s"),
+                    test: () => pByte("5D", 3) === (sec - 30) / 5, shows: () => pByte("5D", 3) * 5 + 30 + " s" });
             }
-
+            // freedive alarm n lives in read packet / byte:  1: 5D[1]  2: 5D[0]  3: 60[1]  4: 60[0]  5: 60[3]  6: 60[2]
+            const FD_SLOT = { 1: ["5D", 1], 2: ["5D", 0], 3: ["60", 1], 4: ["60", 0], 5: ["60", 3], 6: ["60", 2] };
             async function setFdDepth(idx) {
-                let m = parseInt(document.getElementById("fd" + idx).value);
-                let h = (m - 5).toString(16).padStart(2, "0");
-                let pre = "25",
-                    tgt = 219,
-                    pay = "0a" + h;
-
-                const getHex = (targetIdx) => {
-                    let pkt, offset;
-                    if (targetIdx === 1) {
-                        pkt = memMap["5D"];
-                        offset = 2;
-                    } else if (targetIdx === 2) {
-                        pkt = memMap["5D"];
-                        offset = 0;
-                    } else if (targetIdx === 3) {
-                        pkt = memMap["60"];
-                        offset = 2;
-                    } else if (targetIdx === 4) {
-                        pkt = memMap["60"];
-                        offset = 0;
-                    } else if (targetIdx === 5) {
-                        pkt = memMap["60"];
-                        offset = 6;
-                    } else if (targetIdx === 6) {
-                        pkt = memMap["60"];
-                        offset = 4;
-                    }
-
-                    if (!pkt) return "00";
-                    return pkt.substr(6 + offset, 2);
-                };
-
-                switch (idx) {
-                    case 1:
-                        pre = "25";
-                        tgt = 219;
-                        pay = getHex(2) + h;
-                        break;
-                    case 2:
-                        pre = "25";
-                        tgt = 219;
-                        pay = h + getHex(1);
-                        break;
-                    case 3:
-                        pre = "31";
-                        tgt = 207;
-                        pay = getHex(4) + h;
-                        break;
-                    case 4:
-                        pre = "31";
-                        tgt = 207;
-                        pay = h + getHex(3);
-                        break;
-                    case 5:
-                        pre = "32";
-                        tgt = 206;
-                        pay = getHex(6) + h;
-                        break;
-                    case 6:
-                        pre = "32";
-                        tgt = 206;
-                        pay = h + getHex(5);
-                        break;
-                }
-
-                await sendCalcSum(
-                    pre,
-                    tgt,
-                    pay,
-                    "04",
-                    "Set FD Depth " + idx + " to " + m + "m",
-                );
-
-                setTimeout(() => {
-                    if (idx <= 2) verify("free");
-                    if (idx >= 3)
-                        setTimeout(async () => {
-                            await sendStatic("#609e0200", "Verify FD3-6");
-                        }, 200);
-                }, 300);
+                const m = parseInt(document.getElementById("fd" + idx).value);
+                if (isNaN(m) || m < 5) { toast("Enter a depth of at least 5 m", "warn"); return; }
+                const h = (m - 5).toString(16).padStart(2, "0");
+                // alarms are written in pairs: read the partner's current value from the last reply and send both
+                const partner = { 1: 2, 2: 1, 3: 4, 4: 3, 5: 6, 6: 5 }[idx];
+                const [pc, pi] = FD_SLOT[partner];
+                const pHex = memMap[pc] ? memMap[pc].substr(6 + 2 * pi, 2) : "00";
+                const even = idx % 2 === 0, [pre, tgt] = idx <= 2 ? ["25", 219] : idx <= 4 ? ["31", 207] : ["32", 206];
+                const pay = even ? h + pHex : pHex + h;
+                const [rc, ri] = FD_SLOT[idx];
+                applySetting({ doing: "Setting freedive depth alarm " + idx, done: "Freedive depth alarm " + idx + " set to " + m + " m", cmd: rc,
+                    write: () => sendCalcSum(pre, tgt, pay, "04", "Set FD Depth " + idx + " to " + m + "m"),
+                    test: () => pByte(rc, ri) === m - 5, shows: () => pByte(rc, ri) + 5 + " m" });
             }
-
             function highlightBtn(grp, id) {
                 document
                     .getElementById(grp)
@@ -1473,42 +1658,24 @@
                 b.classList.add("show");
             }
             window.addEventListener("load", () => {
-                const ver = "v" + (self.APP_VERSION || "?");
-                document.getElementById("verTop").textContent = ver;
-                document.getElementById("appVer").textContent = ver;
-                fetch("/api/me", { credentials: "same-origin", redirect: "error" })
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((me) => {
-                        if (!me) return;
-                        document.getElementById("who").textContent = " · " + me.email;
-                        document.getElementById("signOut").style.display = "";
-                        if (me.version && me.version !== self.APP_VERSION)
-                            document.getElementById("appVer").textContent = ver + " (server v" + me.version + ", reload to update)";
-                    })
-                    .catch(() => {});
+                AccountArea.init();                                                          // picture, versions, certifications, regulator
                 if (!navigator.bluetooth) showBtHelp();
+                document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
+                document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });
+                const dmsg = (t) => { document.getElementById("diagMsg").textContent = t; };
+                document.getElementById("diagCopy").addEventListener("click", async () => dmsg(await Dives.copyDiagnostics()));
+                document.getElementById("diagSave").addEventListener("click", () => { Dives.downloadDiagnostics(); dmsg("Saved."); });
                 for (const [id, def] of [["optClock", true], ["optDives", true]]) {
                     const el = document.getElementById(id);
                     el.checked = opt(id, def);
                     el.addEventListener("change", () => setOpt(id, el.checked));
                 }
-                let v = "device"; try { v = localStorage.getItem("view") || "device"; } catch (e) {}
+                let v = "summary"; try { v = localStorage.getItem("view") || "summary"; } catch (e) {}
                 showView(v);
                 Dives.render().then(() => Dives.cloudPull());
                 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
             });
 
-            function verify(type) {
-                let cmd = "";
-                if (type === "sys") cmd = "#5f9f0200";
-                if (type === "scuba1") cmd = "#5ca20200";
-                if (type === "scuba2") cmd = "#5ba30200";
-                if (type === "free") cmd = "#5da10200";
-                if (cmd)
-                    setTimeout(async () => {
-                        await sendStatic(cmd, "Verify");
-                    }, 600);
-            }
         </script>
     </body>
 </html>

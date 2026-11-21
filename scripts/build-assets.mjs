@@ -14,7 +14,7 @@ const out = {};
     const t = types[path.extname(f.name)];
     if (!t) continue;
     let buf = fs.readFileSync(path.join(d, f.name));
-    if (prefix + f.name === "auth/login.html") buf = Buffer.from(buf.toString("utf8").replaceAll("__APP_VERSION__", version));
+    if (prefix === "auth/" && f.name.endsWith(".html")) buf = Buffer.from(buf.toString("utf8").replaceAll("__APP_VERSION__", version));
     out["/" + prefix + f.name] = { t, b: buf.toString("base64") };
   }
 })(dir, "");

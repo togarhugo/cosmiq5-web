@@ -7,6 +7,7 @@ const { chromium, devices } = req("playwright");
 import assert from "node:assert/strict";
 
 const root = path.resolve("public");
+import { readFileSync } from "node:fs";
 const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
@@ -21,12 +22,38 @@ const fakeBle = () => {
   const enc = new TextEncoder();
   const frame = (cmd, data) => { const len = data.length * 2; let s = cmd + len; for (const b of data) s += b;
     const h = [cmd, (256 - (s & 255)) & 255, len, ...data].map((x) => x.toString(16).padStart(2, "0")).join(""); return "$" + h + "\n"; };
-  const hdr = (y, mo, d, h, mi, dur, mode, o2, maxRaw) => { const b = new Array(36).fill(0);
-    b[2] = mode; b[3] = o2; b[4] = 0xf5; b[5] = 0x03; b[6] = y & 255; b[7] = y >> 8; b[8] = d; b[9] = mo; b[10] = mi; b[11] = h;
-    b[12] = dur & 255; b[13] = dur >> 8; b[22] = maxRaw & 255; b[23] = maxRaw >> 8; b[26] = 10; return b; };
+  const hdr = (y, mo, d, h, mi, dur, mode, o2, maxRaw, number, n, minT, page) => { const b = new Array(36).fill(0);
+    b[0] = number; b[2] = mode; b[3] = o2; b[4] = 0xf5; b[5] = 0xa3; b[6] = y & 255; b[7] = y >> 8; b[8] = d; b[9] = mo; b[10] = mi; b[11] = h;
+    b[12] = dur & 255; b[13] = dur >> 8; b[22] = maxRaw & 255; b[23] = maxRaw >> 8; b[24] = minT & 255; b[25] = minT >> 8; b[26] = 10;
+    b[28] = n & 255; b[29] = n >> 8; b[30] = page & 255; b[31] = page >> 8; b[32] = (page + 1) & 255; b[33] = (page + 1) >> 8; return b; };
   const smp = (t, d) => [t & 255, t >> 8, d & 255, d >> 8];
   const prof = []; for (let i = 0; i < 40; i++) { const depth = 1013 + Math.round(1800 * Math.sin((i / 39) * Math.PI)); prof.push(...smp(270 + i % 5, depth)); }
-  const dives = [{ h: hdr(2025, 3, 14, 9, 30, 42, 2, 32, 1013 + 1800), p: prof }, { h: hdr(2025, 3, 15, 8, 5, 1, 4, 0, 1013 + 1500), p: smp(260, 1013 + 1500) }];
+  const dives = [{ h: hdr(2025, 3, 14, 9, 30, 42, 2, 32, 1013 + 1800, 1, 40, 270, 0), p: prof }, { h: hdr(2025, 3, 15, 8, 5, 1, 4, 0, 1013 + 1500, 2, 1, 260, 2), p: smp(260, 1013 + 1500) }];
+  // window.__wrap: dive #3 lives at page 256 (wrapped) and physically overwrote dive #1's slot, like the real device
+  const prof3 = []; for (let i = 0; i < 20; i++) prof3.push(...smp(255 + (i % 3), 1013 + Math.round(900 * Math.sin((i / 19) * Math.PI))));
+  const d3 = { h: hdr(2025, 3, 16, 10, 0, 7, 2, 32, 1013 + 900, 3, 20, 255, 256), p: prof3 };
+  if (window.__wrap) dives.push(d3);
+  window.__dives = dives; window.__d3 = d3;
+  const readProfile = (n) => { const d = dives[n - 1]; if (!window.__wrap) return d.p;
+    const page = d.h[30] | (d.h[31] << 8), len = (d.h[28] | (d.h[29] << 8)) * 4;
+    if (page >= 256) return new Array(len).fill(255);                                  // the device cannot read wrapped pages
+    if (page === 0) { const p = prof3.slice(); while (p.length < len) p.push(255); return p.slice(0, len); }   // slot 0 now holds dive #3
+    return d.p; };
+  // stateful settings, laid out like the real read packets (see technical_documentation.md)
+  const st = { env: 0, blEco: 5, mode: 0, depth: 30, tAlarm: 60, air: 21, timeout: 3, date: 0, units: 1, fdTime: 6, safety: 1, ppo2: 14, a: [0, 25, 30, 35, 40, 45, 50] };
+  const settingsReply = (cmd) => ({
+    0x5f: [0, st.env, st.blEco, 0, 0, 0],
+    0x5c: [(st.depth * 100 + 1000) >> 8, (st.depth * 100 + 1000) & 255, st.tAlarm >> 8, st.tAlarm & 255, st.air, st.mode],
+    0x5b: [0, 0, 0, st.timeout, st.date, st.units],
+    0x5d: [st.a[2] - 5, st.a[1] - 5, 0, st.fdTime, st.safety, st.ppo2],
+    0x60: [st.a[4] - 5, st.a[3] - 5, st.a[6] - 5, st.a[5] - 5],
+  })[cmd];
+  const writeSetting = (cmd, p) => { const last = p[p.length - 1];
+    if (cmd === 0x30) st.env = last; else if (cmd === 0x2e) st.blEco = p[0]; else if (cmd === 0x21) st.safety = last; else if (cmd === 0x2b) st.mode = p[0];
+    else if (cmd === 0x2a) st.timeout = last; else if (cmd === 0x22) st.air = p[0]; else if (cmd === 0x2d) st.ppo2 = p[0]; else if (cmd === 0x23) st.units = p[0];
+    else if (cmd === 0x24) st.date = p[0]; else if (cmd === 0x27) st.depth = (((p[0] << 8) | p[1]) - 1000) / 100;
+    else if (cmd === 0x28) st.tAlarm = (p[0] << 8) | p[1]; else if (cmd === 0x26) st.fdTime = p[1];
+    else if (cmd === 0x25) { st.a[2] = p[0] + 5; st.a[1] = p[1] + 5; } else if (cmd === 0x31) { st.a[4] = p[0] + 5; st.a[3] = p[1] + 5; } else if (cmd === 0x32) { st.a[6] = p[0] + 5; st.a[5] = p[1] + 5; } };
   let handler = null; const out = [];
   const chunks = (str) => { for (let i = 0; i < str.length; i += 20) out.push(str.slice(i, i + 20)); };
   const flush = () => { while (out.length) { const c = enc.encode(out.shift()); handler && handler({ target: { value: new DataView(c.buffer) } }); } };
@@ -34,10 +61,15 @@ const fakeBle = () => {
     const raw = line.trim().slice(1).match(/../g).map((x) => parseInt(x, 16)); const cmd = raw[0], n = raw[3];
     if (cmd === 0x58) chunks(frame(0x58, [0x42]));
     else if (cmd === 0x5a) chunks(frame(0x5a, [1, 2, 3, 4, 5, 6]));
-    else if ([0x5f, 0x5b, 0x5c, 0x5d, 0x60].includes(cmd)) chunks(frame(cmd, [0, 0, 5, 20, 1, 14]));
+    else if ([0x5f, 0x5b, 0x5c, 0x5d, 0x60].includes(cmd)) chunks(frame(cmd, settingsReply(cmd)));
+    else if (cmd >= 0x21 && cmd <= 0x32 && cmd !== 0x20) {                       // a setting is being written
+      if (window.__rejectWrites) chunks("$800000\n");
+      else if (!window.__ignoreWrites) writeSetting(cmd, raw.slice(3));
+    }
     else if (cmd === 0x40) chunks(frame(0x40, [dives.length]));
     else if (cmd === 0x41) { chunks(frame(0x41, [36])); for (let i = 0; i < 36; i += 6) chunks(frame(0x42, dives[n - 1].h.slice(i, i + 6))); }
-    else if (cmd === 0x43) { const p = dives[n - 1].p; chunks(frame(0x43, [p.length >> 8, p.length & 255])); for (let i = 0; i < p.length; i += 6) chunks(frame(0x44, p.slice(i, i + 6))); }
+    else if (cmd === 0x43 && n === 2 && window.__stall) { /* device goes silent */ }
+    else if (cmd === 0x43) { const p = readProfile(n); chunks(frame(0x43, [p.length >> 8, p.length & 255])); for (let i = 0; i < p.length; i += 6) chunks(frame(0x44, p.slice(i, i + 6))); }
     setTimeout(flush, 0);
   };
   const tx = { properties: { write: true }, writeValue: async (v) => { const s = new TextDecoder().decode(v); window.__tx.push(s.trim()); respond(s); } };
@@ -76,10 +108,28 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.ok(tx.indexOf(setTime[0]) < tx.findIndex((t) => t.startsWith("#43")), "clock set before dive download");
       assert.ok(tx.every((t) => !/^#(2[1-9a-f]|3)/i.test(t) || t.startsWith("#20")), "no writes other than clock");
       assert.match(await page.locator("#clockStatus").innerText(), /clock set/i);
-      await page.click("#navLog");
+      // the result is shown automatically (no hunting for the tab) and the count is in the nav
+      assert.ok(await page.locator("#logView").isVisible(), "switched to the Dive log after a sync that saved dives");
+      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+      assert.match(await page.locator("#lastSync").innerText(), /Last sync .*Dive sync done: 2 on device, 2 new/);
+      await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });   // progress banner hidden when finished
       assert.equal(await page.locator("details.dive").count(), 2);
-      await page.locator("details.dive").last().locator("summary").click();
+      // grouped by year: both dives are from 2025 -> one group, open by default (newest year)
+      assert.equal(await page.locator("details.year").count(), 1);
+      assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*2 dives[\s\S]*max \d+\.\d m/);
+      assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
+      assert.match(await page.locator("details.dive").first().innerText(), /#2/); assert.match(await page.locator("details.dive").last().innerText(), /#1/);
+      assert.match(await page.locator("#diveList > p").first().innerText(), /2 dives . 2 with full depth profile/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
+      // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
+      const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
+      assert.ok((await tech.locator("table.hdr tr").count()) >= 15, "header map rendered");
+      assert.ok((await tech.locator("tr.unk").count()) >= 3, "undecoded byte ranges highlighted");
+      assert.match(await tech.innerText(), /no location \(GPS\) field/);
+      // diagnostics file contains version, device traffic and the stored headers
+      const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#diagSave")]);
+      const diagText = fs.readFileSync(await dl.path(), "utf8");
+      assert.match(diagText, /app version: \d+\.\d+\.\d+/); assert.match(diagText, /TX #40/); assert.match(diagText, /RX \$40/); assert.match(diagText, /header=[0-9a-f]{72}/);
       assert.equal(uploaded.length, 2, "both dives uploaded to cloud API");
       // second connect must not re-download profiles
       await page.evaluate(() => { window.__tx.length = 0; });
@@ -93,6 +143,276 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.deepEqual(errors, [], "page errors");
     console.log("PASS", name);
   } catch (e) { failed++; console.log("FAIL", name, "\n ", e.message); await page.screenshot({ path: "/tmp/fail.png" }); }
+  await ctx.close();
+}
+// ---- scenario: the device stalls on dive 2 -> progress is visible, Cancel keeps dive 1, a re-sync finishes the rest ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [];
+  await page.route("**/api/dives", async (r) => {
+    if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    uploaded.push(...JSON.parse(r.request().postData()).dives); return r.fulfill({ json: { stored: uploaded.length } });
+  });
+  await page.addInitScript(fakeBle); await page.addInitScript(() => { window.__stall = true; });
+  await page.goto(base);
+  try {
+    await page.click("#connectBtn");
+    // progress is visible on the Device tab (banner), with the dive being fetched
+    await page.waitForFunction(() => /Downloading dive 2 of 2/.test(document.getElementById("bannerText").textContent), null, { timeout: 15000 });
+    assert.ok(await page.locator("#syncBanner").isVisible(), "banner visible while syncing, on every tab");
+    assert.ok(await page.locator("#summaryView").isVisible() && !(await page.locator("#logView").isVisible()), "still on the tab you were on (Summary)");
+    assert.match(await page.locator("#navLog").innerText(), /\(1\)/, "dive 1 already counted while dive 2 is still downloading");
+    await page.click("#cancelSync");
+    await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("diveProgress").textContent), null, { timeout: 10000 });
+    assert.match(await page.locator("#diveProgress").innerText(), /1 dive\(s\) were saved/);
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });
+    await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("lastSync")?.textContent || ""));
+    assert.equal(uploaded.length, 1, "the dive that was saved is also uploaded");
+    // the device recovers: a second sync only fetches what is missing
+    await page.evaluate(() => { window.__stall = false; window.__tx.length = 0; });
+    await page.click("#navLog"); await page.click("#diveSyncBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 1 new, 1 already saved/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    const reqs = (await page.evaluate(() => window.__tx)).filter((t) => t.startsWith("#43"));
+    assert.equal(reqs.length, 1, "only the missing dive's profile was requested");
+    assert.equal(uploaded.length, 2); assert.equal(await page.locator("details.dive").count(), 2);
+    console.log("PASS cancel + resume");
+  } catch (e) { failed++; console.log("FAIL cancel + resume\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cancel.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: wrapped profile memory (what really happened on the real device) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [] } }) : r.fulfill({ json: { stored: 3 } })));
+  await page.addInitScript(() => { window.__wrap = true; }); await page.addInitScript(fakeBle);
+  await page.goto(base);
+  try {
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    assert.equal(await page.locator("details.dive").count(), 3);
+    assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
+    const row = (n) => page.locator("details.dive", { hasText: `#${n}` });
+    assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
+    assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
+    await row(3).locator("summary").click(); await page.waitForSelector("details.dive[open] svg polyline");
+    assert.match(await row(3).innerText(), /#3[\s\S]*dive number/);
+    await row(1).locator("summary").click();
+    assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
+    assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
+    console.log("PASS wrapped profile memory");
+  } catch (e) {
+    failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
+    console.log("  progress:", await page.evaluate(() => document.getElementById("diveProgress").textContent));
+    console.log("  last log:", (await page.evaluate(() => (window.__diag || []).slice(-14))).join("\n            "));
+    await page.screenshot({ path: "/tmp/fail-wrap.png", fullPage: true });
+  }
+  await ctx.close();
+}
+// ---- scenario: every change on the dive computer is confirmed (or honestly reported) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.route("**/api/**", (r) => r.fulfill({ status: 404, body: "{}" }));
+  await page.addInitScript(() => { localStorage.setItem("optDives", "0"); }); await page.addInitScript(fakeBle);
+  await page.goto(base);
+  const toastText = async () => (await page.locator("#toast").innerText()).replace(/\s+/g, " ").trim();
+  const waitToast = (re, cls) => page.waitForFunction(([src, c]) => { const t = document.getElementById("toast"); return new RegExp(src).test(t.textContent) && t.classList.contains(c); }, [re.source, cls], { timeout: 8000 });
+  try {
+    await page.click("#connectBtn"); await page.click("#navDevice"); await page.waitForSelector("#app", { state: "visible" });
+    await page.waitForFunction(() => document.getElementById("clockStatus").textContent.includes("clock set"));
+    // 1. a successful change: "Applying..." first, then a green confirmation that names what changed; the button flashes
+    await page.locator("#bl7").tap();
+    await waitToast(/Setting backlight/, "pending");
+    await waitToast(/Backlight set to level 5/, "ok");
+    assert.ok(await page.locator("#toast").evaluate((e) => e.classList.contains("show")), "toast visible");
+    assert.ok(await page.locator("#bl7").evaluate((e) => e.classList.contains("applied") && e.classList.contains("selected")), "button flashed and selected");
+    // 2. more kinds of settings
+    await page.locator("#unit0").tap(); await waitToast(/Units set to Imperial/, "ok");
+    await page.locator("#ecoOff").tap(); await waitToast(/Power-saving mode off/, "ok");
+    await page.locator("#date1").tap(); await waitToast(/Date display set to last dive date/, "ok");
+    await page.selectOption("#timeoutSel", "60"); await page.locator("#timeoutSel + button").tap(); await waitToast(/Screen timeout set to 1 min/, "ok");
+    await page.locator(".tab", { hasText: "Environment" }).tap();
+    await page.locator("#env1").tap(); await waitToast(/Environment set to High salinity/, "ok");
+    await page.locator(".tab", { hasText: "Scuba" }).tap();
+    await page.fill("#scubaDepth", "35"); await page.locator("#scubaDepth + button").tap(); await waitToast(/Depth alarm set to 35 m/, "ok");
+    await page.fill("#scubaTime", "45"); await page.locator("#scubaTime + button").tap(); await waitToast(/Time alarm set to 45 min/, "ok");
+    await page.locator("#safeGroup .btn-opt", { hasText: "Prog" }).tap(); await waitToast(/Safety factor set to Progressive/, "ok");
+    await page.locator(".tab", { hasText: "Freedive" }).tap();
+    await page.fill("#fd3", "22"); await page.locator("#fd3 + button").tap(); await waitToast(/Freedive depth alarm 3 set to 22 m/, "ok");
+    await page.fill("#fd6", "48"); await page.locator("#fd6 + button").tap(); await waitToast(/Freedive depth alarm 6 set to 48 m/, "ok");
+    // the partner of a paired alarm must not be disturbed (alarms are written in pairs)
+    assert.equal(await page.inputValue("#fd4"), "40"); assert.equal(await page.inputValue("#fd5"), "45");
+    // 3. clock: no read-back exists, so the message says what is actually known
+    await page.locator(".tab", { hasText: "General" }).tap();
+    await page.locator("button", { hasText: "Sync Now" }).tap(); await waitToast(/Clock set to \d\d:\d\d:\d\d.* \(phone time\)/, "ok");
+    // 4. the device does NOT apply the change: an honest warning, and the screen goes back to what the device really has
+    await page.evaluate(() => { window.__ignoreWrites = true; });
+    await page.locator("#unit1").tap();
+    await waitToast(/Not applied: the dive computer still shows Imperial/, "warn");
+    assert.ok(await page.locator("#unit0").evaluate((e) => e.classList.contains("selected")), "UI reverted to the device's real value");
+    assert.ok(!(await page.locator("#unit1").evaluate((e) => e.classList.contains("selected"))));
+    // 5. the device rejects the change
+    await page.evaluate(() => { window.__ignoreWrites = false; window.__rejectWrites = true; });
+    await page.locator("#unit1").tap(); await waitToast(/rejected/, "err");
+    // 6. back to normal: the next change confirms again; rapid taps are applied one after another, all confirmed
+    await page.evaluate(() => { window.__rejectWrites = false; });
+    await page.locator("#unit1").tap(); await waitToast(/Units set to Metric/, "ok");
+    await page.locator("#bl3").tap(); await page.locator("#bl4").tap(); await waitToast(/Backlight set to level 2/, "ok");
+    assert.ok(await page.locator("#bl4").evaluate((e) => e.classList.contains("selected")));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    await page.screenshot({ path: process.env.SHOT_TOAST || "/tmp/shot-toast.png" });
+    console.log("PASS setting confirmations");
+  } catch (e) { failed++; console.log("FAIL setting confirmations\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  toast now:", await toastText().catch(() => "?")); await page.screenshot({ path: "/tmp/fail-settings.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: summary page + dive locations (asked after each sync, per date) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2025, 2, 17, 12, 0, 0) });
+  const uploaded = [], locCalls = [];
+  await page.route("**/api/dives/location", (r) => { locCalls.push(JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+  await page.route("**/api/dives", async (r) => {
+    if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    uploaded.push(...JSON.parse(r.request().postData()).dives); return r.fulfill({ json: { stored: uploaded.length } });
+  });
+  await page.addInitScript(fakeBle); await page.goto(base);
+  const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
+  const chips = () => page.locator(".dh-loc").allInnerTexts().then((a) => a.map((t) => t.replace(/\s+/g, " ").trim()));
+  const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+  try {
+    // the app opens on the Summary tab; with no dives it says so
+    assert.ok(await page.locator("#summaryView").isVisible()); assert.match(await page.locator("#sumEmpty").innerText(), /No dives yet/);
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    // 1. after the sync we are asked where we dived, one row per DATE, oldest first
+    assert.ok(await page.locator("#logView").isVisible(), "switched to the Dive log"); await page.waitForSelector("#locPrompt", { state: "visible", timeout: 5000 });
+    assert.match(await page.locator("#locPrompt h3").innerText(), /Where did you dive\?/);
+    const rows = page.locator("#locPrompt .locask"); assert.equal(await rows.count(), 2);
+    assert.match(await rows.nth(0).locator("label").innerText(), /14.*2025|2025.*14/); assert.match(await rows.nth(1).locator("label").innerText(), /15.*2025|2025.*15/);
+    assert.equal(await page.locator("#locPrompt .same").count(), 1, "no 'same as above' on the first row");
+    await page.fill("#locIn0", "  Komodo "); await page.locator("#locPrompt .same").tap();
+    assert.equal(await page.inputValue("#locIn1"), "  Komodo ", "same as above copies the value");
+    await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
+    assert.ok(!(await page.locator("#locPrompt").isVisible()), "question closed");
+    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    await until(() => locCalls.length >= 1, "the location update to reach the cloud");
+    assert.equal(locCalls.length, 1); assert.deepEqual(locCalls[0].map((i) => i.location), ["Komodo", "Komodo"]); assert.equal(locCalls[0].length, 2);
+    assert.ok(uploaded.every((d) => /^[0-9a-f]{12}$/.test(d.fingerprint)), "dives were uploaded before their location");
+    // 2. summary: last dive date (with how long ago and where) and total dive time
+    await page.click("#navSummary");
+    assert.match(await page.locator("#sumLastDate").innerText(), /March 15, 2025|15 March 2025/);
+    assert.match(await page.locator("#sumLastSub").innerText(), /2 days ago.*Komodo/);
+    assert.equal(await page.locator("#sumHours").innerText(), "0 h 42 min"); assert.match(await page.locator("#sumCount").innerText(), /across 2 dives/);
+    // 3. it survives a reload (stored on the phone)
+    await page.reload(); await page.click("#navLog"); await page.waitForSelector(".dh-loc");
+    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    // 4. change the place of one date from its header; a known place is always written with its existing spelling
+    await page.locator(".dh-loc").last().tap(); await page.waitForSelector(".dh-edit input");
+    assert.ok(await page.locator("#locList option[value='Komodo']").count(), "known places are suggested");
+    await page.evaluate(() => Dives.render());                                              // a background refresh must not wipe what is being typed
+    await page.fill(".dh-edit input", "Banda"); await page.evaluate(() => Dives.render());
+    assert.equal(await page.inputValue(".dh-edit input"), "Banda", "typing is not interrupted by a refresh");
+    await page.locator(".dh-save").tap(); await toastIs(/Location saved/); await until(() => locCalls.length >= 2, "the date edit to reach the cloud");
+    const after = await chips(); assert.ok(after.includes("\u{1F4CD} Banda") && after.includes("\u{1F4CD} Komodo"), after.join(" | "));
+    assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Banda"]);
+    await page.locator(".dh-loc", { hasText: "Banda" }).tap(); await page.fill(".dh-edit input", "KOMODO"); await page.locator(".dh-save").tap(); await toastIs(/Location saved/);
+    await until(() => locCalls.length >= 3, "the second date edit to reach the cloud"); assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Komodo"], "re-uses the existing spelling");
+    // 5. per-dive field inside the dive
+    await page.locator("details.dive").first().locator("summary").tap(); await page.waitForSelector("details.dive[open] .dive-loc");
+    await page.fill("details.dive[open] .dive-loc", "Tulamben"); await page.locator("details.dive[open] .dive-loc-save").tap(); await toastIs(/Location saved/);
+    await until(async () => (await chips()).filter((c) => /Tulamben/.test(c)).length === 1, "the date header to show Tulamben");
+    assert.ok(await page.locator("details.dive[open]").count(), "the dive you are editing stays open");
+    // 6. clearing a place brings up the 'no location' banner; it opens the same question, pre-filled from other dives of that day where possible
+    await page.locator(".dh-loc", { hasText: "Tulamben" }).tap(); await page.fill(".dh-edit input", ""); await page.locator(".dh-save").tap(); await toastIs(/Location cleared/);
+    await page.waitForSelector("#locBanner", { state: "visible", timeout: 5000 }); assert.match(await page.locator("#locBannerText").innerText(), /1 dive has no location/);
+    await page.click("#locBannerBtn"); await page.waitForSelector("#locPrompt .locask", { timeout: 5000 }); assert.equal(await page.locator("#locPrompt .locask").count(), 1);
+    assert.ok(!(await page.locator("#locBanner").isVisible()), "the banner steps aside while its question is open");
+    assert.doesNotMatch(await page.locator("#locPrompt p").innerText(), /same/, "no same-as-above hint for a single row");
+    await page.locator("#locPrompt input").fill("Banda"); await page.click("#locSave"); await toastIs(/Location saved for 1 dive/);
+    assert.ok(!(await page.locator("#locBanner").isVisible()), "banner gone when every dive has a place");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    await page.screenshot({ path: process.env.SHOT_LOC || "/tmp/shot-loc.png", fullPage: true });
+    console.log("PASS summary + locations");
+  } catch (e) { failed++; console.log("FAIL summary + locations\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-loc.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: new header/account structure, regulator colours (70 orange, 90 red) + reset, month bulk locations ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2025, 2, 17, 12, 0, 0) });
+  let reg = null; const regPuts = [], locCalls = [];
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", version: "9.9.9" } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => { locCalls.push(JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [] } }) : r.fulfill({ json: { stored: 1 } })));
+  await page.route("**/api/regulator", (r) => { const m = r.request().method();
+    if (m === "PUT") { reg = JSON.parse(r.request().postData()); regPuts.push(reg); } if (m === "DELETE") reg = null; return r.fulfill({ json: m === "GET" ? { regulator: reg } : { ok: true } }); });
+  await page.addInitScript(fakeBle); await page.goto(base);
+  const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
+  const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+  const chips = () => page.locator(".dh-loc").allInnerTexts().then((a) => a.map((t) => t.replace(/\s+/g, " ").trim()));
+  const card = () => page.locator("#sumReg").evaluate((e) => ({ cls: e.className, role: e.getAttribute("role"), border: getComputedStyle(e).borderLeftColor, big: getComputedStyle(e.querySelector(".sum-big")).color, count: e.querySelector("#sumRegCount").textContent, msg: e.querySelector("#sumRegMsg").textContent, bar: e.querySelector("#sumRegBar").style.width }));
+  try {
+    // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
+    assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1").innerText(), "Dive Manager");
+    const box = await page.locator("#acctBtn").boundingBox(), vw = page.viewportSize().width;
+    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 3, "Summary, Dive log, Device");
+    assert.equal(await page.locator("#verTop, #appFooter, #navAccount").count(), 0, "no version badge in the header/footer, no Account tab");
+    assert.ok(!/v\d+\.\d+\.\d+/.test(await page.locator("header").innerText()), "no version text in the header");
+    // 2. sync: the question has a 'whole month' input; a date's own entry wins over it
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.waitForSelector("#locPrompt", { state: "visible", timeout: 5000 });
+    assert.equal(await page.locator("#locPrompt .month-in").count(), 1, "one month (March 2025) with two dates");
+    assert.match(await page.locator("#locPrompt .monthask label").first().innerText(), /March 2025 . 2 dates/);
+    await page.fill("#locPrompt .month-in", "Komodo"); await page.fill("#locIn0", "Banda"); await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
+    await until(async () => (await chips()).length === 2, "date headers");
+    const byDate = Object.fromEntries(await page.locator(".datehead").evaluateAll((els) => els.map((e) => [e.querySelector(".dh-date").textContent.trim(), e.querySelector(".dh-loc").textContent.replace(/\s+/g, " ").trim()])));
+    assert.deepEqual(Object.values(byDate).sort(), ["\u{1F4CD} Banda", "\u{1F4CD} Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
+    // 3. month bulk in the log: keeps places already set unless 'replace' is ticked
+    assert.match(await page.locator(".monthhead").first().innerText(), /March . 2 dives . Komodo, Banda/);
+    await page.locator(".mh-set").tap(); await page.waitForSelector(".mh-edit input[type=text]");
+    await page.fill(".mh-edit input[type=text]", "Tulamben"); await page.locator(".mh-save").tap(); await toastIs(/Every dive this month already has a place/);
+    await page.locator(".mh-replace").check(); await page.locator(".mh-save").tap(); await toastIs(/Location saved for 2 dives/);
+    await until(async () => (await chips()).every((c) => /Tulamben/.test(c)), "both dates to read Tulamben");
+    await until(() => locCalls.length >= 2 && locCalls.at(-1).length === 2 && locCalls.at(-1).every((i) => i.location === "Tulamben"), "the bulk update to reach the cloud");
+    // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
+    await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
+    await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "Regulator", "Help / app version"]);
+    await page.locator("details.acc[data-sec=help] > summary").click();
+    assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
+    assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
+    // 5. regulator: add it, watch the card turn green -> orange (70) -> red (90)
+    await page.locator("details.acc[data-sec=regulator] > summary").click();
+    await page.locator("#regAdd").tap(); await page.fill("#regName", "Apeks XTX50"); await page.fill("#regType", "Balanced piston"); await page.fill("#regBase", "68");
+    await page.locator("#regSave").tap(); await toastIs(/Regulator saved/);
+    assert.equal(await page.locator("#regShownCount").innerText(), "68"); assert.match(await page.locator("#regBadge").innerText(), /68 dives/);
+    assert.deepEqual({ ...regPuts.at(-1), since: typeof regPuts.at(-1).since }, { name: "Apeks XTX50", type: "Balanced piston", baseline: 68, since: "string" }, "stored with the starting count");
+    await page.click("#navSummary"); await until(async () => (await card()).count === "68", "the Summary card");
+    let c = await card(); assert.equal(c.cls, "card sum reg-ok"); assert.equal(c.border, "rgb(43, 138, 62)"); assert.match(c.msg, /Service is due at 70 dives \(2 to go\)/);
+    const edit = async (n) => { await page.click("#acctBtn"); await page.locator("#regEdit").tap(); await page.fill("#regBase", String(n)); await page.locator("#regSave").tap(); await toastIs(/Regulator saved/); await page.click("#navSummary"); await until(async () => (await card()).count === String(n), "count " + n); return card(); };
+    c = await edit(69); assert.equal(c.cls, "card sum reg-ok", "69 is still green");
+    c = await edit(70); assert.equal(c.cls, "card sum reg-orange", "70 turns orange"); assert.equal(c.border, "rgb(230, 119, 0)"); assert.equal(c.big, "rgb(217, 72, 15)"); assert.equal(c.role, "alert"); assert.match(c.msg, /Service soon: 20 dives to the 90-dive limit/);
+    c = await edit(89); assert.equal(c.cls, "card sum reg-orange", "89 is still orange");
+    c = await edit(90); assert.equal(c.cls, "card sum reg-red", "90 turns red"); assert.equal(c.border, "rgb(201, 42, 42)"); assert.equal(c.big, "rgb(201, 42, 42)"); assert.match(c.msg, /Service now/); assert.equal(c.bar, "100%");
+    assert.match(await page.locator("#regBadge").evaluate((e) => e.className), /red/, "badge in the Account list is red too");
+    // 6. reset to 0 (needs a second tap), then every new dive adds one
+    await page.click("#acctBtn"); await page.locator("#regReset").tap();
+    assert.match(await page.locator("#regReset").innerText(), /Tap again/); assert.equal(await page.locator("#regShownCount").innerText(), "90", "the first tap does not reset");
+    await page.locator("#regReset").tap(); await toastIs(/reset to 0/);
+    assert.equal(await page.locator("#regShownCount").innerText(), "0"); assert.deepEqual(regPuts.at(-1), { name: "Apeks XTX50", type: "Balanced piston", baseline: 0, since: "2025-03-15T08:05:00" }, "since = the latest dive logged so far");
+    await page.click("#navSummary"); await until(async () => (await card()).cls === "card sum reg-ok" && (await card()).count === "0", "green at 0");
+    await page.evaluate(() => window.__dives.push(window.__d3));                    // a new dive appears on the dive computer
+    await page.click("#navLog"); await page.click("#diveSyncBtn");
+    await page.waitForFunction(() => /Dive sync done: 3 on device, 1 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.click("#navSummary"); await until(async () => (await card()).count === "1", "the new dive to count");
+    assert.match((await card()).msg, /\(69 to go\)/);
+    // 7. remove
+    await page.click("#acctBtn"); await page.locator("#regRemove").tap(); await page.locator("#regRemove").tap(); await toastIs(/Regulator removed/);
+    await page.click("#navSummary"); await until(async () => !(await page.locator("#sumReg").isVisible()) && (await page.locator("#sumRegHint").isVisible()), "card gone, hint back");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    console.log("PASS account structure + regulator + month bulk");
+  } catch (e) { failed++; console.log("FAIL account structure + regulator + month bulk\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-acct.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

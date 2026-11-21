@@ -9,22 +9,21 @@
   }
   $("form").addEventListener("submit", async (ev) => {
     ev.preventDefault(); err("");
-    const email = $("email").value.trim().toLowerCase(), password = $("password").value, code = $("code").value.replace(/\s/g, "");
+    const email = $("email").value.trim().toLowerCase(), password = $("password").value;
     if (!email || !password) return err("Enter your email and password.");
-    if (!/^\d{6}$/.test(code)) return err("Enter the 6-digit code from your authenticator app.");
     const btn = $("go"); btn.disabled = true; const label = btn.textContent;
     try {
-      btn.textContent = "Checking…";
+      btn.textContent = "Checking\u2026";
       const pre = await post("/auth/prelogin", { email });
       if (!pre.ok || !Number.isInteger(pre.data.iter) || pre.data.iter < CosmiqKdf.MIN_ITER || pre.data.iter > CosmiqKdf.MAX_ITER)
         throw new Error("Unexpected response from the server.");
-      btn.textContent = "Securing password…";           // ~0.3-1 s of PBKDF2 on a phone
+      btn.textContent = "Securing password\u2026";      // ~0.3-1 s of PBKDF2 on a phone
       const key = await CosmiqKdf.deriveKey(password, pre.data.salt, pre.data.iter, email);
-      btn.textContent = "Signing in…";
-      const res = await post("/auth/password", { email, key, code });
-      if (res.ok) { location.replace("/"); return; }
+      btn.textContent = "Signing in\u2026";
+      const res = await post("/auth/password", { email, key });
+      if (res.ok) { location.replace(res.data.next || "/auth/mfa"); return; }   // step 2: authenticator code
       err(res.data.error || "Sign-in failed.");
-      $("code").value = ""; $("password").focus();
+      $("password").value = ""; $("password").focus();
     } catch (e) { err(e.message || "Something went wrong. Check your connection and try again."); }
     finally { btn.disabled = false; btn.textContent = label; }
   });

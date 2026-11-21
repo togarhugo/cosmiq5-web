@@ -5,7 +5,8 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
-export const SESSION_COOKIE = "dc_session", OAUTH_COOKIE = "dc_oauth";
+export const SESSION_COOKIE = "dc_session", OAUTH_COOKIE = "dc_oauth", MFA_COOKIE = "dc_mfa";
+export const MFA_SECONDS = 300;
 const SESSION_SECONDS = 30 * 24 * 3600;
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -70,10 +71,21 @@ export async function currentUser(request, env) {
   return { email: p.email, name: p.name || "", amr: p.amr || "google" };
 }
 
-/** Set-Cookie values that start a session (also clears any pending OAuth cookie). */
+/** Set-Cookie values that start a session (also clears any pending OAuth / second-step cookies). */
 export async function issueSession(env, { email, name, amr }) {
   const session = await sign({ typ: "session", email, name: name || "", amr, exp: now() + SESSION_SECONDS }, env.SESSION_SECRET);
-  return [clearCookie(OAUTH_COOKIE, "/auth"), setCookie(SESSION_COOKIE, session, SESSION_SECONDS, "/")];
+  return [clearCookie(OAUTH_COOKIE, "/auth"), clearCookie(MFA_COOKIE, "/auth"), setCookie(SESSION_COOKIE, session, SESSION_SECONDS, "/")];
+}
+
+/** Cookie proving the password step succeeded: valid for 5 minutes, only usable on /auth/mfa. */
+export async function issueMfaChallenge(env, email) {
+  return setCookie(MFA_COOKIE, await sign({ typ: "mfa", email, exp: now() + MFA_SECONDS }, env.SESSION_SECRET), MFA_SECONDS, "/auth");
+}
+export const clearMfaChallenge = () => clearCookie(MFA_COOKIE, "/auth");
+/** The email whose password was just verified, or null. */
+export async function pendingMfaEmail(request, env) {
+  const p = await verifySigned(readCookie(request, MFA_COOKIE), env.SESSION_SECRET);
+  return p && p.typ === "mfa" && allowedEmails(env).includes(p.email) ? p.email : null;
 }
 
 async function startLogin(url, env) {
@@ -126,7 +138,12 @@ export async function handleAuth(request, url, env, serveAsset) {
       if (await currentUser(request, env)) return redirect("/");
       const r = serveAsset(request, "/auth/login.html"); r.headers.set("content-security-policy", LOGIN_CSP); return r;
     }
-    case "/auth/login.js": case "/auth/kdf.js": return serveAsset(request, url.pathname);
+    case "/auth/mfa": {                         // step 2: six boxes for the authenticator code
+      if (await currentUser(request, env)) return redirect("/");
+      if (!(await pendingMfaEmail(request, env))) return redirect("/auth/login");
+      const r = serveAsset(request, "/auth/mfa.html"); r.headers.set("content-security-policy", LOGIN_CSP); return r;
+    }
+    case "/auth/login.js": case "/auth/mfa.js": case "/auth/kdf.js": return serveAsset(request, url.pathname);
     case "/auth/google": return startLogin(url, env);
     case "/auth/callback": return finishLogin(request, url, env);
     case "/auth/logout": return page("Signed out", "You have been signed out.", [clearCookie(SESSION_COOKIE, "/")], 200);
