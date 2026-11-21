@@ -1,0 +1,1514 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta name="theme-color" content="#007bff" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <script src="version.js"></script>
+        <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
+        <link rel="apple-touch-icon" href="icon-192.png" />
+        <link rel="icon" href="icon-192.png" />
+        <title>Cosmiq Manager</title>
+        <style>
+            :root {
+                --blue: #007bff;
+                --green: #28a745;
+                --red: #dc3545;
+                --yellow: #ffc107;
+                --bg: #f8f9fa;
+                --text: #212529;
+                --mono:
+                    "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+                    Courier, monospace;
+            }
+            body {
+                font-family: -apple-system, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                padding: 15px;
+                max-width: 600px;
+                margin: 0 auto;
+            }
+
+            header {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            h1 {
+                font-size: 20px;
+                margin: 0;
+                color: #343a40;
+            }
+            .status {
+                font-size: 12px;
+                font-weight: 600;
+                color: #adb5bd;
+                margin-top: 5px;
+            }
+            .connected {
+                color: var(--green);
+            }
+
+            button {
+                cursor: pointer;
+                border: none;
+                outline: none;
+                font-weight: 600;
+                font-family: inherit;
+            }
+            .btn-main {
+                width: 100%;
+                padding: 14px;
+                border-radius: 10px;
+                font-size: 16px;
+                color: white;
+                background: var(--blue);
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                transition: 0.1s;
+                margin-bottom: 10px;
+            }
+            .btn-main:active {
+                transform: scale(0.98);
+            }
+            .btn-test {
+                background: #6f42c1;
+            }
+            .btn-disc {
+                background: #6c757d;
+                display: none;
+            }
+
+            .tabs {
+                display: flex;
+                background: white;
+                padding: 5px;
+                border-radius: 10px;
+                margin-bottom: 15px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            }
+            .tab {
+                flex: 1;
+                padding: 10px;
+                background: none;
+                color: #6c757d;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: 0.2s;
+            }
+            .tab.active {
+                background: var(--blue);
+                color: white;
+            }
+
+            .section {
+                display: none;
+                animation: fadeIn 0.3s;
+            }
+            .section.active {
+                display: block;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+
+            .card {
+                background: white;
+                padding: 15px;
+                border-radius: 12px;
+                margin-bottom: 12px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            }
+            .card h3 {
+                margin: 0 0 15px 0;
+                font-size: 13px;
+                text-transform: uppercase;
+                color: #868e96;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 8px;
+            }
+
+            .label {
+                font-size: 13px;
+                font-weight: 600;
+                margin-bottom: 8px;
+                display: block;
+                color: #495057;
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+                gap: 8px;
+            }
+
+            .btn-opt {
+                padding: 10px;
+                background: #f1f3f5;
+                border-radius: 6px;
+                color: #495057;
+                font-size: 13px;
+                transition: 0.2s;
+            }
+            .btn-opt.selected {
+                background: #e3f2fd;
+                color: var(--blue);
+                border: 1px solid #90caf9;
+            }
+
+            .synced {
+                animation: flashGreen 1.5s ease-out;
+            }
+            @keyframes flashGreen {
+                0% {
+                    background-color: #d4edda;
+                }
+                100% {
+                    background-color: transparent;
+                }
+            }
+
+            .row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 15px;
+            }
+            input[type="range"] {
+                flex: 1;
+            }
+            input[type="number"] {
+                width: 60px;
+                padding: 8px;
+                text-align: center;
+                border: 1px solid #ced4da;
+                border-radius: 6px;
+                font-weight: bold;
+                color: var(--blue);
+            }
+            .val {
+                font-family: var(--mono);
+                font-weight: bold;
+                width: 45px;
+                text-align: right;
+            }
+            .btn-set {
+                padding: 8px 16px;
+                background: var(--blue);
+                color: white;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+
+            .warning-box {
+                background: #fff3cd;
+                color: #856404;
+                padding: 10px;
+                border-radius: 6px;
+                font-size: 11px;
+                margin-top: 10px;
+                border: 1px solid #ffeeba;
+                display: none;
+            }
+
+            #log {
+                font-family: var(--mono);
+                font-size: 10px;
+                color: #aaa;
+                margin-top: 20px;
+                text-align: left;
+                height: 150px;
+                overflow-y: scroll;
+                padding: 10px;
+                border-radius: 8px;
+                background: #212529;
+                white-space: pre-wrap;
+            }
+            .log-tx {
+                color: #4dabf7;
+            }
+            .log-rx {
+                color: #2ecc71;
+            }
+            .log-err {
+                color: #ff6b6b;
+                font-weight: bold;
+            }
+            .log-info {
+                color: #ffd700;
+                font-weight: bold;
+            }
+
+            /* Byte Hunter Styles */
+            .byte-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: var(--mono);
+                font-size: 12px;
+            }
+            .byte-table td,
+            .byte-table th {
+                padding: 6px;
+                border-bottom: 1px solid #eee;
+            }
+            .byte-cell {
+                display: inline-block;
+                padding: 2px 4px;
+                background: #f1f3f5;
+                border-radius: 4px;
+                margin-right: 2px;
+                color: #d63384;
+                font-weight: bold;
+            }
+            .byte-idx {
+                font-size: 9px;
+                color: #adb5bd;
+                display: block;
+                text-align: center;
+                margin-bottom: 2px;
+            }
+            .bit-box {
+                display: flex;
+                gap: 2px;
+                margin-top: 5px;
+            }
+            .bit {
+                flex: 1;
+                background: #eee;
+                text-align: center;
+                font-size: 10px;
+                padding: 4px 0;
+                border-radius: 3px;
+            }
+            .bit.on {
+                background: var(--blue);
+                color: white;
+            }
+
+            /* ---- mobile / dive log additions ---- */
+            body { padding: max(15px, env(safe-area-inset-top)) max(15px, env(safe-area-inset-right)) max(15px, env(safe-area-inset-bottom)) max(15px, env(safe-area-inset-left)); -webkit-text-size-adjust: 100%; }
+            button, .btn-opt, .tab { min-height: 44px; touch-action: manipulation; }
+            .btn-set { min-height: 44px; min-width: 64px; }
+            input, select { font-size: 16px; } /* stops iOS zooming into fields */
+            input[type="number"] { width: 72px; min-height: 44px; }
+            input[type="range"] { min-height: 44px; }
+            .tabs { overflow-x: auto; scrollbar-width: none; gap: 4px; -webkit-overflow-scrolling: touch; }
+            .tabs::-webkit-scrollbar { display: none; }
+            .tab { flex: 0 0 auto; padding: 10px 14px; }
+            .nav { display: flex; gap: 6px; margin-bottom: 15px; }
+            .nav button { flex: 1; background: #e9ecef; color: #495057; border-radius: 10px; font-size: 15px; }
+            .nav button.active { background: #343a40; color: #fff; }
+            .banner { background: #fff3cd; color: #664d03; border: 1px solid #ffeeba; border-radius: 10px; padding: 12px; font-size: 13px; margin-bottom: 12px; display: none; }
+            .banner.show { display: block; }
+            .muted { color: #6c757d; font-size: 12px; }
+            .btn-main:disabled { opacity: .5; }
+            .bar { height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
+            #diveBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
+            details.dive { background: #fff; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.05); }
+            details.dive summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 12px; min-height: 44px; cursor: pointer; flex-wrap: wrap; }
+            details.dive summary::-webkit-details-marker { display: none; }
+            .dive-date { font-weight: 600; font-size: 14px; }
+            .dive-meta { margin-left: auto; font-family: var(--mono); font-size: 13px; color: #495057; }
+            .dive-mode { font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; background: #e3f2fd; color: #0b5ed7; }
+            .dive-mode.m-freedive { background: #e0f7f4; color: #0f766e; }
+            .dive-mode.m-gauge { background: #f1f3f5; color: #495057; }
+            .dive-body { padding: 0 12px 12px; }
+            .dive-body svg { width: 100%; height: auto; }
+            .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-top: 8px; }
+            .stats b { display: block; font-size: 15px; } .stats span { font-size: 11px; color: #6c757d; }
+            .opt { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
+            .opt input { width: 22px; height: 22px; min-height: 0; }
+            details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: #6c757d; min-height: 44px; display: flex; align-items: center; }
+            #log { margin-top: 6px; }
+            @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+            #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Cosmiq Manager <span id="verTop" class="muted"></span></h1>
+            <div id="status" class="status">Disconnected</div>
+        </header>
+
+        <button id="connectBtn" class="btn-main" onclick="connect()">
+            Connect & Sync
+        </button>
+        <button
+            id="disconnectBtn"
+            class="btn-main btn-disc"
+            onclick="disconnect()"
+        >
+            Disconnect
+        </button>
+
+        <div id="btBanner" class="banner"></div>
+        <div id="clockStatus" class="muted" style="text-align:center;margin-bottom:10px"></div>
+
+        <div class="nav">
+            <button id="navDevice" class="active" onclick="showView('device')">Device settings</button>
+            <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
+            <button id="navAccount" onclick="showView('account')">Account</button>
+        </div>
+
+        <div id="deviceView">
+        <div id="notConnected" class="card muted">Connect to your dive computer to view or change its settings.</div>
+        <div id="app" style="display: none; margin-top: 20px">
+            <div class="tabs">
+                <button class="tab active" onclick=\"tab('gen', this)\">General</button>
+                <button class="tab" onclick=\"tab('env', this)\">Environment</button>
+                <button class="tab" onclick=\"tab('scuba', this)\">Scuba</button>
+                <button class="tab" onclick=\"tab('free', this)\">Freedive</button>
+                <button class="tab" onclick=\"tab('hunter', this)\">Diagnostics</button>
+            </div>
+
+            <div id="gen" class="section active">
+                <div class="card">
+                    <h3>System</h3>
+                    <span class="label">Default Mode</span>
+                    <div class="grid" id="modeGroup">
+                        <button
+                            class="btn-opt"
+                            id="mode0"
+                            onclick="setMode(0, this)"
+                        >
+                            Scuba
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="mode2"
+                            onclick="setMode(2, this)"
+                        >
+                            Freedive
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="mode1"
+                            onclick="setMode(1, this)"
+                        >
+                            Gauge
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 15px"></div>
+                    <span class="label">System Time</span>
+                    <div class="row">
+                        <span style="flex: 1; font-size: 12px; color: #666"
+                            >Sync device clock to browser time</span
+                        >
+                        <button class="btn-set" onclick="setSystemTime()">
+                            Sync Now
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 15px"></div>
+                    <span class="label">Units</span>
+                    <div class="grid" id="unitGroup">
+                        <button
+                            class="btn-opt"
+                            id="unit1"
+                            onclick="setUnits(1)"
+                        >
+                            Metric
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="unit0"
+                            onclick="setUnits(0)"
+                        >
+                            Imperial
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 15px"></div>
+                    <span class="label">Date Display</span>
+                    <div class="grid" id="dateGroup">
+                        <button class="btn-opt" id="date0" onclick="setDate(0)">
+                            Current Date
+                        </button>
+                        <button class="btn-opt" id="date1" onclick="setDate(1)">
+                            Last Dive Date
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Display & Power</h3>
+                    <span class="label">Screen Timeout</span>
+                    <div class="row">
+                        <select
+                            id="timeoutSel"
+                            style="
+                                flex: 1;
+                                padding: 8px;
+                                border-radius: 6px;
+                                background: #fff;
+                                border: 1px solid #ced4da;
+                            "
+                        >
+                            <option value="5">5 s</option>
+                            <option value="10">10 s</option>
+                            <option value="15">15 s</option>
+                            <option value="20">20 s</option>
+                            <option value="30">30 s</option>
+                            <option value="60">1 min</option>
+                            <option value="120">2 min</option>
+                        </select>
+                        <button class="btn-set" onclick="setTimeoutIndex()">
+                            Set
+                        </button>
+                    </div>
+                    <div
+                        style="
+                            font-size: 11px;
+                            color: #666;
+                            margin-top: -10px;
+                            margin-bottom: 15px;
+                            font-style: italic;
+                        "
+                    >
+                        Period of inactivity before returning to Watch Mode
+                    </div>
+
+                    <span class="label">Backlight</span>
+                    <div class="grid" id="blGroup">
+                        <button class="btn-opt" id="bl3" onclick="setBL(3)">
+                            1
+                        </button>
+                        <button class="btn-opt" id="bl4" onclick="setBL(4)">
+                            2
+                        </button>
+                        <button class="btn-opt" id="bl5" onclick="setBL(5)">
+                            3
+                        </button>
+                        <button class="btn-opt" id="bl6" onclick="setBL(6)">
+                            4
+                        </button>
+                        <button class="btn-opt" id="bl7" onclick="setBL(7)">
+                            5
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 15px"></div>
+                    <span class="label"
+                        >Power-Saving Mode (&lt; 5% Battery)</span
+                    >
+                    <div class="grid" id="ecoGroup">
+                        <button
+                            class="btn-opt"
+                            id="ecoOn"
+                            onclick="setEco(true)"
+                        >
+                            On
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="ecoOff"
+                            onclick="setEco(false)"
+                        >
+                            Off
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="env" class="section">
+                <div class="card">
+                    <h3>Diving Environment</h3>
+                    <span class="label">Water / Altitude Mode</span>
+                    <div class="grid" id="envGroup">
+                        <button class="btn-opt" id="env0" onclick="setEnv(0)">
+                            Normal / Sea
+                        </button>
+                        <button class="btn-opt" id="env1" onclick="setEnv(1)">
+                            High Salinity
+                        </button>
+                        <button class="btn-opt" id="env2" onclick="setEnv(2)">
+                            Altitude &gt;300m
+                        </button>
+                    </div>
+                    <div id="salinityWarn" class="warning-box">
+                        <strong>WARNING: Advanced Setting</strong><br />
+                        Please only use this setting when diving in highly
+                        saline water. Your depth readings will be slightly
+                        shallower if used in normal ocean water.
+                    </div>
+                </div>
+            </div>
+
+            <div id="scuba" class="section">
+                <div class="card">
+                    <h3>Safety</h3>
+                    <span class="label">Safety Factor</span>
+                    <div
+                        class="grid"
+                        id="safeGroup"
+                        style="margin-bottom: 15px"
+                    >
+                        <button
+                            class="btn-opt"
+                            id="safe0"
+                            onclick="setSafe(0, this)"
+                        >
+                            Consv
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="safe1"
+                            onclick="setSafe(1, this)"
+                        >
+                            Norm
+                        </button>
+                        <button
+                            class="btn-opt"
+                            id="safe2"
+                            onclick="setSafe(2, this)"
+                        >
+                            Prog
+                        </button>
+                    </div>
+                    <span class="label">Max PPO2</span>
+                    <div class="row">
+                        <input
+                            type="range"
+                            id="ppo2Range"
+                            min="1.2"
+                            max="1.6"
+                            step="0.1"
+                            value="1.4"
+                            oninput="upd('ppo2Val', this.value)"
+                        />
+                        <span class="val" id="ppo2Val">1.4</span>
+                        <button class="btn-set" onclick="setPPO2()">Set</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Gas</h3>
+                    <span class="label">Air Mix (O2 %)</span>
+                    <div class="row">
+                        <input
+                            type="range"
+                            id="airRange"
+                            min="21"
+                            max="40"
+                            step="1"
+                            value="21"
+                            oninput="upd('airVal', this.value + '%')"
+                        />
+                        <span class="val" id="airVal">--</span>
+                        <button class="btn-set" onclick="setAir()">Set</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Alarms</h3>
+                    <div class="row">
+                        <span style="font-size: 13px; flex: 1">Depth (m)</span>
+                        <input type="number" id="scubaDepth" placeholder="--" />
+                        <button class="btn-set" onclick="setScubaDepth()">
+                            Set
+                        </button>
+                    </div>
+                    <div class="row">
+                        <span style="font-size: 13px; flex: 1">Time (min)</span>
+                        <input type="number" id="scubaTime" placeholder="--" />
+                        <button class="btn-set" onclick="setScubaTime()">
+                            Set
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="free" class="section">
+                <div class="card">
+                    <h3>Alarms</h3>
+                    <span class="label">Max Time (Seconds)</span>
+                    <div class="row" style="margin-bottom: 20px">
+                        <input
+                            type="range"
+                            id="fdTimeRange"
+                            min="30"
+                            max="600"
+                            step="5"
+                            value="60"
+                            oninput="upd('fdTimeVal', this.value + 's')"
+                        />
+                        <span class="val" id="fdTimeVal">--</span>
+                        <button class="btn-set" onclick="setFdTime()">
+                            Set
+                        </button>
+                    </div>
+                    <span class="label">Depth Alarms (m)</span>
+                    <div id="fdAlarms"></div>
+                </div>
+            </div>
+
+            <div id="hunter" class="section">
+                <div class="card">
+                    <h3>Byte Hunter</h3>
+                    <p
+                        style="
+                            font-size: 12px;
+                            color: #666;
+                            margin-bottom: 15px;
+                        "
+                    >
+                        Raw memory viewer. Useful for diagnostics.
+                    </p>
+                    <button
+                        class="btn-main"
+                        onclick="readAllSettings()"
+                        style="background: #6f42c1; margin-bottom: 15px"
+                    >
+                        Refetch All
+                    </button>
+                    <div id="hunterTable">
+                        <!-- Populated by JS -->
+                        <div
+                            style="
+                                text-align: center;
+                                padding: 20px;
+                                color: #aaa;
+                            "
+                        >
+                            No data received yet...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div><!-- /deviceView -->
+
+        <div id="logView" style="display:none">
+            <div class="card">
+                <h3>Sync</h3>
+                <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
+                <div class="bar"><div id="diveBar"></div></div>
+                <div id="diveProgress" class="muted">Turn on your dive computer, then tap Sync.</div>
+                <label class="opt"><input type="checkbox" id="optClock" /> Set dive computer clock to this phone's time on every connect</label>
+                <label class="opt"><input type="checkbox" id="optDives" /> Download new dives on every connect</label>
+                <div class="muted"><span id="cloudState"></span></div>
+            </div>
+            <div id="diveList"></div>
+            <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
+        </div>
+
+        <div id="appFooter" class="muted" style="text-align:center;margin-top:18px">
+            Cosmiq Manager <span id="appVer"></span><span id="who"></span>
+            <a id="signOut" href="/auth/logout" style="display:none;margin-left:6px">Sign out</a>
+        </div>
+
+        <div id="accountView" style="display:none">
+            <div class="card">
+                <h3>Sign-in methods</h3>
+                <div id="accVia" class="muted" style="margin-bottom:10px"></div>
+                <div class="opt" style="min-height:0">✓ Google account <span class="muted">(always on)</span></div>
+                <div class="opt" style="min-height:0">
+                    <span id="accPwIcon">○</span> Email + password + authenticator
+                    <span id="accPwState" class="muted"></span>
+                </div>
+                <div id="accMsg" role="status" style="font-size:13px;margin:10px 0"></div>
+                <div id="accBtns" class="row" style="margin-bottom:0">
+                    <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
+                    <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                </div>
+            </div>
+
+            <div id="accSetup" class="card" style="display:none">
+                <h3>Set up email login</h3>
+                <div id="accStep1">
+                    <span class="label">Choose a password (12+ characters)</span>
+                    <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <input id="accPw2" type="password" autocomplete="new-password" placeholder="Repeat password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <div id="accCurWrap" style="display:none">
+                        <span class="label">Current authenticator code (to confirm the change)</span>
+                        <input id="accCur" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    </div>
+                    <button id="accNext" class="btn-main" type="button">Continue</button>
+                </div>
+                <div id="accStep2" style="display:none">
+                    <span class="label">Scan this with Google Authenticator</span>
+                    <div id="accQr" style="max-width:240px;margin:0 auto 8px"></div>
+                    <div class="muted" style="text-align:center;margin-bottom:10px">Can't scan? Choose "Enter a setup key" and type:<br /><code id="accSecret" style="user-select:all;word-break:break-all"></code></div>
+                    <span class="label">Enter the 6-digit code it shows</span>
+                    <input id="accCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <button id="accFinish" class="btn-main" type="button">Turn on email login</button>
+                </div>
+                <div id="accRemove" style="display:none">
+                    <span class="label">Authenticator code to confirm removal</span>
+                    <input id="accRmCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
+                    <button id="accRmGo" class="btn-main" type="button" style="background:#dc3545">Remove email login</button>
+                </div>
+                <button id="accCancel" class="btn-set" type="button" style="background:#6c757d;margin-top:4px">Cancel</button>
+            </div>
+        </div>
+
+        <details class="logwrap"><summary>Activity log</summary>
+        <div id="log">Waiting for connection...</div></details>
+        <script src="dive-protocol.js"></script>
+        <script src="dives.js"></script>
+        <script src="/auth/kdf.js"></script>
+        <script src="vendor/qrcode.js"></script>
+        <script src="account.js"></script>
+
+        <script>
+            const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+            let dev, txChar, rxChar;
+            let memMap = {};
+
+            // Global State for Bitmasked settings
+            let sysState = { bl: 5, eco: true }; // Default BL=3 (5), Eco=On
+
+            // Map for Screen Timeout
+            const TIMEOUT_MAP = {
+                5: 5,
+                10: 10,
+                15: 15,
+                20: 20,
+                30: 1,
+                60: 2,
+                120: 3,
+            };
+
+            // UI Init
+            const fdDiv = document.getElementById("fdAlarms");
+            for (let i = 1; i <= 6; i++) {
+                let lbl = "Alarm " + i;
+                fdDiv.innerHTML += `<div class="row"><span style="font-size:11px; flex:1">${lbl}</span><input type="number" id="fd${i}" placeholder="--"><button class="btn-set" onclick="setFdDepth(${i})">Set</button></div>`;
+            }
+
+            function tab(id, btn) {
+                document
+                    .querySelectorAll("#app .section")
+                    .forEach((e) => e.classList.remove("active"));
+                document
+                    .querySelectorAll(".tab")
+                    .forEach((e) => e.classList.remove("active"));
+                document.getElementById(id).classList.add("active");
+                if (btn) btn.classList.add("active");
+            }
+            function showView(v) {
+                for (const [name, nav] of [["device", "navDevice"], ["log", "navLog"], ["account", "navAccount"]]) {
+                    document.getElementById(name + "View").style.display = v === name ? "" : "none";
+                    document.getElementById(nav).classList.toggle("active", v === name);
+                }
+                if (v === "account") Account.load();
+                try { localStorage.setItem("view", v); } catch (e) {}
+                if (v === "log") Dives.render();
+            }
+            const isConnected = () => !!(dev && dev.gatt && dev.gatt.connected && txChar);
+            function opt(id, def) { try { const v = localStorage.getItem(id); return v === null ? def : v === "1"; } catch (e) { return def; } }
+            function setOpt(id, v) { try { localStorage.setItem(id, v ? "1" : "0"); } catch (e) {} }
+            async function syncDivesNow() {
+                if (!isConnected()) return connect();
+                await Dives.syncFromDevice(diveIO);
+            }
+            function upd(id, val) {
+                document.getElementById(id).innerText = val;
+            }
+
+            function log(m, type = "") {
+                console.log(m);
+                const el = document.getElementById("log");
+                let span = `<span class="${type}">${m}</span>`;
+                el.innerHTML += "\n" + span;
+                el.scrollTop = el.scrollHeight;
+            }
+
+            // Connection
+            async function connect() {
+                try {
+                    if (!navigator.bluetooth) { showBtHelp(); return; }
+                    log("Scanning...");
+                    dev = await navigator.bluetooth.requestDevice({
+                        filters: [
+                            { namePrefix: "COS" },
+                            { namePrefix: "Deep" },
+                        ],
+                        optionalServices: [SERVICE_UUID],
+                    });
+                    dev.addEventListener("gattserverdisconnected", onDisc);
+                    const server = await dev.gatt.connect();
+                    const service =
+                        await server.getPrimaryService(SERVICE_UUID);
+                    const chars = await service.getCharacteristics();
+                    for (const c of chars) {
+                        if (
+                            c.properties.write ||
+                            c.properties.writeWithoutResponse
+                        )
+                            txChar = c;
+                        if (c.properties.notify) rxChar = c;
+                    }
+
+                    await rxChar.startNotifications();
+                    rxChar.addEventListener(
+                        "characteristicvaluechanged",
+                        handleRX,
+                    );
+
+                    document.getElementById("status").innerText = "Connected";
+                    document
+                        .getElementById("status")
+                        .classList.add("connected");
+                    document.getElementById("connectBtn").style.display =
+                        "none";
+                    document.getElementById("disconnectBtn").style.display =
+                        "block";
+                    document.getElementById("app").style.display = "block";
+                    document.getElementById("notConnected").style.display = "none";
+
+                    log("Reading settings...");
+                    await readAllSettings();
+                    await new Promise((r) => setTimeout(r, 600)); // let late replies land
+                    if (opt("optClock", true)) {
+                        try { await setSystemTime(); } catch (e) { log("Clock sync failed: " + e, "log-err"); }
+                    }
+                    if (opt("optDives", true)) await Dives.syncFromDevice(diveIO);
+                } catch (e) {
+                    log("Error: " + e, "log-err");
+                }
+            }
+
+            function disconnect() {
+                if (dev && dev.gatt.connected) dev.gatt.disconnect();
+            }
+            function onDisc() {
+                document.getElementById("status").innerText = "Disconnected";
+                document.getElementById("status").classList.remove("connected");
+                document.getElementById("connectBtn").style.display = "block";
+                document.getElementById("disconnectBtn").style.display = "none";
+                document.getElementById("app").style.display = "none";
+                document.getElementById("notConnected").style.display = "";
+                if (lineWaiter) lineWaiter(null);
+                lineBuf = "";
+                log("Disconnected.");
+            }
+
+            // RX: BLE notifications are <=20 bytes; reassemble into newline-terminated lines.
+            let lineBuf = "", lineQ = [], lineWaiter = null, inTransfer = false;
+            function handleRX(event) {
+                lineBuf += new TextDecoder("utf-8").decode(event.target.value);
+                if (lineBuf.length > 400 && lineBuf.indexOf("\n") < 0) lineBuf = ""; // junk guard
+                let i;
+                while ((i = lineBuf.indexOf("\n")) >= 0) {
+                    const line = lineBuf.slice(0, i + 1);
+                    lineBuf = lineBuf.slice(i + 1);
+                    if (inTransfer) {
+                        if (lineWaiter) lineWaiter(line); else lineQ.push(line);
+                    } else handleLine(line);
+                }
+            }
+            function nextLine(ms) {
+                if (lineQ.length) return Promise.resolve(lineQ.shift());
+                return new Promise((res, rej) => {
+                    const t = setTimeout(() => { lineWaiter = null; rej(new Error("Timed out waiting for the dive computer")); }, ms);
+                    lineWaiter = (l) => { clearTimeout(t); lineWaiter = null; l === null ? rej(new Error("Disconnected")) : res(l); };
+                });
+            }
+            // Transport used by CosmiqDive.readDives (read-only commands)
+            const diveIO = {
+                async send(cmd, data) {
+                    if (!inTransfer) { inTransfer = true; lineQ = []; lineBuf = ""; }
+                    await txChar.writeValue(new TextEncoder().encode(CosmiqDive.buildCommand(cmd, data)));
+                },
+                async recv(cmd, n) {
+                    const out = []; let strays = 0;
+                    while (out.length < n) {
+                        const line = await nextLine(4000);
+                        let fr;
+                        try { fr = CosmiqDive.parseFrame(line); } catch (e) { fr = { bad: e.message }; }
+                        if (fr.bad || fr.cmd !== cmd) {
+                            if (++strays > 12) throw new Error("Unexpected replies from device (" + (fr.bad || "cmd " + fr.cmd.toString(16)) + ")");
+                            log("ignored stray frame", "log-info"); continue;
+                        }
+                        out.push(...fr.data);
+                    }
+                    if (out.length !== n) throw new Error(`Expected ${n} bytes, got ${out.length}`);
+                    return Uint8Array.from(out);
+                },
+                end() { inTransfer = false; lineQ = []; lineBuf = ""; },
+            };
+
+            // Settings reply parser (one complete line per call)
+            function handleLine(text) {
+                try {
+                    let clean = text.replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+
+                    if (clean.startsWith("80")) {
+                        log("!!! COMMAND REJECTED !!!", "log-err");
+                        return;
+                    }
+
+                    log("RX: " + text.trim(), "log-rx");
+
+                    if (clean.length < 4) return;
+                    let cmd = clean.substr(0, 2);
+
+                    memMap[cmd] = clean;
+                    updateHunter();
+
+                    // Parsing Logic
+                    if (cmd === "5F") {
+                        // System: Backlight, Eco, Environment
+                        let env = parseInt(clean.substr(8, 2), 16);
+                        if (!isNaN(env) && env <= 2) {
+                            highlightBtn("envGroup", "env" + env);
+                            document.getElementById(
+                                "salinityWarn",
+                            ).style.display = env === 1 ? "block" : "none";
+                            log("> Parsed Env: " + env);
+                        }
+
+                        let raw = parseInt(clean.substr(10, 2), 16);
+                        if (!isNaN(raw)) {
+                            let bl = raw & 0x0f;
+                            let ecoDisabled = (raw & 0x10) > 0;
+
+                            sysState.bl = bl;
+                            sysState.eco = !ecoDisabled;
+
+                            highlightBtn("blGroup", "bl" + bl);
+
+                            document
+                                .getElementById("ecoOn")
+                                .classList.remove("selected");
+                            document
+                                .getElementById("ecoOff")
+                                .classList.remove("selected");
+                            if (sysState.eco)
+                                document
+                                    .getElementById("ecoOn")
+                                    .classList.add("selected");
+                            else
+                                document
+                                    .getElementById("ecoOff")
+                                    .classList.add("selected");
+
+                            log(
+                                `> Parsed Sys: BL Level ${bl - 2}, Eco ${sysState.eco ? "ON" : "OFF"}`,
+                            );
+                        }
+                    }
+
+                    if (cmd === "5C") {
+                        // Scuba 1
+                        let depth =
+                            (parseInt(clean.substr(6, 4), 16) - 1000) / 100;
+                        syncInput("scubaDepth", depth);
+
+                        let timeAlarm = parseInt(clean.substr(10, 4), 16);
+                        if (!isNaN(timeAlarm)) {
+                            syncInput("scubaTime", timeAlarm);
+                            log("> Parsed Scuba Time Alarm: " + timeAlarm);
+                        }
+
+                        let air = parseInt(clean.substr(14, 2), 16);
+                        if (!isNaN(air)) {
+                            document.getElementById("airRange").value = air;
+                            upd("airVal", air + "%");
+                        }
+
+                        let mode = parseInt(clean.substr(16, 2), 16);
+                        if (!isNaN(mode)) {
+                            highlightBtn("modeGroup", "mode" + mode);
+                            log("> Parsed Mode: " + mode);
+                        }
+
+                        log("> Parsed: Depth:" + depth + "m Air:" + air + "%");
+                    }
+
+                    if (cmd === "5B") {
+                        // Scuba 2
+                        let timeOutVal = parseInt(clean.substr(12, 2), 16);
+                        let timeoutKey = Object.keys(TIMEOUT_MAP).find(
+                            (key) => TIMEOUT_MAP[key] === timeOutVal,
+                        );
+                        if (timeoutKey) {
+                            document.getElementById("timeoutSel").value =
+                                timeoutKey;
+                            document
+                                .getElementById("timeoutSel")
+                                .parentElement.classList.add("synced");
+                            setTimeout(
+                                () =>
+                                    document
+                                        .getElementById("timeoutSel")
+                                        .parentElement.classList.remove(
+                                            "synced",
+                                        ),
+                                1000,
+                            );
+                            log("> Parsed Timeout: " + timeoutKey + "s");
+                        }
+
+                        let dMode = parseInt(clean.substr(14, 2), 16);
+                        if (!isNaN(dMode)) {
+                            highlightBtn("dateGroup", "date" + dMode);
+                            log("> Parsed Date Mode: " + dMode);
+                        }
+
+                        let uMode = parseInt(clean.substr(16, 2), 16);
+                        if (!isNaN(uMode)) {
+                            highlightBtn("unitGroup", "unit" + uMode);
+                            log("> Parsed Units: " + uMode);
+                        }
+                    }
+
+                    if (cmd === "5D") {
+                        // Freedive 1-2, Safety, PPO2, FD Time
+                        let a2 = parseInt(clean.substr(6, 2), 16);
+                        syncInput("fd2", a2 + 5);
+
+                        let a1 = parseInt(clean.substr(8, 2), 16);
+                        syncInput("fd1", a1 + 5);
+
+                        let timeIdx = parseInt(clean.substr(12, 2), 16);
+                        if (!isNaN(timeIdx)) {
+                            let sec = timeIdx * 5 + 30;
+                            syncInput("fdTimeRange", sec);
+                            upd("fdTimeVal", sec + "s");
+                            log("> Parsed FD Time: " + sec + "s");
+                        }
+
+                        let safe = parseInt(clean.substr(14, 2), 16);
+                        if (safe >= 0 && safe <= 2) {
+                            highlightBtn("safeGroup", "safe" + safe);
+                            log("> Parsed Safety: " + safe);
+                        }
+
+                        let ppo2Raw = parseInt(clean.substr(16, 2), 16);
+                        if (!isNaN(ppo2Raw)) {
+                            let ppo2 = ppo2Raw / 10;
+                            document.getElementById("ppo2Range").value = ppo2;
+                            upd("ppo2Val", ppo2.toFixed(1));
+                            log("> Parsed PPO2: " + ppo2.toFixed(1));
+                        }
+                    }
+                    if (cmd === "60") {
+                        // Freedive Alarms 3-6
+                        let fda4 = parseInt(clean.substr(6, 2), 16);
+                        if (!isNaN(fda4)) {
+                            syncInput("fd4", fda4 + 5);
+                        }
+
+                        let fda3 = parseInt(clean.substr(8, 2), 16);
+                        if (!isNaN(fda3)) {
+                            syncInput("fd3", fda3 + 5);
+                        }
+
+                        let fda6 = parseInt(clean.substr(10, 2), 16);
+                        if (!isNaN(fda6)) {
+                            syncInput("fd6", fda6 + 5);
+                        }
+
+                        let fda5 = parseInt(clean.substr(12, 2), 16);
+                        if (!isNaN(fda5)) {
+                            syncInput("fd5", fda5 + 5);
+                        }
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+
+            function updateHunter() {
+                let html = `<table class="byte-table"><tr><th>CMD</th><th>Payload (Raw Hex)</th></tr>`;
+                const commands = [
+                    { id: "58", desc: "System ($58)" },
+                    { id: "5F", desc: "System ($5F)" },
+                    { id: "5C", desc: "Scuba 1 ($5C)" },
+                    { id: "5B", desc: "Scuba 2 ($5B)" },
+                    { id: "5D", desc: "FD Depth ($5D)" },
+                    { id: "60", desc: "FD Time ($60)" },
+                ];
+
+                commands.forEach((c) => {
+                    let raw = memMap[c.id] || "No Data";
+                    let payloadHtml = "";
+                    if (raw !== "No Data") {
+                        let payload = raw.substring(6);
+                        for (let i = 0; i < payload.length; i += 2) {
+                            payloadHtml += `<div class="byte-cell"><span class="byte-idx">${i / 2}</span>${payload.substr(i, 2)}</div>`;
+                        }
+                    }
+                    html += `<tr><td><strong>${c.id}</strong><br><span style="font-size:10px">${c.desc}</span></td><td>${payloadHtml || raw}</td></tr>`;
+                });
+                html += `</table>`;
+                document.getElementById("hunterTable").innerHTML = html;
+            }
+
+            async function readAllSettings() {
+                const qs = [
+                    "#58a60200",
+                    "#5f9f0200",
+                    "#5ba30200",
+                    "#5ca20200",
+                    "#5da10200",
+                    "#609e0200",
+                ];
+                for (const q of qs) {
+                    await sendStatic(q, "Read Config");
+                    await new Promise((r) => setTimeout(r, 300));
+                }
+            }
+
+            async function sendStatic(str, desc = "") {
+                if (!txChar) return;
+                let enc = new TextEncoder();
+                await txChar.writeValue(enc.encode(str + "\n"));
+                if (!desc) desc = str;
+                log(`<span class="log-tx">TX: ${desc}</span>`);
+            }
+
+            async function sendCalcSum(
+                prefix,
+                targetSum,
+                valHex,
+                lenHex = "02",
+                desc = "",
+            ) {
+                let v = valHex.toLowerCase();
+                let p = prefix.toLowerCase();
+                let payloadBytes = [];
+                payloadBytes.push(parseInt(lenHex, 16));
+                for (let i = 0; i < v.length; i += 2)
+                    payloadBytes.push(parseInt(v.substr(i, 2), 16));
+
+                let sum = payloadBytes.reduce((a, b) => a + b, 0);
+                let checkDec = (targetSum - sum) & 0xff;
+                let checkHex = checkDec
+                    .toString(16)
+                    .padStart(2, "0")
+                    .toLowerCase();
+
+                await sendStatic(`#${p}${checkHex}${lenHex}${v}`, desc);
+            }
+
+            // --- FUNCTIONS ---
+
+            async function setSystemTime() {
+                if (!isConnected()) { log("Not connected", "log-err"); return; }
+                let now = new Date();
+                let y = (now.getFullYear() % 100).toString().padStart(2, "0");
+                let m = (now.getMonth() + 1).toString().padStart(2, "0");
+                let d = now.getDate().toString().padStart(2, "0");
+                let h = now.getHours().toString().padStart(2, "0");
+                let min = now.getMinutes().toString().padStart(2, "0");
+                let s = now.getSeconds().toString().padStart(2, "0");
+
+                // Decimal-as-Hex format: 2025 -> "25"
+                let payloadStr = y + m + d + h + min + s;
+
+                // Checksum for Command 20: Target 224 (0xE0), Length 12 (0x0C)
+                // Send payload string as is, sendCalcSum will treat pairs as bytes
+                await sendCalcSum(
+                    "20",
+                    224,
+                    payloadStr,
+                    "0c",
+                    "Set Time " + payloadStr,
+                );
+                document.getElementById("clockStatus").textContent =
+                    "Dive computer clock set to " + now.toLocaleString() + " (phone time)";
+            }
+
+            function setEnv(v) {
+                document
+                    .getElementById("envGroup")
+                    .querySelectorAll(".btn-opt")
+                    .forEach((b) => b.classList.remove("selected"));
+                document.getElementById("env" + v).classList.add("selected");
+
+                document.getElementById("salinityWarn").style.display =
+                    v === 1 ? "block" : "none";
+
+                let h = "0" + v;
+                sendCalcSum("30", 208, "000" + v, "04", "Set Environment " + v);
+                verify("sys");
+            }
+
+            function setBL(l) {
+                highlightBtn("blGroup", "bl" + l);
+                sysState.bl = l;
+                sendBLEcoPacket();
+            }
+
+            function setEco(isOn) {
+                sysState.eco = isOn;
+                document.getElementById("ecoOn").classList.remove("selected");
+                document.getElementById("ecoOff").classList.remove("selected");
+                if (isOn)
+                    document.getElementById("ecoOn").classList.add("selected");
+                else
+                    document.getElementById("ecoOff").classList.add("selected");
+
+                sendBLEcoPacket();
+            }
+
+            function sendBLEcoPacket() {
+                let blBits = sysState.bl;
+                let ecoFlag = sysState.eco ? 0x00 : 0x10;
+                let total = blBits | ecoFlag;
+                let hex = total.toString(16).padStart(2, "0");
+                sendCalcSum("2e", 210, hex, "02", "Set Sys/BL " + hex);
+                verify("sys");
+            }
+
+            function setSafe(s, btn) {
+                highlightBtn("safeGroup", btn.id);
+                let valStr = "000" + s;
+                sendCalcSum("21", 223, valStr, "04", "Set Safety " + s);
+                verify("free");
+            }
+
+            function setMode(m, btn) {
+                highlightBtn("modeGroup", btn.id);
+                let c =
+                    m === 0 ? "#2bd30200" : m === 2 ? "#2bd10202" : "#2bd20201";
+                sendStatic(c, "Set Mode");
+                verify("scuba1");
+            }
+
+            function setTimeoutIndex() {
+                let val = parseInt(document.getElementById("timeoutSel").value);
+                let devVal = TIMEOUT_MAP[val];
+                if (devVal === undefined) devVal = 1;
+
+                let h = devVal.toString(16).padStart(4, "0");
+                sendCalcSum("2a", 214, h, "04", "Set Timeout " + val + "s");
+                verify("scuba2");
+            }
+
+            function setAir() {
+                let v = parseInt(document.getElementById("airRange").value);
+                sendCalcSum(
+                    "22",
+                    222,
+                    v.toString(16).padStart(2, "0"),
+                    "02",
+                    "Set Air " + v + "%",
+                );
+                verify("scuba1");
+            }
+
+            function setPPO2() {
+                let v = parseFloat(document.getElementById("ppo2Range").value);
+                sendCalcSum(
+                    "2d",
+                    211,
+                    Math.round(v * 10)
+                        .toString(16)
+                        .padStart(2, "0"),
+                    "02",
+                    "Set PPO2 " + v,
+                );
+                verify("free");
+            }
+
+            function setUnits(m) {
+                sendCalcSum("23", 221, "0" + m, "02", "Set Units " + m);
+                verify("scuba2");
+            }
+
+            function setDate(m) {
+                sendCalcSum("24", 220, "0" + m, "02", "Set DateFmt " + m);
+                verify("scuba2");
+            }
+
+            function setScubaDepth() {
+                let m = parseInt(document.getElementById("scubaDepth").value);
+                sendCalcSum(
+                    "27",
+                    217,
+                    (m * 100 + 1000).toString(16).padStart(4, "0"),
+                    "04",
+                    "Set Depth " + m + "m",
+                );
+                verify("scuba1");
+            }
+            function setScubaTime() {
+                let m = parseInt(document.getElementById("scubaTime").value);
+                sendCalcSum(
+                    "28",
+                    216,
+                    m.toString(16).padStart(4, "0"),
+                    "04",
+                    "Set Time " + m + "min",
+                );
+                verify("scuba1");
+            }
+
+            function setFdTime() {
+                let s = parseInt(document.getElementById("fdTimeRange").value);
+                sendCalcSum(
+                    "26",
+                    218,
+                    "14" + ((s - 30) / 5).toString(16).padStart(2, "0"),
+                    "04",
+                    "Set FD Time " + s + "s",
+                );
+                setTimeout(async () => {
+                    await sendStatic("#5da10200", "Verify FD Time");
+                }, 600);
+            }
+
+            async function setFdDepth(idx) {
+                let m = parseInt(document.getElementById("fd" + idx).value);
+                let h = (m - 5).toString(16).padStart(2, "0");
+                let pre = "25",
+                    tgt = 219,
+                    pay = "0a" + h;
+
+                const getHex = (targetIdx) => {
+                    let pkt, offset;
+                    if (targetIdx === 1) {
+                        pkt = memMap["5D"];
+                        offset = 2;
+                    } else if (targetIdx === 2) {
+                        pkt = memMap["5D"];
+                        offset = 0;
+                    } else if (targetIdx === 3) {
+                        pkt = memMap["60"];
+                        offset = 2;
+                    } else if (targetIdx === 4) {
+                        pkt = memMap["60"];
+                        offset = 0;
+                    } else if (targetIdx === 5) {
+                        pkt = memMap["60"];
+                        offset = 6;
+                    } else if (targetIdx === 6) {
+                        pkt = memMap["60"];
+                        offset = 4;
+                    }
+
+                    if (!pkt) return "00";
+                    return pkt.substr(6 + offset, 2);
+                };
+
+                switch (idx) {
+                    case 1:
+                        pre = "25";
+                        tgt = 219;
+                        pay = getHex(2) + h;
+                        break;
+                    case 2:
+                        pre = "25";
+                        tgt = 219;
+                        pay = h + getHex(1);
+                        break;
+                    case 3:
+                        pre = "31";
+                        tgt = 207;
+                        pay = getHex(4) + h;
+                        break;
+                    case 4:
+                        pre = "31";
+                        tgt = 207;
+                        pay = h + getHex(3);
+                        break;
+                    case 5:
+                        pre = "32";
+                        tgt = 206;
+                        pay = getHex(6) + h;
+                        break;
+                    case 6:
+                        pre = "32";
+                        tgt = 206;
+                        pay = h + getHex(5);
+                        break;
+                }
+
+                await sendCalcSum(
+                    pre,
+                    tgt,
+                    pay,
+                    "04",
+                    "Set FD Depth " + idx + " to " + m + "m",
+                );
+
+                setTimeout(() => {
+                    if (idx <= 2) verify("free");
+                    if (idx >= 3)
+                        setTimeout(async () => {
+                            await sendStatic("#609e0200", "Verify FD3-6");
+                        }, 200);
+                }, 300);
+            }
+
+            function highlightBtn(grp, id) {
+                document
+                    .getElementById(grp)
+                    .querySelectorAll(".btn-opt")
+                    .forEach((b) => b.classList.remove("selected"));
+                let btn = document.getElementById(id);
+                if (btn) btn.classList.add("selected");
+            }
+            function syncInput(id, val) {
+                let el = document.getElementById(id);
+                if (!isNaN(val) && el) {
+                    el.value = val;
+                    el.parentElement.classList.add("synced");
+                    setTimeout(
+                        () => el.parentElement.classList.remove("synced"),
+                        1000,
+                    );
+                }
+            }
+            function showBtHelp() {
+                const ua = navigator.userAgent;
+                const ios = /iPhone|iPad|iPod/.test(ua);
+                const b = document.getElementById("btBanner");
+                b.innerHTML = !window.isSecureContext
+                    ? "Bluetooth needs a secure (https) connection."
+                    : ios
+                      ? "<b>This browser can't use Bluetooth.</b> On iPhone/iPad open this page in the <b>Bluefy</b> browser (App Store). Your saved dive log is still viewable here."
+                      : "<b>This browser can't use Bluetooth.</b> Use Chrome or Edge (Android, Windows, Mac, Linux). Your saved dive log is still viewable here.";
+                b.classList.add("show");
+            }
+            window.addEventListener("load", () => {
+                const ver = "v" + (self.APP_VERSION || "?");
+                document.getElementById("verTop").textContent = ver;
+                document.getElementById("appVer").textContent = ver;
+                fetch("/api/me", { credentials: "same-origin", redirect: "error" })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((me) => {
+                        if (!me) return;
+                        document.getElementById("who").textContent = " · " + me.email;
+                        document.getElementById("signOut").style.display = "";
+                        if (me.version && me.version !== self.APP_VERSION)
+                            document.getElementById("appVer").textContent = ver + " (server v" + me.version + ", reload to update)";
+                    })
+                    .catch(() => {});
+                if (!navigator.bluetooth) showBtHelp();
+                for (const [id, def] of [["optClock", true], ["optDives", true]]) {
+                    const el = document.getElementById(id);
+                    el.checked = opt(id, def);
+                    el.addEventListener("change", () => setOpt(id, el.checked));
+                }
+                let v = "device"; try { v = localStorage.getItem("view") || "device"; } catch (e) {}
+                showView(v);
+                Dives.render().then(() => Dives.cloudPull());
+                if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+            });
+
+            function verify(type) {
+                let cmd = "";
+                if (type === "sys") cmd = "#5f9f0200";
+                if (type === "scuba1") cmd = "#5ca20200";
+                if (type === "scuba2") cmd = "#5ba30200";
+                if (type === "free") cmd = "#5da10200";
+                if (cmd)
+                    setTimeout(async () => {
+                        await sendStatic(cmd, "Verify");
+                    }, 600);
+            }
+        </script>
+    </body>
+</html>

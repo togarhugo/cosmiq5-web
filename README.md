@@ -45,3 +45,7 @@ Diving involves significant risks, including decompression sickness, oxygen toxi
 3. The authors and the AI assistant accept **NO RESPONSIBILITY** for malfunctions, incorrect settings, or any safety incidents resulting from the use of this tool.
 
 *Dive safe. Always carry a backup.*
+
+## 📱 Mobile + Cloudflare version
+
+A mobile-friendly build with **dive-log download**, **automatic clock sync on every connect** and Google-login cloud storage lives in [`public/`](public/) with a Cloudflare Worker in [`src/`](src/). See [DEPLOY.md](DEPLOY.md). The original single-file `index.html` above is unchanged.

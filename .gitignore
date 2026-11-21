@@ -3,3 +3,10 @@
 !.pixi/config.toml
 data/
 plots/
+
+# node / cloudflare
+node_modules/
+.wrangler/
+.dev.vars
+src/assets.generated.js
+src/version.js

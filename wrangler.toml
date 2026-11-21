@@ -1,0 +1,22 @@
+name = "cosmiq-manager"
+main = "src/worker.js"  # the app files in public/ are bundled into the Worker by scripts/build-assets.mjs
+compatibility_date = "2025-01-01"
+
+# Serve on your own domain (the zone must be on this Cloudflare account).
+routes = [{ pattern = "dive-comp.thmlab.org", custom_domain = true }]
+workers_dev = false
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cosmiq"
+database_id = "da3daca5-ced2-46b5-924e-0021b8afb5f3"
+
+[vars]
+# Google OAuth client (public identifier, same one the other thmlab apps use).
+# Its redirect URI list in Google Cloud Console must include https://dive-comp.thmlab.org/auth/callback
+GOOGLE_CLIENT_ID = "234504022788-v4pd8ehvn3g5i6qqv7ce7ce2dert3152.apps.googleusercontent.com"
+# Secrets (never commit these):
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   npx wrangler secret put SESSION_SECRET      (32+ random chars, e.g. `openssl rand -hex 32`)
+#   npx wrangler secret put ALLOWED_EMAILS      (comma-separated Google emails allowed to sign in)
