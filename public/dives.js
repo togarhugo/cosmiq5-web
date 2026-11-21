@@ -350,6 +350,7 @@ const Dives = (() => {
   const fmtDayLong = (key) => dayOf(key).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   // ---------- summary page ----------
+  const KIND_LABEL = { scuba: "Scuba", freedive: "Freedive" };
   function renderSummary(recs) {
     if (!$("sumHours")) return;
     const sm = U.summarize(recs, new Date());
@@ -359,6 +360,8 @@ const Dives = (() => {
     $("sumLastDate").textContent = fmtDayLong(sm.last.date);
     $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
     $("sumHours").textContent = U.hoursText(sm.totalSec);
+    const kc = $("sumLastKind"); kc.className = "kindchip kind-" + sm.last.kind; kc.textContent = KIND_LABEL[sm.last.kind];
+    $("sumKinds").innerHTML = U.KINDS.filter((k) => k === "scuba" || sm.byKind[k].count).map((k) => `<div class="kindrow"><span class="kindchip kind-${k}">${KIND_LABEL[k]}</span><b>${U.durText(sm.byKind[k].sec)}</b><span class="muted">${sm.byKind[k].count} dive${sm.byKind[k].count === 1 ? "" : "s"}</span></div>`).join("");
     $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on both computers, counted once (Cosmiq+ used)` : "");
   }
   /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */

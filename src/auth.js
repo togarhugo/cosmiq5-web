@@ -127,12 +127,14 @@ async function finishLogin(request, url, env) {
   return redirect("/", await issueSession(env, { email, name: claims.name, amr: "google" }));
 }
 
-const LOGIN_CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+const PUBLIC_ASSET = /^\/auth\/(favicon\.svg|apple-touch-icon\.png|theme\.(js|css)|fonts\.css|logo-(light|dark)\.png|icon-(summary|log|device)\.png|fonts\/[A-Za-z-]+\.(woff2|txt))$/;
+const LOGIN_CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /** Handles the GET /auth/* routes; returns a Response, or null if the path is not one of them.
  *  (POST /auth/prelogin and /auth/password are handled in password.js.) */
 export async function handleAuth(request, url, env, serveAsset) {
   if (!url.pathname.startsWith("/auth/") || request.method === "POST") return null;
+  if (PUBLIC_ASSET.test(url.pathname)) return serveAsset(request, url.pathname);              // the look of the app (icons, logos, theme, fonts) is public: the sign-in pages use it too
   switch (url.pathname) {
     case "/auth/login": {                       // the first page: choose Google or email + password + authenticator
       if (await currentUser(request, env)) return redirect("/");
@@ -143,7 +145,7 @@ export async function handleAuth(request, url, env, serveAsset) {
       if (!(await pendingMfaEmail(request, env))) return redirect("/auth/login");
       const r = serveAsset(request, "/auth/mfa.html"); r.headers.set("content-security-policy", LOGIN_CSP); return r;
     }
-    case "/auth/login.js": case "/auth/mfa.js": case "/auth/kdf.js": case "/auth/favicon.svg": case "/auth/apple-touch-icon.png": case "/auth/theme.js": case "/auth/theme.css": case "/auth/logo-light.png": case "/auth/logo-dark.png": return serveAsset(request, url.pathname);     // the sign-in pages show the app icon too
+    case "/auth/login.js": case "/auth/mfa.js": case "/auth/kdf.js": return serveAsset(request, url.pathname);     // the sign-in pages show the app icon too
     case "/auth/google": return startLogin(url, env);
     case "/auth/callback": return finishLogin(request, url, env);
     case "/auth/logout": return page("Signed out", "You have been signed out.", [clearCookie(SESSION_COOKIE, "/")], 200);

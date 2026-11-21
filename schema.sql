@@ -86,3 +86,19 @@ CREATE TABLE IF NOT EXISTS places (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, k)
 );
+
+-- API keys for reading the dive log from other tools (see migrations/0007_api_keys.sql). Only a hash of each key is stored.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           TEXT PRIMARY KEY,
+  user_email   TEXT NOT NULL,
+  description  TEXT NOT NULL,
+  prefix       TEXT NOT NULL,
+  key_hash     TEXT NOT NULL UNIQUE,
+  ttl_days     INTEGER,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at   TEXT,
+  last_used_at TEXT,
+  revoked_at   TEXT,
+  rotated_from TEXT
+);
+CREATE INDEX IF NOT EXISTS api_keys_by_user ON api_keys (user_email, created_at);

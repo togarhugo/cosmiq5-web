@@ -41,8 +41,8 @@ test("summarize: last dive date, total dive time, dive count, location of the la
   const r = [dive("2026-10-17T08:26:00", 4500, "Komodo"), dive("2026-10-12T06:36:00", 3600), dive("2021-06-11T14:10:00", 3600 * 2 + 60)];
   const s = U.summarize(r, new Date(2026, 10, 21, 15, 0));
   assert.equal(s.count, 3); assert.equal(s.totalSec, 4500 + 3600 + 7260);
-  assert.deepEqual(s.last, { date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
-  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0 }); assert.equal(s.duplicates, 0);
+  assert.deepEqual(s.last, { kind: "scuba", date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
+  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0, byKind: { scuba: { count: 0, sec: 0 }, freedive: { count: 0, sec: 0 } } }); assert.equal(s.duplicates, 0);
   assert.equal(U.summarize([dive("2026-11-21T09:00:00", 60)], new Date(2026, 10, 21, 23, 59)).last.daysAgo, 0, "same calendar day = today");
 });
 
@@ -231,4 +231,59 @@ test("logo: a transparent PNG for each theme, shown in the app header and on bot
   const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png" alt="Dive Manager"/); assert.match(main, /class="logo logo-dark" src="\/auth\/logo-dark\.png" alt="Dive Manager"/);
   for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<h1 class="brand"><img class="logo logo-light" src="\/auth\/logo-light\.png"/, f); assert.match(h, /html\[data-theme="dark"\] \.brand \.logo-dark \{ display: inline-block; \}/, f); assert.ok(!/<h1>Dive Manager<\/h1>/.test(h), f + ": the plain text title is gone"); }
   assert.ok(fs.existsSync(new URL("../design/logo-source.png", root)), "the source artwork is kept so the logo can be regenerated");
+});
+
+test("fonts and tab icons: Geist and Geist Mono served from the app, tab icons as one-colour masks", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url);
+  for (const [f, min] of [["auth/fonts/Geist-Variable.woff2", 40000], ["auth/fonts/GeistMono-Variable.woff2", 40000]]) { const b = fs.readFileSync(new URL(f, root)); assert.equal(b.slice(0, 4).toString(), "wOF2", f + " is a WOFF2 font"); assert.ok(b.length > min && b.length < 120000, f + " " + b.length); }
+  assert.match(fs.readFileSync(new URL("auth/fonts/LICENSE-Geist-OFL.txt", root), "utf8"), /OPEN FONT LICENSE/i, "the licence travels with the fonts");
+  const css = fs.readFileSync(new URL("auth/fonts.css", root), "utf8"); assert.match(css, /font-family: "Geist";[^}]*Geist-Variable\.woff2[^}]*font-weight: 100 900/); assert.match(css, /font-family: "Geist Mono";[^}]*GeistMono-Variable\.woff2/); assert.ok(!/https?:\/\//.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), "no font is loaded from another website");
+  for (const f of ["auth/icon-summary.png", "auth/icon-log.png", "auth/icon-device.png"]) { const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]); assert.equal(b.readUInt32BE(16), 148); assert.equal(b.readUInt32BE(20), 148); assert.equal(b[25], 6, f + " has an alpha channel (the mask)"); }
+  const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /href="\/auth\/fonts\.css"/); assert.match(main, /rel="preload" href="\/auth\/fonts\/Geist-Variable\.woff2" as="font" type="font\/woff2" crossorigin/); assert.match(main, /--mono: "Geist Mono"/);
+  for (const [id, cls] of [["navSummary", "ti-summary"], ["navLog", "ti-log"], ["navDevice", "ti-device"]]) assert.match(main, new RegExp(`id="${id}"[^>]*><i class="ti ${cls}" aria-hidden="true"></i><span>`));
+  for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<link rel="stylesheet" href="\/auth\/fonts\.css">/, f); assert.match(h, /font-family:"Geist"/, f); }
+  assert.ok(fs.existsSync(new URL("../design/tab-icons-source.png", root)), "the source artwork is kept");
+});
+
+test("scuba and freedive: told apart in the totals and on the map, each dive counted once", () => {
+  const d = (startedAt, durationSec, mode, location, device, depth = 20) => ({ fingerprint: (device || "c") + startedAt, startedAt, durationSec, mode, maxDepthM: depth, ...(location ? { location } : {}), ...(device ? { device } : {}) });
+  const recs = [d("2026-05-01T09:00:00", 3000, "scuba", "Tulamben"), d("2026-05-01T13:00:00", 3300, "scuba", "Tulamben"), d("2026-05-02T09:00:00", 2700, "gauge", "Komodo"),
+    d("2026-05-03T09:00:00", 45, "freedive", "Bunaken", undefined, 12), d("2026-05-03T09:10:00", 70, "freedive", "bunaken", undefined, 15), d("2026-05-03T14:00:00", 3000, "scuba", "Bunaken"), d("2026-05-04T08:00:00", 90, "freedive", "Raja Ampat", undefined, 14), d("2026-05-05T08:00:00", 600, "scuba")];
+  assert.equal(U.kindOf({ mode: "freedive" }), "freedive"); assert.equal(U.kindOf({ mode: "scuba" }), "scuba"); assert.equal(U.kindOf({ mode: "gauge" }), "scuba", "a dive in gauge mode is a dive with a tank"); assert.equal(U.kindOf({}), "scuba");
+  const k = U.byKind(recs); assert.deepEqual(k, { scuba: { count: 5, sec: 3000 + 3300 + 2700 + 3000 + 600 }, freedive: { count: 3, sec: 45 + 70 + 90 } });
+  const sm = U.summarize(recs, new Date(2026, 10, 1)); assert.deepEqual(sm.byKind, k); assert.equal(sm.count, 8); assert.equal(sm.last.kind, "scuba"); assert.equal(sm.totalSec, k.scuba.sec + k.freedive.sec, "kinds add up to the total");
+  assert.equal(U.summarize([d("2026-05-09T08:00:00", 50, "freedive")], new Date(2026, 10, 1)).last.kind, "freedive");
+  // the same dive on both computers is one dive of one kind (the Cosmiq+ record decides)
+  const twin = [d("2026-05-06T09:00:00", 3000, "scuba"), d("2026-05-06T09:02:00", 2940, "scuba", undefined, "peregrine"), d("2026-05-06T15:00:00", 60, "freedive", undefined, "peregrine")];
+  assert.deepEqual(U.byKind(twin), { scuba: { count: 1, sec: 3000 }, freedive: { count: 1, sec: 60 } });
+  // places: both kinds counted per place, Bunaken/bunaken is one place
+  const ps = U.placeStats(recs), by = (n) => ps.find((e) => e.name.toLowerCase() === n.toLowerCase());
+  assert.deepEqual(ps.map((e) => e.key), ["bunaken", "tulamben", "komodo", "raja ampat"].sort((a, b) => (by(b) || { count: 0 }).count - (by(a) || { count: 0 }).count || a.localeCompare(b)), "most dives first");
+  assert.equal(by("Bunaken").count, 3); assert.deepEqual([by("Bunaken").by.scuba.count, by("Bunaken").by.freedive.count], [1, 2]); assert.equal(by("Bunaken").by.freedive.sec, 115); assert.equal(by("Tulamben").by.freedive.count, 0); assert.equal(by("Komodo").by.scuba.sec, 2700);
+  assert.equal(by("Bunaken").by.freedive.first, "2026-05-03T09:00:00"); assert.equal(by("Bunaken").by.freedive.last, "2026-05-03T09:10:00");
+  const fo = U.placeStats(recs, "freedive"); assert.deepEqual(fo.map((e) => [e.key, e.count]), [["bunaken", 2], ["raja ampat", 1]], "only places where you freedived, with the freedive count"); assert.equal(fo[0].last, "2026-05-03T09:10:00"); assert.equal(fo[0].by.scuba.count, 1, "`by` still has both kinds");
+  const so = U.placeStats(recs, "scuba"); assert.deepEqual(so.map((e) => [e.key, e.count]), [["tulamben", 2], ["bunaken", 1], ["komodo", 1]]); assert.ok(!so.some((e) => e.key === "raja ampat"), "a freedive-only place is not on the scuba map");
+  assert.deepEqual(U.pinsAndMissing(fo, { bunaken: { lat: 1, lon: 2 } }).missing.map((e) => e.key), ["raja ampat"]); assert.equal(U.pinsAndMissing(fo, { bunaken: { lat: 1, lon: 2 } }).pins[0].by.freedive.count, 2, "pins keep the breakdown");
+  assert.deepEqual(U.placeStats([], "scuba"), []);
+  // durations as text
+  for (const [sec, txt] of [[0, "0 s"], [45, "45 s"], [193, "3 min 13 s"], [599, "9 min 59 s"], [600, "10 min"], [2520, "42 min"], [3599, "60 min"], [12000, "3 h 20 min"], [null, "0 s"]]) assert.equal(U.durText(sec), txt, String(sec));
+});
+
+test("theme: every colour variable the app uses is defined in the light and the dark palette", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), css = fs.readFileSync(new URL("auth/theme.css", root), "utf8");
+  const light = css.slice(css.indexOf(":root"), css.indexOf('html[data-theme="dark"]')), dark = css.slice(css.indexOf('html[data-theme="dark"] {'), css.indexOf('html[data-theme="light"]'));
+  const used = new Set(); for (const f of ["index.html", "dives.js", "account-area.js", "account.js", "places-ui.js", "api-keys.js", "dive-utils.js"]) for (const m of fs.readFileSync(new URL(f, root), "utf8").matchAll(/var\(--((?:bg|tx|bd)-[0-9a-f]{3,6})\)/g)) used.add(m[1]);
+  assert.ok(used.size > 50, "found the colour variables: " + used.size);
+  for (const v of used) { assert.ok(light.includes(`--${v}:`), "--" + v + " has a light value"); assert.ok(dark.includes(`--${v}:`), "--" + v + " has a dark value"); }
+});
+
+test("api access: the account page has the menu, the script and the endpoint information", async () => {
+  const fs = await import("node:fs"), root = new URL("../public/", import.meta.url), main = fs.readFileSync(new URL("index.html", root), "utf8");
+  assert.match(main, /<details class="card acc" data-sec="api">\s*<summary>API access/); assert.match(main, /<script src="api-keys\.js"><\/script>/); assert.match(main, /ApiKeys\.init\(\)/);
+  for (const id of ["apiBase", "apiCurl", "apiExample", "apiDesc", "apiDays", "apiGen", "apiNew", "apiKeyText", "apiCopy", "apiHide", "apiList", "apiCount", "apiMsg", "apiUnlimitedWarn"]) assert.ok(main.includes(`id="${id}"`), id);
+  assert.match(main, /<option value="7">7 days<\/option><option value="14">14 days<\/option><option value="30" selected>30 days<\/option><option value="0">Unlimited<\/option>/);
+  for (const ep of ["/ping", "/summary", "/dives", "/dives/{id}"]) assert.ok(main.includes(`<code>${ep}</code>`), ep); for (const opt of ["limit", "cursor", "order", "from</code>, <code>to", "device", "kind", "location", "uploadedSince", "include"]) assert.ok(main.includes(`<code>${opt}</code>`), opt);
+  const js = fs.readFileSync(new URL("api-keys.js", root), "utf8"); assert.ok(!/localStorage|sessionStorage/.test(js), "a key is never kept in browser storage");
+  assert.ok(fs.readFileSync(new URL("sw.js", root), "utf8").includes('"api-keys.js"')); assert.ok(fs.existsSync(new URL("../migrations/0007_api_keys.sql", root)));
+  assert.match(fs.readFileSync(new URL("../schema.sql", root), "utf8"), /CREATE TABLE IF NOT EXISTS api_keys[\s\S]*key_hash\s+TEXT NOT NULL UNIQUE/);
 });

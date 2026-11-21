@@ -14,6 +14,8 @@
         <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
         <link rel="apple-touch-icon" href="apple-touch-icon.png" />
         <title>Dive Manager</title>
+        <link rel="preload" href="/auth/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="stylesheet" href="/auth/fonts.css" />
         <link rel="stylesheet" href="/auth/theme.css" />
         <link rel="stylesheet" href="vendor/leaflet.css" />
         <style>
@@ -24,12 +26,10 @@
                 --yellow: #ffc107;
                 --bg: #f8f9fa;
                 --text: #212529;
-                --mono:
-                    "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
-                    Courier, monospace;
+                --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
             }
             body {
-                font-family: -apple-system, sans-serif;
+                font-family: var(--font, "Geist", -apple-system, sans-serif);
                 background: var(--bg);
                 color: var(--text);
                 padding: 15px;
@@ -331,7 +331,9 @@
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: var(--tx-6c757d); min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
-            .nav { gap: 4px; } .nav button { flex: 1 1 auto; padding: 0 8px; font-size: 13px; white-space: nowrap; min-width: 0; }
+            .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
+            .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
+            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
             .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
@@ -405,7 +407,7 @@
             .badge.also { background: var(--bg-e7f5ff); color: var(--tx-1864ab); text-transform: none; }
             .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: var(--bg-dbe9f3); margin: 8px 0; }
             .mapbox.tall { height: 300px; flex: 0 0 auto; }
-            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: var(--tx-495057); margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
+            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: var(--tx-495057); margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; } .pin-pop .pin-kind { display: flex; align-items: center; gap: 6px; margin: 4px 0 !important; color: var(--tx-212529); }
             .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid var(--bd-ffe08a); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--tx-6b5200); }
             #mapUnplaced { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
             .chip { background: var(--bg-fff4e6); color: var(--tx-d9480f); border: 1px solid var(--bd-ffd8a8); border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
@@ -431,6 +433,38 @@
             .brand { margin: 0; line-height: 0; text-align: center; } .brand .logo { height: auto; max-width: 100%; display: inline-block; vertical-align: top; } .brand .logo-dark { display: none; }
             html[data-theme="dark"] .brand .logo-light { display: none; } html[data-theme="dark"] .brand .logo-dark { display: inline-block; }
 
+            .kindchip { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 2px 9px; border-radius: 10px; vertical-align: middle; }
+            .kindchip:empty { display: none; }
+            .kind-scuba { background: var(--bg-e3f2fd); color: var(--tx-0b5ed7); } .kind-freedive { background: var(--bg-e0f7f4); color: var(--tx-0f766e); }
+            .sum-label .kindchip { margin-left: 8px; }
+            .kinds { margin-top: 10px; border-top: 1px solid var(--bd-e9ecef); }
+            .kindrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--bd-f1f3f5); font-size: 15px; } .kindrow:last-child { border-bottom: 0; padding-bottom: 0; }
+            .kindrow .kindchip { min-width: 74px; text-align: center; } .kindrow b { font-family: var(--mono); font-weight: 600; } .kindrow .muted { margin-left: auto; }
+            .kindseg { display: flex; gap: 6px; margin: 2px 0 6px; }
+            .kindseg button { flex: 1 1 0; min-height: 38px; padding: 4px 6px; border-radius: 10px; background: var(--bg-e9ecef); color: var(--tx-495057); font-size: 13px; line-height: 1.15; }
+            .kindseg button.active { background: var(--bg-343a40); color: var(--tx-fff); } .kindseg button .muted { color: inherit; opacity: .7; }
+            .maplegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--tx-6c757d); margin: 2px 0 4px; }
+            .maplegend .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+            .kind-scuba-dot { background: #228be6; } .kind-freedive-dot { background: #12b886; } .kind-both-dot { background: linear-gradient(90deg, #228be6 50%, #12b886 50%); }
+            .apiline { display: flex; gap: 8px; align-items: flex-start; } .apiline code, .apiline pre { flex: 1; min-width: 0; margin: 0; }
+            #apiDocs code { font-family: var(--mono); font-size: 12.5px; background: var(--bg-f1f3f5); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+            #apiDocs pre { font-family: var(--mono); font-size: 12px; background: var(--bg-f1f3f5); padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: pre; } #apiDocs pre.apiexample { margin: 8px 0 0; max-height: 220px; }
+            .apitable { width: 100%; border-collapse: collapse; font-size: 13px; } .apitable td { padding: 5px 4px; border-bottom: 1px solid var(--bd-e9ecef); vertical-align: top; } .apitable td:first-child { white-space: nowrap; padding-right: 10px; }
+            .apimore { margin-top: 10px; } .apimore > summary { cursor: pointer; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+            .keybox { border: 2px solid var(--bd-2b8a3e); background: var(--bg-ebfbee); border-radius: 12px; padding: 12px; margin: 12px 0; } .kb-title { font-weight: 700; margin-bottom: 6px; }
+            .keybox code { display: block; font-family: var(--mono); font-size: 13px; word-break: break-all; background: var(--bg-fff); border: 1px solid var(--bd-ced4da); border-radius: 8px; padding: 10px; user-select: all; -webkit-user-select: all; }
+            .kb-warn { margin-top: 8px; font-size: 12.5px; color: var(--tx-d9480f); }
+            .apihead { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 6px; }
+            .keyrow { border-bottom: 1px solid var(--bd-e9ecef); } .keyrow:first-child { border-top: 1px solid var(--bd-e9ecef); }
+            .kline { display: flex; align-items: center; gap: 6px; min-height: 46px; }
+            .kmain { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 9px; background: none; color: var(--text); text-align: left; padding: 6px 2px; min-height: 44px; font-weight: 600; font-size: 15px; border-radius: 8px; }
+            .kname { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .keyrow.revoked .kname, .keyrow.expired .kname { color: var(--tx-868e96); font-weight: 500; }
+            .kdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--tx-2b8a3e); } .kdot.soon { background: var(--tx-e67700); } .kdot.expired { background: var(--tx-c92a2a); } .kdot.revoked { background: var(--tx-adb5bd); }
+            .kchip { flex: none; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; } .kchip.active { background: var(--bg-ebfbee); color: var(--tx-2b8a3e); } .kchip.soon { background: var(--bg-fff4e6); color: var(--tx-d9480f); } .kchip.expired { background: var(--bg-fff5f5); color: var(--tx-c92a2a); } .kchip.revoked { background: var(--bg-e9ecef); color: var(--tx-6c757d); }
+            .kact { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; width: auto; min-height: 40px; padding: 0 8px; border-radius: 10px; background: var(--bg-e9ecef); color: var(--tx-495057); font-size: 12px; font-weight: 700; } .kact.k-rotate { color: var(--tx-1864ab); }
+            .kact.armed { background: var(--bg-dc3545); color: var(--tx-fff); }
+            .kdetail { display: none; padding: 0 2px 10px 21px; line-height: 1.5; } .keyrow.open .kdetail { display: block; } .keyrow.open .kmain { background: var(--bg-f1f3f5); }
+            .kprefix { font-family: var(--mono); }
             .chart { display: block; }
             .chart .g-axis { stroke: var(--bd-adb5bd); } .chart .g-grid { stroke: var(--bd-dee2e6); } .chart .g-grid2 { stroke: var(--bd-e9ecef); } .chart .g-lbl { fill: var(--tx-6c757d); } .chart .g-gap { fill: var(--tx-adb5bd); }
 
@@ -484,9 +518,9 @@
         </div>
 
         <div class="nav">
-            <button id="navSummary" onclick="showView('summary')">Summary</button>
-            <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
-            <button id="navDevice" class="active" onclick="showView('device')">Device</button>
+            <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
+            <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
+            <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
         </div>
 
         <div id="summaryView" style="display:none">
@@ -508,14 +542,16 @@
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
             <div id="mapCard" class="card" style="display:none">
                 <div class="sum-label">Where you have dived</div>
+                <div id="mapKinds" class="kindseg" role="tablist" aria-label="Show on the map"></div>
                 <div id="sumMap" class="mapbox" role="region" aria-label="Map of the places you have dived"></div>
+                <div id="mapLegend" class="maplegend" aria-hidden="true"><span><i class="dot kind-scuba-dot"></i>Scuba</span><span><i class="dot kind-freedive-dot"></i>Freedive</span><span><i class="dot kind-both-dot"></i>Both</span></div>
                 <div id="mapMsg" class="muted"></div>
                 <div id="mapUnplaced"></div>
                 <details class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
             </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
-                    <div class="sum-label">Last dive</div>
+                    <div class="sum-label">Last dive <span id="sumLastKind" class="kindchip"></span></div>
                     <div id="sumLastDate" class="sum-big">&ndash;</div>
                     <div id="sumLastSub" class="muted"></div>
                 </div>
@@ -523,6 +559,7 @@
                     <div class="sum-label">Total dive time</div>
                     <div id="sumHours" class="sum-big">&ndash;</div>
                     <div id="sumCount" class="muted"></div>
+                    <div id="sumKinds" class="kinds"></div>
                 </div>
             </div>
         </div>
@@ -1080,6 +1117,74 @@
                 </div>
             </details>
 
+            <details class="card acc" data-sec="api">
+                <summary>API access <span id="apiBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Let another tool (a dashboard, a script, a spreadsheet) <b>read</b> your dive log. A key can only read dives: it cannot change or delete anything and it cannot open this app.</p>
+
+                    <div class="subcard" id="apiDocs" style="margin-top:0">
+                        <h4>How to use it</h4>
+                        <div class="muted" style="margin-bottom:4px">Base address</div>
+                        <div class="apiline"><code id="apiBase"></code><button id="apiCopyBase" class="btn-set" type="button">Copy</button></div>
+                        <div class="muted" style="margin:10px 0 4px">Send your key in a header (never in the web address)</div>
+                        <div class="apiline"><code>Authorization: Bearer dm_&hellip;</code></div>
+                        <div class="muted" style="margin:10px 0 4px">Endpoints (read only, GET)</div>
+                        <table class="apitable">
+                            <tr><td><code>/ping</code></td><td>Check that your key works.</td></tr>
+                            <tr><td><code>/summary</code></td><td>Number of dives and dive time per computer, scuba and freedive.</td></tr>
+                            <tr><td><code>/dives</code></td><td>Your dives, newest first, 100 at a time.</td></tr>
+                            <tr><td><code>/dives/{id}</code></td><td>One dive with its depth samples.</td></tr>
+                        </table>
+                        <details class="apimore"><summary>Options, example and notes</summary>
+                            <div class="muted" style="margin:8px 0 4px">Options for <code>/dives</code></div>
+                            <table class="apitable">
+                                <tr><td><code>limit</code></td><td>1 to 500 (default 100; at most 10 with <code>include</code>).</td></tr>
+                                <tr><td><code>cursor</code></td><td>The <code>nextCursor</code> of the previous page: asks for the next page.</td></tr>
+                                <tr><td><code>order</code></td><td><code>desc</code> (default) or <code>asc</code>.</td></tr>
+                                <tr><td><code>from</code>, <code>to</code></td><td>Days, like <code>2025-03-14</code>, both included.</td></tr>
+                                <tr><td><code>device</code></td><td><code>cosmiq</code> or <code>peregrine</code>.</td></tr>
+                                <tr><td><code>kind</code></td><td><code>scuba</code> (includes gauge mode) or <code>freedive</code>.</td></tr>
+                                <tr><td><code>location</code></td><td>A place name, any capital letters.</td></tr>
+                                <tr><td><code>uploadedSince</code></td><td>Only dives added after this time, like <code>2025-04-01T10:00:00Z</code>: to fetch just what is new.</td></tr>
+                                <tr><td><code>include</code></td><td><code>samples</code> adds the depth profile; <code>raw</code> also the device bytes (Cosmiq+).</td></tr>
+                            </table>
+                            <div class="muted" style="margin:10px 0 4px">Example</div>
+                            <div class="apiline"><pre id="apiCurl"></pre><button id="apiCopyCurl" class="btn-set" type="button">Copy</button></div>
+                            <pre id="apiExample" class="apiexample"></pre>
+                            <ul class="help" style="margin-top:8px">
+                                <li>Depth is in metres, temperature in &deg;C, times in seconds. <code>startedAt</code> is the dive computer's own clock (no time zone).</li>
+                                <li>A dive recorded by both computers appears once per computer (see <code>device</code>); the Summary in the app counts it once.</li>
+                                <li>A Cosmiq+ dive has <code>samples</code> only when its stored depth profile really belongs to it (<code>profileStatus</code>: <code>complete</code>, <code>partial</code> or <code>unavailable</code>).</li>
+                                <li><code>position</code> is where you put the place on the map, or <code>null</code>.</li>
+                                <li>Errors come as <code>{"error": "code", "message": "..."}</code> with status 400, 401, 404 or 405. Please keep it to a few requests per second.</li>
+                            </ul>
+                        </details>
+                    </div>
+
+                    <div id="apiNew" class="keybox" style="display:none" role="alert">
+                        <div id="apiNewTitle" class="kb-title"></div>
+                        <code id="apiKeyText" tabindex="0"></code>
+                        <div class="row wrap" style="margin:8px 0 0"><button id="apiCopy" class="btn-set" type="button">Copy key</button><button id="apiHide" class="btn-set" type="button" style="background:var(--bg-6c757d)">I have saved it</button></div>
+                        <div class="kb-warn">Copy it now. For your safety the key is not stored and <b>cannot be shown again</b>. If you lose it, rotate the key to get a new one.</div>
+                    </div>
+
+                    <div class="subcard" id="apiForm">
+                        <h4>Generate a key</h4>
+                        <label class="label" for="apiDesc">What is it for?</label>
+                        <input id="apiDesc" class="fld" maxlength="60" placeholder="e.g. Home dashboard" autocomplete="off" />
+                        <label class="label" for="apiDays">Works for</label>
+                        <select id="apiDays" class="fld"><option value="7">7 days</option><option value="14">14 days</option><option value="30" selected>30 days</option><option value="0">Unlimited</option></select>
+                        <div id="apiUnlimitedWarn" class="muted" style="display:none;color:var(--tx-d9480f)">An unlimited key works until you revoke it. A key with a time limit is safer: rotate it when it runs out.</div>
+                        <button id="apiGen" class="btn-set" type="button" style="margin-top:8px">Generate key</button>
+                    </div>
+
+                    <div class="apihead"><b>Your keys</b><span id="apiCount" class="muted"></span></div>
+                    <div id="apiList"></div>
+                    <div id="apiMsg" class="msg" role="status"></div>
+                    <p class="muted" style="margin:8px 0 0">Tap a key for details. <b>&#8635; Rotate</b>: new secret and a fresh time limit, the old secret stops working at once. <b>&#8856; Revoke</b>: off for good. <b>Delete</b> removes it from the list. Each asks &ldquo;Sure?&rdquo; first.</p>
+                </div>
+            </details>
+
             <details class="card acc" data-sec="help">
                 <summary>Help / app version</summary>
                 <div class="acc-body">
@@ -1131,6 +1236,7 @@
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
         <script src="account-area.js"></script>
+        <script src="api-keys.js"></script>
 
         <script>
             const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -1813,6 +1919,7 @@
             window.addEventListener("load", () => {
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
                 PlacesUI.init();                                                             // map pins of the places you have dived
+                ApiKeys.init();                                                              // Account > API access
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });

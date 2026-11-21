@@ -19,8 +19,17 @@ const PlacesUI = (() => {
     t.on("tileload", () => { failed = 0; });
     t.addTo(m); return t;
   }
-  const pinIcon = (count) => L.divIcon({ className: "pin-wrap", iconSize: [32, 42], iconAnchor: [16, 40], popupAnchor: [0, -36],
-    html: `<svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true"><path d="M16 1C8 1 2 7 2 15c0 10 14 26 14 26s14-16 14-26C30 7 24 1 16 1z" fill="#e03131" stroke="#fff" stroke-width="2"/><circle cx="16" cy="15" r="8.5" fill="#fff"/><text x="16" y="19" font-size="${count > 99 ? 8 : count > 9 ? 10 : 12}" font-weight="700" text-anchor="middle" fill="#c92a2a" font-family="system-ui,sans-serif">${count}</text></svg>` });
+  const SC = "#228be6", FR = "#12b886";                                                  // scuba blue, freedive green
+  let kindFilter = (() => { try { const v = localStorage.getItem("mapKind"); return v === "scuba" || v === "freedive" ? v : "all"; } catch (e) { return "all"; } })(), pinSeq = 0;
+  /** The counts a pin shows under the current filter: [scuba, freedive]. */
+  const shownBy = (p) => (kindFilter === "all" ? [p.by.scuba.count, p.by.freedive.count] : kindFilter === "scuba" ? [p.by.scuba.count, 0] : [0, p.by.freedive.count]);
+  /** A pin is blue for scuba, green for freedive, and split blue / green when you did both there (the split only says "both", it is not to scale). */
+  function pinIcon(p) {
+    const [s, f] = shownBy(p), count = s + f, id = "pg" + ++pinSeq; let fill = s ? SC : FR, defs = "";
+    if (s && f) { const share = Math.min(0.75, Math.max(0.25, s / count)); defs = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="${share}" stop-color="${SC}"/><stop offset="${share}" stop-color="${FR}"/></linearGradient></defs>`; fill = `url(#${id})`; }
+    return L.divIcon({ className: "pin-wrap", iconSize: [32, 42], iconAnchor: [16, 40], popupAnchor: [0, -36],
+      html: `<svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true">${defs}<path d="M16 1C8 1 2 7 2 15c0 10 14 26 14 26s14-16 14-26C30 7 24 1 16 1z" fill="${fill}" stroke="#fff" stroke-width="2"/><circle cx="16" cy="15" r="8.5" fill="#fff"/><text x="16" y="19" font-size="${count > 99 ? 8 : count > 9 ? 10 : 12}" font-weight="700" text-anchor="middle" fill="#212529" font-family="system-ui,sans-serif">${count}</text></svg>` });
+  }
   const plainPin = () => L.divIcon({ className: "pin-wrap", iconSize: [32, 42], iconAnchor: [16, 40], html: '<svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true"><path d="M16 1C8 1 2 7 2 15c0 10 14 26 14 26s14-16 14-26C30 7 24 1 16 1z" fill="#1971c2" stroke="#fff" stroke-width="2"/><circle cx="16" cy="15" r="6" fill="#fff"/></svg>' });
   function newMap(el) {
     const m = L.map(el, { zoomControl: true, worldCopyJump: true, attributionControl: true }).setView([0, 20], 2);
@@ -32,30 +41,41 @@ const PlacesUI = (() => {
   function popup(p) {
     const box = document.createElement("div"); box.className = "pin-pop";
     const b = document.createElement("b"); b.textContent = p.name; box.appendChild(b);
-    const d = document.createElement("div"); d.textContent = `${p.count} dive${p.count === 1 ? "" : "s"} · ${p.first.slice(0, 4) === p.last.slice(0, 4) && p.first.slice(5, 7) === p.last.slice(5, 7) ? fmtDay(p.last) : fmtDay(p.first) + " – " + fmtDay(p.last)}`; box.appendChild(d);
+    for (const k of U.KINDS) {
+      const x = p.by[k]; if (!x.count || (kindFilter !== "all" && kindFilter !== k)) continue;
+      const row = document.createElement("div"); row.className = "pin-kind"; const chip = document.createElement("span"); chip.className = "kindchip kind-" + k; chip.textContent = k === "scuba" ? "Scuba" : "Freedive"; row.appendChild(chip);
+      row.appendChild(document.createTextNode(` ${x.count} dive${x.count === 1 ? "" : "s"} \u00b7 ${U.durText(x.sec)}`)); box.appendChild(row);
+    }
+    const when = document.createElement("div"); when.className = "muted"; when.textContent = p.first.slice(0, 4) === p.last.slice(0, 4) && p.first.slice(5, 7) === p.last.slice(5, 7) ? fmtDay(p.last) : fmtDay(p.first) + " \u2013 " + fmtDay(p.last); box.appendChild(when);
     const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn-set"; btn.textContent = "Move pin"; btn.addEventListener("click", () => { map.closePopup(); open([p.name]); }); box.appendChild(btn);
     return box;
   }
   function draw() {
     if (!map) return;
     layer.clearLayers();
-    for (const p of pins) L.marker([p.lat, p.lon], { icon: pinIcon(p.count), title: `${p.name}: ${p.count} dive${p.count === 1 ? "" : "s"}`, keyboard: true }).bindPopup(() => popup(p)).addTo(layer);
-    const s = pins.map((p) => `${p.key}:${p.lat}:${p.lon}`).join("|");
+    for (const p of pins) L.marker([p.lat, p.lon], { icon: pinIcon(p), title: `${p.name}: ` + U.KINDS.filter((k) => p.by[k].count && (kindFilter === "all" || kindFilter === k)).map((k) => `${p.by[k].count} ${k}`).join(", "), keyboard: true }).bindPopup(() => popup(p)).addTo(layer);
+    const s = kindFilter + "|" + pins.map((p) => `${p.key}:${p.lat}:${p.lon}`).join("|");
     if (s !== sig) {                                                                   // only re-frame when the pins changed, not on every refresh
       sig = s;
-      if (pins.length > 1) map.fitBounds(L.latLngBounds(pins.map((p) => [p.lat, p.lon])), { padding: [34, 34], maxZoom: 9 });
+      if (pins.length > 1) map.fitBounds(L.latLngBounds(pins.map((p) => [p.lat, p.lon])), { paddingTopLeft: [64, 50], paddingBottomRight: [40, 56], maxZoom: 9 });           // room for the zoom buttons and the map credit
       else if (pins.length === 1) map.setView([pins[0].lat, pins[0].lon], 8); else map.setView([0, 20], 2);
     }
   }
   /** Redraw from the dives. Called after every render of the dive log. */
   function render(recs) {
     const card = $("mapCard"); if (!card) return;
-    stats = U.placeStats(recs); const split = U.pinsAndMissing(stats, P.coords()); pins = split.pins; missing = split.missing;
+    stats = U.placeStats(recs); const split = U.pinsAndMissing(stats, P.coords()); missing = split.missing;      // every place: the list and "still to place" never depend on the filter
+    const hasFree = U.byKind(recs).freedive.count > 0; if (!hasFree) kindFilter = "all";
+    const shownStats = kindFilter === "all" ? stats : U.placeStats(recs, kindFilter); pins = U.pinsAndMissing(shownStats, P.coords()).pins;
+    const nPlaces = (k) => stats.filter((e) => e.by[k].count > 0).length, kt = $("mapKinds");
+    kt.style.display = hasFree ? "" : "none"; $("mapLegend").style.display = hasFree ? "" : "none";
+    if (hasFree) kt.innerHTML = [["all", "All", stats.length], ["scuba", "Scuba", nPlaces("scuba")], ["freedive", "Freedive", nPlaces("freedive")]].map(([k, l, n]) => `<button type="button" role="tab" aria-selected="${k === kindFilter}" class="${k === kindFilter ? "active" : ""}" data-kind="${k}">${l} <span class="muted">\u00b7 ${n}</span></button>`).join("");
     card.style.display = stats.length ? "" : "none";
     const banner = $("placeBanner");
     if (banner) { banner.style.display = missing.length ? "flex" : "none"; $("placeBannerText").textContent = `${missing.length} place${missing.length === 1 ? " is" : "s are"} not on the map yet`; }
     if (!stats.length) return;
-    $("mapMsg").textContent = `${stats.length} place${stats.length === 1 ? "" : "s"} · ${pins.length} on the map` + (missing.length ? ` · ${missing.length} still to place` : "");
+    const onMap = stats.length - missing.length;                                       // every place that has a position, whatever the filter shows
+    $("mapMsg").textContent = `${stats.length} place${stats.length === 1 ? "" : "s"} · ${onMap} on the map` + (missing.length ? ` · ${missing.length} still to place` : "") + (kindFilter !== "all" ? ` · showing ${kindFilter} only` : "");
     $("mapUnplaced").innerHTML = missing.length ? missing.map((m) => `<button type="button" class="chip" data-key="${esc(m.key)}">📍 ${esc(m.name)} <span class="muted">${m.count}</span> ›</button>`).join("") : "";
     $("placeList").innerHTML = stats.map((s) => { const has = !!P.get(s.name);
       return `<div class="place-row"><span><b>${esc(s.name)}</b> <span class="muted">${s.count} dive${s.count === 1 ? "" : "s"}</span></span><span class="row" style="margin:0;gap:6px"><button type="button" class="btn-set pl-set" data-key="${esc(s.key)}">${has ? "Move" : "Set on map"}</button>${has ? `<button type="button" class="btn-set pl-del" data-key="${esc(s.key)}" style="background:var(--bg-6c757d)">Remove pin</button>` : ""}</span></div>`; }).join("");
@@ -173,6 +193,7 @@ const PlacesUI = (() => {
   let wired = false;
   function wire() {
     if (wired || !$("mapCard")) return; wired = true; sWire();
+    $("mapKinds").addEventListener("click", (e) => { const b = e.target.closest("button[data-kind]"); if (!b) return; kindFilter = b.dataset.kind; try { localStorage.setItem("mapKind", kindFilter); } catch (err) {} render(recsNow); });
     $("ppGo").addEventListener("click", search); $("ppQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
     $("ppResults").addEventListener("click", (e) => { const b = e.target.closest(".res"); if (b && $("ppResults")._rows) choose($("ppResults")._rows[+b.dataset.i]); });
     $("ppSkipAll").addEventListener("click", close);

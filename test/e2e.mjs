@@ -10,7 +10,7 @@ import { makeDb, dive as cloudDive, zip as makeZip } from "./cloud-fixture.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
-const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const types = { ".woff2": "font/woff2", ".txt": "text/plain", ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
   if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -383,7 +383,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
     await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
     await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
-    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "Help / app version"]);
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "API access", "Help / app version"]);
     await page.locator("details.acc[data-sec=help] > summary").click();
     assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
     assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
@@ -983,5 +983,135 @@ if (process.env.REAL_DB) {
     }
     assert.deepEqual(errs, [], "page errors"); console.log("PASS light/dark switch");
   } catch (e) { failed++; console.log("FAIL light/dark switch\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
+}
+// ---- scenario: tab icons and the Geist / Geist Mono fonts ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = [], bad = []; page.on("pageerror", (e) => errs.push(e.message)); page.on("response", (r) => { if (r.status() >= 400) bad.push(r.status() + " " + r.url()); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
+  const mk = (when, n) => ({ fingerprint: (0x777000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: "Komodo", deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2)] } }));
+  await page.goto(base);
+  try {
+    await page.waitForFunction(() => /Dive log \(2\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
+    // 1. every tab has its icon above its label, painted in the label's colour (a one-colour mask), at the same size
+    const tabs = await page.evaluate(() => ["navSummary", "navLog", "navDevice"].map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
+      return { id, icon: (ci.webkitMaskImage || ci.maskImage), w: Math.round(r.width), h: Math.round(r.height), above: r.bottom <= s.top + 1, same: ci.backgroundColor === cb.color, text: b.innerText.trim(), aria: i.getAttribute("aria-hidden") }; }));
+    assert.deepEqual(tabs.map((t) => t.id), ["navSummary", "navLog", "navDevice"]); assert.match(tabs[0].icon, /icon-summary\.png/); assert.match(tabs[1].icon, /icon-log\.png/); assert.match(tabs[2].icon, /icon-device\.png/);
+    for (const t of tabs) { assert.equal(t.w, 30); assert.equal(t.h, 30); assert.ok(t.above, t.id + ": icon above the label"); assert.ok(t.same, t.id + ": icon has the label colour"); assert.equal(t.aria, "true", "decorative icon"); }
+    assert.deepEqual(tabs.map((t) => t.text), ["Summary", "Dive log (2)", "Device"], "labels unchanged, the count is still there");
+    await page.click("#navLog"); await page.waitForFunction(() => document.getElementById("navLog").classList.contains("active")); const active = await page.evaluate(() => { const b = document.getElementById("navLog"); return getComputedStyle(b.querySelector(".ti")).backgroundColor === getComputedStyle(b).color && getComputedStyle(b).color === "rgb(255, 255, 255)"; }); assert.ok(active, "the active tab's icon is white like its label");
+    // 2. the icon files load (not a broken mask), and the tab row still fits three tabs on a phone
+    for (const f of ["icon-summary", "icon-log", "icon-device"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
+    const row = await page.evaluate(() => ({ nav: document.querySelector(".nav").scrollWidth <= document.querySelector(".nav").clientWidth + 1, h: Math.round(document.getElementById("navSummary").getBoundingClientRect().height) })); assert.ok(row.nav, "no sideways scrolling in the tab row"); assert.ok(row.h >= 60 && row.h <= 76, "tab height " + row.h);
+    // 3. the fonts: Geist for text (buttons and inputs too), Geist Mono for numbers; loaded from this app
+    await page.locator("details.dive").first().locator("summary").click().catch(() => {}); await page.waitForTimeout(300);
+    const f = await page.evaluate(async () => { await document.fonts.ready; const fam = (s) => getComputedStyle(document.querySelector(s)).fontFamily.split(",")[0].replace(/"/g, ""); return { body: fam("body"), button: fam("#connectBtn"), input: fam("input"), mono: fam(".dive-num"), meta: fam(".dive-meta"), sans: document.fonts.check("16px Geist"), monoOk: document.fonts.check("16px 'Geist Mono'"), loaded: [...document.fonts].filter((x) => x.status === "loaded").map((x) => x.family.replace(/"/g, "")).sort() }; });
+    assert.equal(f.body, "Geist"); assert.equal(f.button, "Geist", "buttons use the page font"); assert.equal(f.input, "Geist", "inputs use the page font"); assert.equal(f.mono, "Geist Mono", "dive numbers in the mono font"); assert.equal(f.meta, "Geist Mono"); assert.ok(f.sans && f.monoOk, "both fonts are loaded"); assert.deepEqual(f.loaded, ["Geist", "Geist Mono"]);
+    assert.deepEqual(bad.filter((u) => !/photon|nominatim|tile\.openstreetmap|favicon/.test(u)), [], "no failed requests (fonts and icons are found)"); assert.deepEqual(errs, [], "page errors"); console.log("PASS tab icons and fonts");
+  } catch (e) { failed++; console.log("FAIL tab icons and fonts\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-tabs.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: scuba and freedive are told apart in the Summary totals and on the map ----
+{
+  const run = async (dives, pre) => {
+    const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); if (!sessionStorage.getItem("__fresh")) { localStorage.removeItem("mapKind"); sessionStorage.setItem("__fresh", "1"); } } catch (e) {} }); if (pre) await ctx.addInitScript(pre);        // start clean once: a reload must keep what the page saved
+    const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+    await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+    await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+    await page.route("**/api/places", (r) => r.fulfill({ json: { places: [{ name: "Tulamben", lat: -8.29, lon: 115.59 }, { name: "Bunaken", lat: 1.6, lon: 124.76 }, { name: "Raja Ampat", lat: -0.55, lon: 130.5 }] } }));
+    await page.route("**/api/dives", (r) => r.fulfill({ json: { dives } })); await page.goto(base); await page.waitForSelector("#sumMap .leaflet-marker-icon", { timeout: 10000 }); return { ctx, page, errs };
+  };
+  const mk = (n, when, loc, mode, dur) => ({ fingerprint: (0x555000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode, durationSec: dur, maxDepthM: 15, o2Percent: null, headerHex: "", profileHex: "", location: loc, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 12, 28]] }) });
+  const dives = [mk(1, "2025-03-14T09:00:00", "Tulamben", "scuba", 3000), mk(2, "2025-03-14T13:00:00", "Tulamben", "scuba", 3300), mk(3, "2025-03-15T09:00:00", "tulamben", "gauge", 2700),
+    mk(4, "2025-05-03T09:00:00", "Bunaken", "freedive", 45), mk(5, "2025-05-03T09:10:00", "Bunaken", "freedive", 70), mk(6, "2025-05-03T14:00:00", "Bunaken", "scuba", 3000), mk(7, "2025-11-04T08:00:00", "Raja Ampat", "freedive", 90), mk(8, "2025-12-10T08:00:00", "", "freedive", 193)];
+  try {
+    let { ctx, page, errs } = await run(dives);
+    // 1. totals: scuba (incl. gauge) and freedive, each with its time and number of dives; they add up to the total
+    const kinds = await page.evaluate(() => [...document.querySelectorAll("#sumKinds .kindrow")].map((r) => ({ chip: r.querySelector(".kindchip").textContent, cls: r.querySelector(".kindchip").className, time: r.querySelector("b").textContent, n: r.querySelector(".muted").textContent })));
+    assert.deepEqual(kinds.map((k) => [k.chip, k.time, k.n]), [["Scuba", "3 h 20 min", "4 dives"], ["Freedive", "6 min 38 s", "4 dives"]], "gauge counts as scuba; freedive time in minutes and seconds: " + JSON.stringify(kinds));
+    assert.match(kinds[0].cls, /kind-scuba/); assert.match(kinds[1].cls, /kind-freedive/); assert.equal(await page.locator("#sumHours").innerText(), "3 h 27 min", "total = scuba + freedive (12000 s + 398 s)"); assert.match(await page.locator("#sumCount").innerText(), /across 8 dives/);
+    assert.equal((await page.locator("#sumLastKind").textContent()).toLowerCase(), "freedive", "the last dive is a freedive"); assert.match(await page.locator("#sumLastKind").getAttribute("class"), /kind-freedive/);
+    // 2. the map: a filter with the number of places per kind, pins coloured by kind, the count on a pin follows the filter
+    assert.deepEqual((await page.locator("#mapKinds button").allInnerTexts()).map((t) => t.replace(/\s+/g, " ")), ["All · 3", "Scuba · 2", "Freedive · 2"]); assert.ok(await page.locator("#mapLegend").isVisible());
+    const pins = () => page.evaluate(() => [...document.querySelectorAll("#sumMap .leaflet-marker-icon")].map((m) => ({ title: m.title, n: m.querySelector("text").textContent, fill: m.querySelector("path").getAttribute("fill").startsWith("url(") ? "split" : m.querySelector("path").getAttribute("fill") })).sort((a, b) => a.title.localeCompare(b.title)));
+    // (the place shows the newest spelling used: "tulamben")
+    assert.deepEqual(await pins(), [{ title: "Bunaken: 1 scuba, 2 freedive", n: "3", fill: "split" }, { title: "Raja Ampat: 1 freedive", n: "1", fill: "#12b886" }, { title: "tulamben: 3 scuba", n: "3", fill: "#228be6" }], "scuba blue, freedive green, both = split: " + JSON.stringify(await pins()));
+    await page.locator("#sumMap .leaflet-marker-icon[title^=Bunaken]").click(); await page.waitForSelector("#sumMap .pin-pop"); const pop = await page.locator("#sumMap .pin-pop").innerText(); assert.match(pop, /Bunaken[\s\S]*SCUBA\s+1 dive . 50 min[\s\S]*FREEDIVE\s+2 dives . 1 min 55 s[\s\S]*May 2025/i, pop);
+    await page.locator('#mapKinds button[data-kind="freedive"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "2", "#12b886"], ["Raja Ampat", "1", "#12b886"]], "only freedive places, with their freedive count");
+    assert.match(await page.locator("#mapMsg").innerText(), /3 places . 3 on the map . showing freedive only/);
+    await page.locator('#mapKinds button[data-kind="scuba"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "1", "#228be6"], ["tulamben", "3", "#228be6"]]);
+    await page.locator("#mapCard details summary").click(); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    // 3. the filter is remembered; a reload keeps it
+    await page.reload(); await page.waitForSelector("#sumMap .leaflet-marker-icon"); assert.equal(await page.locator("#mapKinds button.active").getAttribute("data-kind"), "scuba", "remembered"); assert.equal(await page.evaluate(() => localStorage.getItem("mapKind")), "scuba");
+    assert.deepEqual(errs, [], "page errors"); await ctx.close();
+    // 4. nobody freediving: no filter, no legend, no freedive row - only the totals of scuba
+    ({ ctx, page, errs } = await run(dives.filter((d) => d.mode !== "freedive")));
+    assert.ok(!(await page.locator("#mapKinds").isVisible()), "no filter without freedives"); assert.ok(!(await page.locator("#mapLegend").isVisible())); assert.deepEqual(await page.locator("#sumKinds .kindrow").evaluateAll((r) => r.map((x) => x.querySelector(".kindchip").textContent)), ["Scuba"]);
+    assert.deepEqual(errs, []); await ctx.close();
+    // 5. a stored 'freedive' filter does not hide the map once there are no freedives left
+    ({ ctx, page, errs } = await run(dives.filter((d) => d.mode !== "freedive"), () => { try { localStorage.setItem("mapKind", "freedive"); } catch (e) {} })); assert.equal(await page.locator("#sumMap .leaflet-marker-icon").count(), 2, "pins still shown"); await ctx.close();
+    console.log("PASS scuba and freedive");
+  } catch (e) { failed++; console.log("FAIL scuba and freedive\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
+}
+// ---- scenario: Account > API access (generate, show once, copy, rotate, revoke, delete, endpoint information) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
+  const iso = (d) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 19) + "Z"; let seq = 0; const calls = [];
+  let keys = [{ id: "a".repeat(16), description: "Home dashboard", prefix: "dm_Qx7Lm2p", lifetimeDays: 30, createdAt: iso(-12), expiresAt: iso(18), lastUsedAt: iso(0), revokedAt: null, status: "active", rotatedFrom: null }];
+  const mkKey = (b) => ({ id: (++seq).toString(16).padStart(16, "0"), description: b.description, prefix: "dm_Ab3xK9m", lifetimeDays: b.days || null, createdAt: iso(0), expiresAt: b.days ? iso(b.days) : null, lastUsedAt: null, revokedAt: null, status: "active", rotatedFrom: null });
+  const SECRET = (n) => "dm_" + String(n).repeat(43).slice(0, 43);
+  await page.route("**/api/keys", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { keys, max: 10 } }); const b = JSON.parse(r.request().postData()); calls.push(["create", b]); if (keys.filter((k) => k.status === "active").length >= 10) return r.fulfill({ status: 409, json: { error: "You can have 10 active keys. Revoke one first." } }); const it = mkKey(b); keys = [it, ...keys]; return r.fulfill({ json: { key: SECRET(1), item: it } }); });
+  await page.route(/\/api\/keys\/[0-9a-f]{16}(\/(rotate|revoke))?$/, (r) => { const m = r.request().method(), u = new URL(r.request().url()).pathname.split("/"), id = u[3], act = u[4]; calls.push([act || "delete", id]);
+    if (act === "rotate") { const old = keys.find((k) => k.id === id); old.status = "revoked"; old.revokedAt = iso(0); const it = mkKey({ description: old.description, days: old.lifetimeDays }); keys = [it, ...keys]; return r.fulfill({ json: { key: SECRET(2), item: it } }); }
+    if (act === "revoke") { const k = keys.find((x) => x.id === id); k.status = "revoked"; k.revokedAt = iso(0); return r.fulfill({ json: { ok: true } }); }
+    keys = keys.filter((k) => k.id !== id); return r.fulfill({ json: { ok: true } }); });
+  await page.goto(base);
+  try {
+    await page.waitForFunction(() => /1 key/.test(document.getElementById("apiBadge").textContent), null, { timeout: 8000 });
+    await page.click("#acctBtn"); const sec = page.locator('details.acc[data-sec="api"]'); await sec.locator("> summary").click();
+    // 1. the endpoint information: this site's own address, the header, the endpoints, the options, an example
+    assert.equal(await page.locator("#apiBase").innerText(), base.replace(/\/$/, "") + "/api/v1", "the base address of this very site"); assert.match(await page.locator("#apiDocs").innerText(), /Authorization: Bearer dm_/); assert.match(await page.locator("#apiDocs").innerText(), /never in the web address/);
+    const eps = await page.locator("#apiDocs table.apitable").first().locator("tr").evaluateAll((rows) => rows.map((r) => r.querySelector("td").textContent)); assert.deepEqual(eps, ["/ping", "/summary", "/dives", "/dives/{id}"]);
+    await page.locator("#apiDocs .apimore > summary").click(); const opts = await page.locator("#apiDocs .apimore table.apitable td:first-child").allInnerTexts(); for (const o of ["limit", "cursor", "order", "from, to", "device", "kind", "location", "uploadedSince", "include"]) assert.ok(opts.includes(o), "option " + o + " documented: " + opts.join("|"));
+    assert.match(await page.locator("#apiCurl").innerText(), new RegExp(`curl -H "Authorization: Bearer dm_YOUR_KEY"[\\s\\S]*${base.replace(/[.\\/]/g, "\\$&").replace(/\/$/, "")}/api/v1/dives`)); const ex = JSON.parse(await page.locator("#apiExample").innerText()); assert.deepEqual(Object.keys(ex.dives[0]).slice(0, 5), ["id", "device", "kind", "mode", "startedAt"]); assert.ok("nextCursor" in ex);
+    await page.click("#apiCopyBase"); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), base.replace(/\/$/, "") + "/api/v1", "copies the address");
+    // 2. the form: the four lifetimes, 30 days preselected, a warning for unlimited, a description is required
+    assert.deepEqual(await page.locator("#apiDays option").evaluateAll((o) => o.map((x) => [x.value, x.textContent])), [["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["0", "Unlimited"]]); assert.equal(await page.inputValue("#apiDays"), "30");
+    assert.ok(!(await page.locator("#apiUnlimitedWarn").isVisible())); await page.selectOption("#apiDays", "0"); assert.match(await page.locator("#apiUnlimitedWarn").innerText(), /until you revoke it/); await page.selectOption("#apiDays", "14");
+    await page.click("#apiGen"); assert.match(await page.locator("#apiMsg").innerText(), /Describe what the key is for/); assert.equal(calls.length, 0, "nothing was sent without a description");
+    // 3. generate: the key is shown once, with a warning; copy works; the list gets the new key with its description and lifetime
+    await page.fill("#apiDesc", "  Garmin watch sync  "); await page.click("#apiGen"); await page.waitForSelector("#apiNew", { state: "visible" });
+    assert.deepEqual(calls.at(-1), ["create", { description: "Garmin watch sync", days: 14 }]); assert.equal(await page.locator("#apiKeyText").innerText(), SECRET(1)); assert.match(await page.locator("#apiNew").innerText(), /cannot be shown again/); assert.equal(await page.inputValue("#apiDesc"), "", "the form is cleared");
+    await page.click("#apiCopy"); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), SECRET(1), "the key is copied"); assert.equal(await page.locator("#apiCopy").innerText(), "Copied ✓");
+    const row0 = page.locator("#apiList .keyrow").first(); assert.match(await row0.innerText(), /Garmin watch sync[\s\S]*14 d/, "one short line: the name and how long it has left"); assert.ok(!(await row0.locator(".kdetail").isVisible()), "details are closed");
+    await row0.locator(".kmain").click(); assert.match(await row0.locator(".kdetail").innerText(), /dm_Ab3xK9m.*Active . expires .* \(in 14 days\)[\s\S]*Made .*never used/); assert.equal(await row0.locator(".kmain").getAttribute("aria-expanded"), "true"); await row0.locator(".kmain").click(); assert.ok(!(await row0.locator(".kdetail").isVisible()), "tap again to close");
+    assert.ok(!(await page.locator("#apiList").innerText()).includes(SECRET(1)), "the list never shows the key");
+    const line = await row0.evaluate((r) => { const b = (s) => r.querySelector(s).getBoundingClientRect(), main = b(".kmain"), name = b(".kname"), chip = b(".kchip"), rot = b(".k-rotate"), rev = b(".k-revoke"), row = r.getBoundingClientRect(), c = (x) => x.top + x.height / 2; return { h: Math.round(row.height), aligned: [name, chip, rot, rev].every((x) => Math.abs(c(x) - c(main)) < 4), order: name.left < chip.left && chip.right <= rot.left + 1 && rot.right <= rev.left + 1, inside: rev.right <= row.right + 1 }; });
+    assert.ok(line.h <= 56, "one line per key: " + line.h + " px"); assert.ok(line.aligned && line.order && line.inside, "name, status and buttons side by side: " + JSON.stringify(line));
+    assert.deepEqual(await row0.locator(".kact").evaluateAll((b) => b.map((x) => x.getAttribute("aria-label"))), ["Rotate: Garmin watch sync", "Revoke: Garmin watch sync"], "icon buttons keep their names for screen readers");
+    await page.click("#apiHide"); assert.ok(!(await page.locator("#apiNew").isVisible())); assert.equal(await page.locator("#apiKeyText").innerText(), "", "gone from the page, not just hidden"); assert.ok(!(await page.content()).includes(SECRET(1)), "the key is nowhere in the page any more");
+    // 4. rotate: needs a second tap; shows the new key once; the old one is listed as revoked
+    const first = page.locator("#apiList .keyrow").first(); await first.locator(".k-rotate").click(); assert.equal(await first.locator(".k-rotate").innerText(), "Sure?"); assert.ok(await first.locator(".k-rotate.armed").count(), "the button turns red"); assert.equal(calls.filter((c) => c[0] === "rotate").length, 0, "one tap does nothing");
+    await first.locator(".k-revoke").click(); assert.equal(await first.locator(".k-rotate").innerText(), "", "arming another button disarms the first (it shows its icon again)"); assert.ok(await first.locator(".k-rotate svg").count()); assert.equal(await first.locator(".k-revoke").innerText(), "Sure?"); await first.locator(".k-rotate").click();
+    await first.locator(".k-rotate").click(); await page.waitForSelector("#apiNew", { state: "visible" }); assert.equal(await page.locator("#apiKeyText").innerText(), SECRET(2)); assert.match(await page.locator("#apiNewTitle").innerText(), /Rotated: Garmin watch sync.*old key stopped working/);
+    assert.equal(await page.locator("#apiList .keyrow.revoked").count(), 1, "the old key is revoked"); assert.match(await page.locator("#apiList .keyrow.revoked").innerText(), /Revoked/); assert.equal(await page.locator("#apiList .keyrow.revoked .k-rotate").count(), 0, "a revoked key cannot be rotated"); assert.equal(await page.locator("#apiList .keyrow.revoked .k-delete").count(), 1);
+    // 5. revoke (two taps) and delete (two taps)
+    await page.click("#apiHide"); const home = page.locator("#apiList .keyrow", { hasText: "Home dashboard" }); await home.locator(".k-revoke").click(); await home.locator(".k-revoke").click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow.revoked").length === 2); assert.ok(calls.some((c) => c[0] === "revoke"));
+    const rv = page.locator("#apiList .keyrow.revoked").first(); await rv.locator(".k-delete").click(); await rv.locator(".k-delete").click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow").length === 2); assert.ok(calls.some((c) => c[0] === "delete"));
+    assert.equal(await page.locator("#apiCount").innerText(), "1 of 10 active keys"); assert.equal(await page.locator("#apiBadge").innerText(), "1 key");
+    // 6. a server refusal (10 keys) is explained; a reload shows no key
+    keys = Array.from({ length: 10 }, (_, i) => ({ ...mkKey({ description: "k" + i, days: 30 }) })); await page.reload(); await page.click("#acctBtn"); await page.locator('details.acc[data-sec="api"] > summary').click(); await page.waitForFunction(() => document.querySelectorAll("#apiList .keyrow").length === 10);
+    assert.ok((await page.locator("#apiList").boundingBox()).height < 10 * 56, "ten keys fit in about ten lines: " + (await page.locator("#apiList").boundingBox()).height);
+    await page.fill("#apiDesc", "one too many"); await page.click("#apiGen"); await page.waitForFunction(() => /10 active keys/.test(document.getElementById("apiMsg").textContent)); assert.ok(!(await page.locator("#apiNew").isVisible()), "no key box after a refusal");
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS api access");
+  } catch (e) { failed++; console.log("FAIL api access\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-api.png", fullPage: true }); }
+  await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

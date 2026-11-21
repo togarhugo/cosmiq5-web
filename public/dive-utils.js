@@ -121,23 +121,41 @@
   /** The summary page: last dive date and total dive time. */
   function summarize(recs, today) {
     const all = recs; recs = uniqueDives(recs);
-    if (!recs.length) return { count: 0, totalSec: 0, last: null, duplicates: 0 };
+    if (!recs.length) return { count: 0, totalSec: 0, last: null, duplicates: 0, byKind: byKind([]) };
     const last = recs.slice().sort(byStartDesc)[0];
     return { count: recs.length, totalSec: recs.reduce((a, r) => a + (r.durationSec || 0), 0),
-      duplicates: all.length - recs.length,
-      last: { date: dateKey(last), startedAt: last.startedAt, location: last.location || "", daysAgo: daysBetween(dateKey(last), today || new Date()) } };
+      duplicates: all.length - recs.length, byKind: byKind(all),
+      last: { kind: kindOf(last), date: dateKey(last), startedAt: last.startedAt, location: last.location || "", daysAgo: daysBetween(dateKey(last), today || new Date()) } };
   }
 
+  // ---- scuba or freedive ----
+  const KINDS = ["scuba", "freedive"];
+  /** A dive with a tank (scuba, or the computer in gauge mode) or a breath-hold dive. */
+  const kindOf = (r) => (r.mode === "freedive" ? "freedive" : "scuba");
+  const blank = () => ({ count: 0, sec: 0 });
+  /** Dives and dive time per kind, each dive counted once: {scuba: {count, sec}, freedive: {count, sec}}. */
+  function byKind(recs) { const o = { scuba: blank(), freedive: blank() }; for (const r of uniqueDives(recs)) { const k = o[kindOf(r)]; k.count++; k.sec += r.durationSec || 0; } return o; }
+  /** Short duration text for a total of seconds: "45 s", "3 min 13 s", "42 min", "3 h 20 min". */
+  function durText(sec) { sec = Math.round(sec || 0); if (sec < 60) return sec + " s"; if (sec < 600) return `${Math.floor(sec / 60)} min ${sec % 60} s`; if (sec < 3600) return Math.round(sec / 60) + " min"; return hoursText(sec); }
+
   // ---- places (the dive locations, for the map) ----
-  /** Every place you have dived (free-text location, case-insensitive): [{key, name, count, first, last}], most dives first. Each dive counts once. */
-  function placeStats(recs) {
+  /**
+   * Every place you have dived (free-text location, case-insensitive), most dives first. Each dive counts once.
+   * [{key, name, count, first, last, by: {scuba: {count, sec, first, last}, freedive: {...}}}]. With `kind` ("scuba" | "freedive") only the places
+   * where you did that kind remain, and count / first / last describe that kind only (`by` always has both).
+   */
+  function placeStats(recs, kind) {
     const m = new Map();
     for (const r of uniqueDives(recs).sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
       if (!r.location) continue;
-      const key = r.location.trim().toLowerCase(), e = m.get(key) || { key, name: r.location, count: 0, first: r.startedAt, last: r.startedAt };
+      const key = r.location.trim().toLowerCase(), k = kindOf(r);
+      const e = m.get(key) || { key, name: r.location, count: 0, first: r.startedAt, last: r.startedAt, by: { scuba: { count: 0, sec: 0 }, freedive: { count: 0, sec: 0 } } };
+      const b = e.by[k]; b.count++; b.sec += r.durationSec || 0; if (!b.first) b.first = r.startedAt; b.last = r.startedAt;
       e.count++; e.last = r.startedAt; e.name = r.location; m.set(key, e);                  // the newest spelling wins
     }
-    return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    let list = [...m.values()];
+    if (kind) list = list.filter((e) => e.by[kind].count > 0).map((e) => ({ ...e, count: e.by[kind].count, first: e.by[kind].first, last: e.by[kind].last }));
+    return list.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }
   /** Split the places into those with a position (pins) and those still to be put on the map. `coords`: key -> {lat, lon}. */
   function pinsAndMissing(stats, coords) {
@@ -201,6 +219,6 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  const api = { KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

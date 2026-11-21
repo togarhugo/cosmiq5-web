@@ -2,7 +2,7 @@
 
 A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the official app has been discontinued: change its settings, download and keep your dive log, and track your diving, all from a phone or laptop browser over Bluetooth.
 
-> **Current version: 0.14.0** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
+> **Current version: 0.17.0** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
 
 ## What it does
 
@@ -13,6 +13,7 @@ A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the offic
 | **Map** | Every place you have dived is a **pin on a map** in the Summary (with the number of dives). Put a place on the map by **searching** for it or tapping / dragging the pin. Maps and search come from OpenStreetMap. |
 | **Device settings** | Backlight, units, screen timeout, clock, gas mix, PPO₂, alarms, safety factor, freedive alarms. Every change is **read back from the dive computer and confirmed**. |
 | **Account** | Profile picture and name, change password, **dive certification files**, **DAN insurance** details and documents, regulator tracker, help and app version. |
+| **API** | Make **API keys** in the Account area (7, 14, 30 days or unlimited; rotate and revoke) and let other tools read your dive log through a small read-only API: `/api/v1/dives`, `/dives/{id}`, `/summary`. The menu shows the endpoints. Keys are shown once and stored only as a hash. |
 | **Sign-in** | Google, or email + password followed by a 6-digit authenticator code. |
 
 The clock of the dive computer is set to your phone's time every time you connect.

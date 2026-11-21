@@ -2,6 +2,7 @@ import ASSETS from "./assets.generated.js";
 import { configError, currentUser, handleAuth } from "./auth.js";
 import { handleAccount, handlePasswordAuth } from "./password.js";
 import { handlePlaces } from "./places.js";
+import { handleApiV1, handleKeys } from "./apikeys.js";
 import { handleAccountData } from "./account-data.js";
 import { VERSION } from "./version.js";
 
@@ -41,9 +42,10 @@ function serveAsset(request, pathname) {
   if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, 405);
   const a = ASSETS[pathname === "/" ? "/index.html" : pathname];
   if (!a) return json({ error: "not found" }, 404);
-  const bin = Uint8Array.from(atob(a.b), (c) => c.charCodeAt(0));
+  const raw = atob(a.b), bin = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);                       // a plain loop: far cheaper than Uint8Array.from(callback) for the 70 KB fonts
   return new Response(request.method === "HEAD" ? null : bin, {
-    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION, "x-frame-options": "DENY", "referrer-policy": "no-referrer" },
+    headers: { "content-type": a.t, "cache-control": pathname.startsWith("/auth/fonts/") ? "public, max-age=31536000, immutable" : "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION, "x-frame-options": "DENY", "referrer-policy": "no-referrer" },
   });
 }
 
@@ -52,6 +54,9 @@ export default {
     const url = new URL(request.url);
     const bad = configError(env);
     if (bad) return json({ error: bad }, 503);
+
+    // The read-only API for other tools: authenticated by a key in a header (never a cookie), so it comes before the cookie checks below.
+    if (url.pathname === "/api/v1" || url.pathname.startsWith("/api/v1/")) return handleApiV1(request, url, env);
 
     // Same-origin check for every state-changing request (cookies are SameSite=Lax as well).
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -80,6 +85,7 @@ export default {
     }
 
     if (url.pathname === "/api/places") return handlePlaces(request, url, env, email);
+    if (url.pathname === "/api/keys" || url.pathname.startsWith("/api/keys/")) { const r = await handleKeys(request, url, env, email); if (r) return r; }
 
     // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.
     if (url.pathname === "/api/dives/location" && request.method === "POST") {
