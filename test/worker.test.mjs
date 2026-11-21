@@ -84,7 +84,7 @@ test("full Google sign-in: session works, app + assets served, version exposed, 
   const cookie = "dc_session=" + cookieOf(res, "dc_session");
   assert.deepEqual(await (await call(env, "/api/me", { headers: { cookie } })).json(), { email: "me@example.com", name: "Me", version: VERSION });
   const page = await call(env, "/", { headers: { cookie, accept: "text/html" } });
-  assert.equal(page.status, 200); assert.match(await page.text(), /Cosmiq Manager/);
+  assert.equal(page.status, 200); assert.match(await page.text(), /Dive Manager/);
   assert.equal(page.headers.get("x-app-version"), VERSION); assert.equal(page.headers.get("x-frame-options"), "DENY");
   assert.equal(new Uint8Array(await (await call(env, "/icon-192.png", { headers: { cookie } })).arrayBuffer())[1], 0x50, "PNG intact");
   for (const f of ["/version.js", "/account.js", "/vendor/qrcode.js"]) assert.equal((await call(env, f, { headers: { cookie } })).status, 200, f);

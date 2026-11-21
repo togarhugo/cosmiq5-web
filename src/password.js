@@ -155,6 +155,21 @@ export async function handleAccount(request, url, env, user) {
     return json({ ok: true });
   }
 
+  // Change the password only: needs the CURRENT password and a CURRENT authenticator code, keeps the same authenticator.
+  if (url.pathname === "/api/account/password/change" && request.method === "POST") {
+    if (!existing) return json({ error: "Email login is not set up yet." }, 400);
+    if (!validSalt(b.salt) || !validKey(b.key) || !validKey(b.currentKey) || !(Number.isInteger(b.iter) && b.iter >= kdfIter(env) && b.iter <= 2_000_000) || !/^\d{6}$/.test(String(b.currentCode)))
+      return json({ error: "bad request" }, 400);
+    if (await isLocked(env, keys)) return json({ error: LOCKED }, 429);
+    const u = await env.DB.prepare("SELECT pw_hash, totp_secret_enc, totp_last_step FROM users WHERE email = ?").bind(email).first();
+    const pwOk = safeEqual(await hashPw(env, email, b.currentKey), u.pw_hash);
+    let step = null; try { step = await verifyTotp(await decryptSecret(env, u.totp_secret_enc), b.currentCode, u.totp_last_step); } catch {}
+    if (!(pwOk && step !== null)) { await recordFailure(env, keys); return json({ error: "Your current password or authenticator code is not right." }, 403); }
+    await env.DB.prepare("UPDATE users SET salt = ?, kdf_iter = ?, pw_hash = ?, totp_last_step = ? WHERE email = ?").bind(b.salt, b.iter, await hashPw(env, email, b.key), step, email).run();
+    await clearFailures(env, keys);
+    return json({ ok: true });
+  }
+
   if (url.pathname === "/api/account/password" && request.method === "DELETE") {
     if (!existing) return json({ ok: true });
     const cur = await checkCode(existing.totp_secret_enc, existing.totp_last_step, b.code);

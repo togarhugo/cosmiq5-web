@@ -19,7 +19,7 @@ test("TOTP matches RFC 6238 vectors and tolerates one step of clock drift", asyn
     assert.equal((await verifyTotp(sec, await hotp(sec, s + off), 0, now)) !== null, ok, "offset " + off);
   assert.equal(await verifyTotp(sec, await hotp(sec, s), s, now), null, "replay of an already used step");
   assert.equal(await verifyTotp(sec, "12345", 0, now), null); assert.equal(await verifyTotp(sec, "abcdef", 0, now), null);
-  assert.match(otpauthUri("ABC", "me@example.com"), /^otpauth:\/\/totp\/Cosmiq%20Dive:me%40example\.com\?secret=ABC&issuer=Cosmiq%20Dive&algorithm=SHA1&digits=6&period=30$/);
+  assert.match(otpauthUri("ABC", "me@example.com"), /^otpauth:\/\/totp\/Dive%20Manager:me%40example\.com\?secret=ABC&issuer=Dive%20Manager&algorithm=SHA1&digits=6&period=30$/);
 });
 
 test("enrollment needs an existing session: no open sign-up", async () => {
@@ -32,7 +32,7 @@ test("enrollment needs an existing session: no open sign-up", async () => {
 
 test("enroll -> sign in with email + password + code -> session works everywhere", async () => {
   const { env, secret, uri } = await enrolled();
-  assert.match(uri, /^otpauth:\/\/totp\/Cosmiq%20Dive:me%40example\.com\?secret=[A-Z2-7]{32}&/);
+  assert.match(uri, /^otpauth:\/\/totp\/Dive%20Manager:me%40example\.com\?secret=[A-Z2-7]{32}&/);
   const res = await at(1, async () => login(env, "me@example.com", PW, await totpNow(secret)));
   assert.equal(res.status, 200); assert.deepEqual(await res.json(), { ok: true });
   const sc = res.headers.getSetCookie().find((c) => c.startsWith("dc_session=")); assert.match(sc, /HttpOnly/); assert.match(sc, /Secure/);
@@ -269,4 +269,48 @@ test("regression: the Account tab calls mfa/start with no body (and DELETE/GET s
   assert.equal(garbage.status, 200, "start needs no input at all");
   assert.equal((await post(env, "/api/account/password", {}, authed(cookie))).status, 400, "finish still validates its fields");
   assert.equal((await del(env, cookie, undefined)).status, 200, "removing when nothing is set up is a no-op");
+});
+
+// ---- change password (keeps the authenticator) ---------------------------------------------------------------------
+async function changer() {
+  const { env, cookie, secret } = await enrolled();
+  const pre = await (await post(env, "/auth/prelogin", { email: "me@example.com" })).json();
+  const change = async ({ currentPw = PW, newPw = "a brand new passphrase", code, currentKey, n = 1, extra = {} } = {}) => at(n, async () => {
+    const ck = currentKey || await kdf.deriveKey(currentPw, pre.salt, pre.iter, "me@example.com");
+    const salt = kdf.randomSalt(), key = await kdf.deriveKey(newPw, salt, 1000, "me@example.com");
+    return post(env, "/api/account/password/change", { salt, iter: 1000, key, currentKey: ck, currentCode: code ?? (await totpNow(secret)), ...extra }, authed(cookie));
+  });
+  return { env, cookie, secret, pre, change };
+}
+test("change password: needs the current password AND current code; the authenticator stays the same", async () => {
+  const { env, secret, change } = await changer();
+  const before = env.DB.raw.prepare("SELECT totp_secret_enc FROM users").get().totp_secret_enc;
+  assert.equal((await change({ n: 1 })).status, 200);
+  assert.equal(env.DB.raw.prepare("SELECT totp_secret_enc FROM users").get().totp_secret_enc, before, "same authenticator secret: no new QR needed");
+  assert.equal((await at(2, async () => login(env, "me@example.com", PW, await totpNow(secret)))).status, 401, "the old password no longer works");
+  assert.equal((await at(2, async () => login(env, "me@example.com", "a brand new passphrase", await totpNow(secret)))).status, 200, "the new one does, with the same authenticator");
+});
+test("change password: wrong current password, wrong code, replayed code and malformed input are refused and change nothing", async () => {
+  const { env, secret, change } = await changer();
+  const hashBefore = () => env.DB.raw.prepare("SELECT pw_hash FROM users").get().pw_hash, h0 = hashBefore();
+  assert.equal((await change({ currentPw: "not my password!!" })).status, 403);
+  assert.equal((await change({ code: "000000" })).status, 403);
+  assert.equal(hashBefore(), h0, "nothing changed");
+  const code = await at(1, () => totpNow(secret));
+  assert.equal((await change({ code, n: 1 })).status, 200);
+  const replay = await at(1, async () => post(env, "/api/account/password/change", { salt: kdf.randomSalt(), iter: 1000, key: await kdf.deriveKey("third passphrase!!", "00".repeat(16), 1000, "me@example.com"),
+    currentKey: await kdf.deriveKey("a brand new passphrase", (await (await post(env, "/auth/prelogin", { email: "me@example.com" })).json()).salt, 1000, "me@example.com"), currentCode: code }, authed((await googleSession(env)).cookie)));
+  assert.equal(replay.status, 403, "a used code cannot be used again");
+  const bad = (extra) => change({ n: 3, extra }); // malformed fields override the good ones
+  for (const [name, extra, status] of [["short key", { key: "abc" }, 400], ["bad salt", { salt: "zz" }, 400], ["weak iterations", { iter: 10 }, 400], ["bad current key", { currentKey: "xyz" }, 400], ["bad code format", { currentCode: "12" }, 400]])
+    assert.equal((await bad(extra)).status, status, name);
+});
+test("change password: guessing is rate limited, it needs a session and an enrolled account", async () => {
+  const { env, change } = await changer();
+  for (let i = 0; i < 5; i++) assert.equal((await change({ code: "000000" })).status, 403);
+  assert.equal((await change({})).status, 429, "locked after 5 failures");
+  const plain = makeEnv(); const { cookie } = await googleSession(plain);
+  const dummy = { salt: "0".repeat(32), iter: 1000, key: "0".repeat(64), currentKey: "0".repeat(64), currentCode: "123456" };
+  assert.equal((await post(plain, "/api/account/password/change", dummy, authed(cookie))).status, 400, "Google-only account has no password to change");
+  assert.equal((await post(plain, "/api/account/password/change", dummy)).status, 401, "not signed in");
 });

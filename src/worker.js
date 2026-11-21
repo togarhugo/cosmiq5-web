@@ -1,9 +1,10 @@
 import ASSETS from "./assets.generated.js";
 import { configError, currentUser, handleAuth } from "./auth.js";
 import { handleAccount, handlePasswordAuth } from "./password.js";
+import { handleAccountData } from "./account-data.js";
 import { VERSION } from "./version.js";
 
-// Cosmiq Manager: static app + dive-log API. Sign-in is Google OAuth inside this Worker
+// Dive Manager: static app + dive-log API. Sign-in is Google OAuth inside this Worker
 // (see auth.js). Everything except /auth/* requires a valid session: fails closed.
 
 const json = (o, status = 200) =>
@@ -61,6 +62,10 @@ export default {
 
     if (url.pathname === "/api/me") return json({ email, name: user.name, version: VERSION });
     if (url.pathname === "/api/account" || url.pathname.startsWith("/api/account/")) return handleAccount(request, url, env, user);
+    if (url.pathname === "/api/profile" || url.pathname.startsWith("/api/profile/") || url.pathname === "/api/regulator" || url.pathname === "/api/certs" || url.pathname.startsWith("/api/certs/")) {
+      const r = await handleAccountData(request, url, env, email);
+      if (r) return r;
+    }
 
     // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.
     if (url.pathname === "/api/dives/location" && request.method === "POST") {

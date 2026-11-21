@@ -55,3 +55,39 @@ test("daysBetween crosses month / year / leap boundaries; agoText wording", () =
 test("hoursText rounds to minutes and never shows 60 min", () => {
   assert.equal(U.hoursText(0), "0 h 00 min"); assert.equal(U.hoursText(3599), "1 h 00 min"); assert.equal(U.hoursText(3600 * 117 + 41 * 60), "117 h 41 min"); assert.equal(U.hoursText(5429), "1 h 30 min"); assert.equal(U.hoursText(5430), "1 h 31 min", "half a minute rounds up");
 });
+
+test("groupByMonth + bulkTargets: a trip's dives in one month, only those without a place unless told to replace", () => {
+  const r = [dive("2026-10-12T06:36:00", 60, "", "a"), dive("2026-10-17T08:26:00", 60, "Komodo", "b"), dive("2026-09-30T10:00:00", 60, "", "c"), dive("2026-10-01T10:00:00", 60, "", "d")];
+  const g = U.groupByMonth(r);
+  assert.deepEqual(g.map((x) => x.month), ["2026-10", "2026-09"], "newest month first");
+  assert.deepEqual(g[0].recs.map((x) => x.fingerprint), ["b", "a", "d"]);
+  assert.deepEqual(U.bulkTargets(g[0].recs, false), ["a", "d"], "keeps the place already set on b");
+  assert.deepEqual(U.bulkTargets(g[0].recs, true), ["b", "a", "d"], "replace overwrites everything");
+  assert.equal(U.monthKey(r[2]), "2026-09"); assert.deepEqual(U.groupByMonth([]), []);
+});
+
+test("asksByMonth: date rows grouped per month, oldest first", () => {
+  const all = [dive("2026-09-30T10:00:00", 60, "", "c"), dive("2026-10-01T10:00:00", 60, "", "d"), dive("2026-10-12T06:36:00", 60, "", "a"), dive("2026-10-12T14:00:00", 60, "", "e")];
+  const g = U.asksByMonth(U.locationAsks(all, all));
+  assert.deepEqual(g.map((x) => [x.month, x.asks.map((a) => a.date)]), [["2026-09", ["2026-09-30"]], ["2026-10", ["2026-10-01", "2026-10-12"]]]);
+});
+
+test("regulatorCount: starting count + dives after 'since'; freedives never count; reset = 0 and only later dives add", () => {
+  const dives = [dive("2025-01-01T10:00:00", 60, "", "a"), { ...dive("2025-02-01T10:00:00", 60, "", "f"), mode: "freedive" }, dive("2025-03-01T10:00:00", 60, "", "b"), { ...dive("2025-04-01T10:00:00", 60, "", "g"), mode: "gauge" }];
+  assert.equal(U.regulatorCount(null, dives), 0);
+  assert.equal(U.regulatorCount({ baseline: 0, since: "" }, dives), 3, "scuba + gauge count, the freedive does not");
+  assert.equal(U.regulatorCount({ baseline: 40, since: "" }, dives), 43, "starting count is added");
+  assert.equal(U.regulatorCount({ baseline: 5, since: "2025-02-15T00:00:00" }, dives), 5 + 2, "only dives after 'since'");
+  assert.equal(U.regulatorCount({ baseline: 0, since: "2025-03-01T10:00:00" }, dives), 1, "a dive AT 'since' is not counted again");
+  const reset = U.regulatorReset({ name: "X", type: "Y", baseline: 80, since: "2020-01-01T00:00:00" }, dives);
+  assert.deepEqual(reset, { name: "X", type: "Y", baseline: 0, since: "2025-04-01T10:00:00" });
+  assert.equal(U.regulatorCount(reset, dives), 0, "0 right after the reset");
+  assert.equal(U.regulatorCount(reset, [...dives, dive("2025-05-01T10:00:00", 60, "", "n1"), dive("2025-05-02T10:00:00", 60, "", "n2")]), 2, "grows with every new dive");
+  assert.equal(U.regulatorCount(reset, [...dives, { ...dive("2025-05-03T10:00:00", 60, "", "fd"), mode: "freedive" }]), 0, "a new freedive does not move it");
+  assert.equal(U.regulatorReset({ name: "X", baseline: 3 }, []).since, "", "no dives yet: everything later counts");
+});
+
+test("regulatorLevel: green below 70, orange from 70, red from 90", () => {
+  assert.deepEqual([0, 1, 69, 70, 71, 89, 90, 91, 200].map(U.regulatorLevel), ["ok", "ok", "ok", "orange", "orange", "orange", "red", "red", "red"]);
+  assert.equal(U.REG_ORANGE, 70); assert.equal(U.REG_RED, 90);
+});

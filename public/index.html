@@ -10,7 +10,7 @@
         <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
         <link rel="apple-touch-icon" href="icon-192.png" />
         <link rel="icon" href="icon-192.png" />
-        <title>Cosmiq Manager</title>
+        <title>Dive Manager</title>
         <style>
             :root {
                 --blue: #007bff;
@@ -341,6 +341,39 @@
             .dh-loc.empty { background: #f1f3f5; color: #868e96; font-weight: 500; }
             .dh-edit { display: flex; gap: 6px; flex: 1; justify-content: flex-end; }
             .loc1 { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+            header { position: relative; } #signOut { box-sizing: border-box; }
+            .avatar { width: 40px; height: 40px; border-radius: 50%; padding: 0; overflow: hidden; background: #dee2e6; color: #868e96; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; }
+            header .avatar { position: absolute; right: 0; top: 0; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+            header .avatar.active { box-shadow: 0 0 0 2px var(--blue); }
+            .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; } .avatar img[hidden] { display: none; }
+            .avatar.big { width: 80px; height: 80px; flex: none; min-height: 80px; cursor: default; }
+            .prof { display: flex; gap: 14px; align-items: center; } .prof-side { flex: 1; min-width: 0; word-break: break-all; }
+            details.acc { padding: 0; } details.acc > summary { list-style: none; cursor: pointer; padding: 16px; min-height: 44px; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+            details.acc > summary::-webkit-details-marker { display: none; }
+            details.acc > summary::after { content: "\25B8"; margin-left: auto; color: #868e96; } details.acc[open] > summary::after { content: "\25BE"; }
+            .acc-body { padding: 0 16px 16px; }
+            .subcard { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 12px; margin-top: 12px; } .subcard h4 { margin: 0 0 8px; font-size: 14px; }
+            .fld { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; margin-bottom: 8px; min-height: 44px; }
+            .row.wrap { flex-wrap: wrap; } .msg { font-size: 13px; margin: 8px 0; min-height: 0; }
+            .filebtn { display: inline-flex; align-items: center; cursor: pointer; }
+            .cert { border: 1px solid #e9ecef; border-radius: 10px; padding: 10px; margin-bottom: 8px; } .cert .cert-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+            .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid #dee2e6; }
+            .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: #495057; line-height: 1.45; } ul.help li { margin-bottom: 6px; }
+            .reg-title { font-size: 15px; } .reg-count { font-size: 30px; font-weight: 700; margin: 2px 0; }
+            .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #2b8a3e; color: #fff; }
+            .regbadge.orange { background: #e67700; } .regbadge.red { background: #c92a2a; }
+            .regbar { position: relative; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; margin: 10px 0 6px; overflow: visible; }
+            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: #2b8a3e; width: 0; transition: width .3s; }
+            .regbar i { position: absolute; left: 77.78%; top: -3px; width: 2px; height: 14px; background: rgba(0,0,0,.35); }
+            .reg-msg { font-size: 13px; font-weight: 600; }
+            .sum.reg-ok { border-left: 5px solid #2b8a3e; } .sum.reg-ok .reg-msg { color: #2b8a3e; }
+            .sum.reg-orange { border-left: 5px solid #e67700; background: #fff4e6; } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: #d9480f; } .sum.reg-orange #sumRegBar { background: #e67700; }
+            .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
+            .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed #ced4da; flex-wrap: wrap; }
+            .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: #1864ab; font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
+            .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; }
+            .mh-edit .chk { font-size: 13px; display: flex; gap: 8px; align-items: center; min-height: 36px; } .mh-edit .chk input { width: 20px; height: 20px; min-height: 0; }
+            .monthask { background: #f1f3f5; border-radius: 8px; padding: 10px; margin: 8px 0 12px; } .monthask label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
             #bannerBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
             #syncBanner { border: 1px solid #b2dfdb; }
             details.tech { margin-top: 10px; } details.tech summary { cursor: pointer; font-size: 13px; color: #495057; min-height: 36px; display: flex; align-items: center; }
@@ -370,8 +403,9 @@
     </head>
     <body>
         <header>
-            <h1>Cosmiq Manager <span id="verTop" class="muted"></span></h1>
+            <h1>Dive Manager</h1>
             <div id="status" class="status">Disconnected</div>
+            <button id="acctBtn" class="avatar" type="button" aria-label="Account" onclick="showView('account')"><img id="acctImg" alt="" hidden /><span id="acctIcon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></button>
         </header>
 
         <button id="connectBtn" class="btn-main" onclick="connect()">
@@ -398,11 +432,18 @@
             <button id="navSummary" onclick="showView('summary')">Summary</button>
             <button id="navLog" onclick="showView('log')">Dive log <span id="diveCount"></span></button>
             <button id="navDevice" class="active" onclick="showView('device')">Device</button>
-            <button id="navAccount" onclick="showView('account')">Account</button>
         </div>
 
         <div id="summaryView" style="display:none">
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
+            <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
+                <div class="sum-label">Regulator service</div>
+                <div class="sum-big"><span id="sumRegCount">0</span> dives</div>
+                <div id="sumRegName" class="muted"></div>
+                <div class="regbar" aria-hidden="true"><div id="sumRegBar"></div><i></i></div>
+                <div id="sumRegMsg" class="reg-msg"></div>
+            </div>
+            <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
                     <div class="sum-label">Last dive</div>
@@ -772,29 +813,56 @@
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
         </div>
 
-        <div id="appFooter" class="muted" style="text-align:center;margin-top:18px">
-            Cosmiq Manager <span id="appVer"></span><span id="who"></span>
-            <a id="signOut" href="/auth/logout" style="display:none;margin-left:6px">Sign out</a>
-        </div>
-
         <div id="accountView" style="display:none">
-            <div class="card">
-                <h3>Sign-in methods</h3>
-                <div id="accVia" class="muted" style="margin-bottom:10px"></div>
-                <div class="opt" style="min-height:0">✓ Google account <span class="muted">(always on)</span></div>
-                <div class="opt" style="min-height:0">
-                    <span id="accPwIcon">○</span> Email + password + authenticator
-                    <span id="accPwState" class="muted"></span>
+            <details class="card acc" data-sec="profile">
+                <summary>Profile picture</summary>
+                <div class="acc-body">
+                    <div class="prof">
+                        <div class="avatar big"><img id="profImg" alt="Profile picture" hidden /><span id="profIcon"><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></div>
+                        <div class="prof-side">
+                            <div id="who" class="muted"></div>
+                            <div class="row" style="margin:8px 0 0">
+                                <label class="btn-set filebtn" tabindex="0">Upload picture<input id="avatarFile" type="file" accept="image/*" hidden /></label>
+                                <button id="avatarRemove" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="profMsg" class="msg" role="status"></div>
                 </div>
-                <div id="accMsg" role="status" style="font-size:13px;margin:10px 0"></div>
-                <div id="accBtns" class="row" style="margin-bottom:0">
-                    <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
-                    <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
-                </div>
-            </div>
+            </details>
 
-            <div id="accSetup" class="card" style="display:none">
-                <h3>Set up email login</h3>
+            <details class="card acc" data-sec="password">
+                <summary>Change password</summary>
+                <div class="acc-body">
+                    <div id="accVia" class="muted" style="margin-bottom:10px"></div>
+                    <div class="opt" style="min-height:0">&#10003; Google account <span class="muted">(always on)</span></div>
+                    <div class="opt" style="min-height:0">
+                        <span id="accPwIcon">&#9675;</span> Email + password + authenticator
+                        <span id="accPwState" class="muted"></span>
+                    </div>
+                    <div id="accMsg" role="status" class="msg"></div>
+                    <div id="accBtns" class="row wrap" style="margin-bottom:0">
+                        <button id="accChangeBtn" class="btn-set" type="button" style="display:none">Change password</button>
+                        <button id="accSetupBtn" class="btn-set" type="button">Set up email login</button>
+                        <button id="accRemoveBtn" class="btn-set" type="button" style="background:#6c757d;display:none">Remove</button>
+                    </div>
+                    <div id="accChange" class="subcard" style="display:none">
+                        <h4>Change password</h4>
+                        <label class="label" for="pwCur">Current password</label>
+                        <input id="pwCur" type="password" autocomplete="current-password" class="fld" />
+                        <label class="label" for="pwNew1">New password (12+ characters)</label>
+                        <input id="pwNew1" type="password" autocomplete="new-password" class="fld" />
+                        <input id="pwNew2" type="password" autocomplete="new-password" placeholder="Repeat new password" class="fld" aria-label="Repeat new password" />
+                        <label class="label" for="pwCode">Authenticator code (6 digits)</label>
+                        <input id="pwCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" class="fld" />
+                        <div class="row wrap" style="margin:0">
+                            <button id="pwChangeGo" class="btn-set" type="button">Change password</button>
+                            <button id="pwChangeCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                        </div>
+                        <div class="muted" style="margin-top:6px">Your authenticator stays the same: no new QR code.</div>
+                    </div>
+            <div id="accSetup" class="subcard" style="display:none">
+                <h4>Email login setup</h4>
                 <div id="accStep1">
                     <span class="label">Choose a password (12+ characters)</span>
                     <input id="accPw1" type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ced4da;border-radius:6px" />
@@ -820,6 +888,83 @@
                 </div>
                 <button id="accCancel" class="btn-set" type="button" style="background:#6c757d;margin-top:4px">Cancel</button>
             </div>
+
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="certs">
+                <summary>Dive certifications</summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
+                    <div id="certList"></div>
+                    <div class="subcard" style="margin-top:10px">
+                        <h4>Add a certification</h4>
+                        <label class="label" for="certLabel">Name</label>
+                        <input id="certLabel" class="fld" maxlength="80" placeholder="e.g. PADI Advanced Open Water" autocomplete="off" />
+                        <label class="label" for="certNumber">Certificate / diver number (optional)</label>
+                        <input id="certNumber" class="fld" maxlength="40" autocomplete="off" />
+                        <div class="row wrap" style="margin:0 0 6px">
+                            <label class="btn-set filebtn" tabindex="0">Choose file<input id="certFile" type="file" accept="application/pdf,image/*" hidden /></label>
+                            <span id="certFileName" class="muted"></span>
+                        </div>
+                        <button id="certAdd" class="btn-set" type="button">Upload</button>
+                    </div>
+                    <div id="certMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="regulator">
+                <summary>Regulator <span id="regBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) so you know when to service it: orange from 70 dives, red from 90.</p>
+                    <div id="regStatus" style="display:none">
+                        <div class="reg-title"><b id="regShownName"></b> <span id="regShownType" class="muted"></span></div>
+                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span></div>
+                        <div class="row wrap" style="margin:8px 0 0">
+                            <button id="regReset" class="btn-set" type="button">Reset to 0</button>
+                            <button id="regEdit" class="btn-set" type="button" style="background:#6c757d">Edit</button>
+                            <button id="regRemove" class="btn-set" type="button" style="background:#6c757d">Remove</button>
+                        </div>
+                    </div>
+                    <div id="regForm" class="subcard" style="display:none">
+                        <label class="label" for="regName">Regulator name</label>
+                        <input id="regName" class="fld" maxlength="60" placeholder="e.g. Apeks XTX50" autocomplete="off" />
+                        <label class="label" for="regType">Type</label>
+                        <input id="regType" class="fld" maxlength="40" list="regTypes" placeholder="e.g. Balanced piston" autocomplete="off" />
+                        <datalist id="regTypes"><option value="Balanced piston"><option value="Unbalanced piston"><option value="Balanced diaphragm"><option value="Unbalanced diaphragm"><option value="Other"></datalist>
+                        <label class="label" for="regBase">Dives already on it</label>
+                        <div class="row" style="margin-bottom:6px"><input id="regBase" class="fld" type="number" min="0" max="99999" value="0" inputmode="numeric" style="margin:0" />
+                            <button id="regUseLogged" class="btn-set" type="button" style="background:#6c757d;white-space:nowrap">Use my logged dives</button></div>
+                        <div class="row wrap" style="margin:0">
+                            <button id="regSave" class="btn-set" type="button">Save regulator</button>
+                            <button id="regCancel" class="btn-set" type="button" style="background:#6c757d">Cancel</button>
+                        </div>
+                    </div>
+                    <button id="regAdd" class="btn-set" type="button" style="display:none">Add my regulator</button>
+                    <div id="regMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="help">
+                <summary>Help / app version</summary>
+                <div class="acc-body">
+                    <div class="ver-row"><span>Dive Manager</span><b id="appVer">v?</b></div>
+                    <div id="serverVer" class="muted"></div>
+                    <div class="row wrap" style="margin:10px 0">
+                        <button id="updateBtn" class="btn-set" type="button">Check for update</button>
+                        <button id="helpDiag" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
+                    </div>
+                    <div id="helpMsg" class="msg" role="status"></div>
+                    <ul class="help">
+                        <li><b>iPhone:</b> Safari cannot use Bluetooth. Open this page in the Bluefy browser to connect. Android: use Chrome.</li>
+                        <li><b>Sync:</b> turn the dive computer on and keep it close. Only new dives are downloaded, and each one is saved as it arrives.</li>
+                        <li><b>Depth profiles:</b> the dive computer keeps profiles for about the last 128 dives and overwrites older ones, so sync after each trip.</li>
+                        <li><b>Your data</b> (dives, picture, certifications, regulator) is stored in your private account and is only visible to you.</li>
+                    </ul>
+                </div>
+            </details>
+
+            <a id="signOut" class="btn-main" href="/auth/logout" style="background:#6c757d;text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
         <div id="toast" role="status" aria-live="polite"></div>
@@ -832,6 +977,7 @@
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
+        <script src="account-area.js"></script>
 
         <script>
             const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -872,11 +1018,12 @@
             let currentView = "summary";
             function showView(v) {
                 currentView = v;
-                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["account", "navAccount"]]) {
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
-                    document.getElementById(nav).classList.toggle("active", v === name);
+                    if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
-                if (v === "account") Account.load();
+                document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
+                if (v === "account") { Account.load(); AccountArea.show(); }
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
                 if (v === "summary") Dives.render();
@@ -1511,19 +1658,7 @@
                 b.classList.add("show");
             }
             window.addEventListener("load", () => {
-                const ver = "v" + (self.APP_VERSION || "?");
-                document.getElementById("verTop").textContent = ver;
-                document.getElementById("appVer").textContent = ver;
-                fetch("/api/me", { credentials: "same-origin", redirect: "error" })
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((me) => {
-                        if (!me) return;
-                        document.getElementById("who").textContent = " · " + me.email;
-                        document.getElementById("signOut").style.display = "";
-                        if (me.version && me.version !== self.APP_VERSION)
-                            document.getElementById("appVer").textContent = ver + " (server v" + me.version + ", reload to update)";
-                    })
-                    .catch(() => {});
+                AccountArea.init();                                                          // picture, versions, certifications, regulator
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });

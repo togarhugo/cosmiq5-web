@@ -225,6 +225,19 @@ const Dives = (() => {
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}`;
   }
+  /** Regulator service card: green below 70 dives, orange from 70, red from 90. */
+  function renderRegulatorCard(recs) {
+    const card = $("sumReg"); if (!card) return;
+    const reg = typeof AccountArea !== "undefined" ? AccountArea.regulator() : null;
+    $("sumRegHint").style.display = reg ? "none" : "";
+    card.style.display = reg ? "" : "none"; if (!reg) return;
+    const n = U.regulatorCount(reg, recs), lvl = U.regulatorLevel(n);
+    card.className = "card sum reg-" + lvl; card.setAttribute("role", lvl === "ok" ? "button" : "alert");
+    $("sumRegCount").textContent = n; $("sumRegName").textContent = [reg.name, reg.type].filter(Boolean).join(" \u00b7 ");
+    $("sumRegBar").style.width = Math.min(100, (n / U.REG_RED) * 100) + "%";
+    $("sumRegMsg").textContent = lvl === "red" ? `Service now: ${n} dives, the ${U.REG_RED}-dive limit is reached`
+      : lvl === "orange" ? `Service soon: ${U.REG_RED - n} dive${U.REG_RED - n === 1 ? "" : "s"} to the ${U.REG_RED}-dive limit` : `Service is due at ${U.REG_ORANGE} dives (${U.REG_ORANGE - n} to go)`;
+  }
 
   // ---------- locations: the question after a sync, the banner, date headers, per-dive field ----------
   const locEditor = (rec) => `<div class="loc1"><span aria-hidden="true">\ud83d\udccd</span><input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
@@ -237,9 +250,13 @@ const Dives = (() => {
     if (!asks.length) { el.style.display = "none"; return; }
     const known = await fillSuggestions();
     const hint = (sub || "Just the area, for example Banda, Komodo or Tulamben.") + (asks.length > 1 ? " Tap \u201c\u2191 same\u201d to repeat the place above." : "");
+    let idx = 0; const monthName = (k) => new Date(+k.slice(0, 4), +k.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const groups = U.asksByMonth(asks);
     el.innerHTML = `<h3>${esc(heading)}</h3><p class="muted" style="margin:0 0 10px">${esc(hint)}</p><div class="locrows">` +
-      asks.map((a, i) => `<div class="locask"><label for="locIn${i}">${esc(fmtDayLong(a.date))} <span class="muted">\u00b7 ${a.count} dive${a.count === 1 ? "" : "s"}</span></label>
-        <div class="row" style="margin-bottom:10px"><input id="locIn${i}" data-i="${i}" list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(a.prefill)}">${i ? `<button class="btn-set same" type="button" data-i="${i}" title="Use the place above">\u2191 same</button>` : ""}</div></div>`).join("") +
+      groups.map((g) => (g.asks.length > 1 ? `<div class="monthask"><label for="locM${esc(g.month)}">${esc(monthName(g.month))} \u00b7 ${g.asks.length} dates</label><input id="locM${esc(g.month)}" class="month-in" data-month="${esc(g.month)}" list="locList" maxlength="60" autocomplete="off" placeholder="Same place for the whole month" style="width:100%;box-sizing:border-box">` : `<div class="monthask" style="background:none;padding:0 0 4px">`) +
+        g.asks.map((a) => { const i = idx++; a.i = i;
+          return `<div class="locask"><label for="locIn${i}">${esc(fmtDayLong(a.date))} <span class="muted">\u00b7 ${a.count} dive${a.count === 1 ? "" : "s"}</span></label>
+          <div class="row" style="margin:6px 0 10px"><input id="locIn${i}" data-i="${i}" list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(a.prefill)}">${i ? `<button class="btn-set same" type="button" data-i="${i}" title="Use the place above">\u2191 same</button>` : ""}</div></div>`; }).join("") + `</div>`).join("") +
       `</div><div class="row" style="margin:0"><button id="locSave" class="btn-set" type="button">Save</button><button id="locLater" class="btn-set" type="button" style="background:#6c757d">Later</button></div>`;
     el.style.display = "block"; updateBanner(recs); el.scrollIntoView({ behavior: "smooth", block: "start" });
     el.onclick = async (e) => {
@@ -248,7 +265,11 @@ const Dives = (() => {
       if (e.target.id === "locLater") { el.style.display = "none"; updateBanner(await all()); return; }
       if (e.target.id !== "locSave") return;
       const map = {}; let n = 0;
-      asks.forEach((a, i) => { const v = U.normalizeLocation($("locIn" + i).value, known); if (v) { a.fps.forEach((fp) => { map[fp] = v; }); n += a.fps.length; } });
+      asks.forEach((a) => {                                                           // a date's own entry wins; otherwise its month's place applies
+        const month = el.querySelector(`.month-in[data-month="${a.date.slice(0, 7)}"]`);
+        const v = U.normalizeLocation($("locIn" + a.i).value || (month ? month.value : ""), known);
+        if (v) { a.fps.forEach((fp) => { map[fp] = v; }); n += a.fps.length; }
+      });
       el.style.display = "none";
       if (n) { await setLocations(map); say(`Location saved for ${n} dive${n === 1 ? "" : "s"}`); } else updateBanner(await all());
     };
@@ -276,6 +297,23 @@ const Dives = (() => {
         span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:#6c757d" aria-label="Cancel">\u2715</button>`;
         head.replaceWith(span); span.querySelector("input").focus(); return;
       }
+      const mset = e.target.closest(".mh-set");
+      if (mset) {                                                                // bulk: one place for every dive of the month
+        await fillSuggestions();
+        const month = mset.dataset.month, n = (await all()).filter((r) => U.monthKey(r) === month).length, box = document.createElement("div"); box.className = "mh-edit";
+        box.innerHTML = `<input type="text" list="locList" maxlength="60" autocomplete="off" placeholder="One place for all ${n} dives, e.g. Komodo" aria-label="Place for the whole month">
+          <label class="chk"><input type="checkbox" class="mh-replace"> Replace places that are already set</label>
+          <div class="row" style="margin:0"><button class="btn-set mh-save" type="button" data-month="${esc(month)}">Apply to the month</button><button class="btn-set dh-cancel" type="button" style="background:#6c757d">Cancel</button></div>`;
+        mset.parentElement.appendChild(box); mset.style.display = "none"; box.querySelector("input[type=text]").focus(); return;
+      }
+      const msave = e.target.closest(".mh-save");
+      if (msave) {
+        const box = msave.closest(".mh-edit"), v = U.normalizeLocation(box.querySelector("input[type=text]").value), replace = box.querySelector(".mh-replace").checked;
+        if (!v) { say("Type a place first", "warn"); return; }
+        const targets = U.bulkTargets((await all()).filter((r) => U.monthKey(r) === msave.dataset.month), replace);
+        if (!targets.length) { say("Every dive this month already has a place. Tick \u201cReplace\u201d to change them.", "warn"); return; }
+        await setLocations(Object.fromEntries(targets.map((fp) => [fp, v]))); say(`Location saved for ${targets.length} dive${targets.length === 1 ? "" : "s"}`); return;
+      }
       if (e.target.closest(".dh-cancel")) { renderPending = false; render(); return; }
       const dsave = e.target.closest(".dh-save");
       if (dsave) {
@@ -287,8 +325,9 @@ const Dives = (() => {
     });
     list.addEventListener("keydown", (e) => {
       if (e.target.tagName !== "INPUT") return;
-      if (e.key === "Enter") { const b = e.target.parentElement.querySelector("button.btn-set"); if (b) b.click(); }
-      if (e.key === "Escape" && e.target.closest(".dh-edit")) { renderPending = false; render(); }
+      if (e.target.type === "checkbox") return;
+      if (e.key === "Enter") { const b = (e.target.closest(".mh-edit") || e.target.parentElement).querySelector("button.btn-set"); if (b) b.click(); }
+      if (e.key === "Escape" && e.target.closest(".dh-edit, .mh-edit")) { renderPending = false; render(); }
     });
     document.addEventListener("focusout", () => { if (renderPending) { renderPending = false; setTimeout(render, 60); } });
   }
@@ -297,7 +336,7 @@ const Dives = (() => {
     const list = $("diveList"); if (!list) return;
     const recs = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
-    renderSummary(recs); updateBanner(recs); wireList(list);
+    renderSummary(recs); renderRegulatorCard(recs); updateBanner(recs); wireList(list);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
@@ -332,9 +371,13 @@ const Dives = (() => {
     for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
-        U.groupByDate(g).map(({ date, recs: rs }) => {
-          const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
-          return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
+        U.groupByMonth(g).map(({ month, recs: mrs }) => {
+          const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))];
+          const head = `<div class="monthhead" data-month="${esc(month)}"><span class="mh-name">${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}<span class="muted" style="font-weight:400"> \u00b7 ${mrs.length} dive${mrs.length === 1 ? "" : "s"}${names.length ? " \u00b7 " + esc(names.join(", ")) : ""}</span></span><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button></div>`;
+          return head + U.groupByDate(mrs).map(({ date, recs: rs }) => {
+            const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
+            return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
+          }).join("");
         }).join("") + `</details>`;
     }
     list.innerHTML = html; fillSuggestions();
@@ -360,7 +403,7 @@ const Dives = (() => {
 
   async function diagnosticsText() {
     const recs = await all(), last = loadLast(), lines = (window.__diag || []);
-    const hdr = [`Cosmiq Manager diagnostics`, `app version: ${self.APP_VERSION || "?"}`, `time: ${new Date().toString()}`,
+    const hdr = [`Dive Manager diagnostics`, `app version: ${self.APP_VERSION || "?"}`, `time: ${new Date().toString()}`,
       `user agent: ${navigator.userAgent}`, `web bluetooth: ${!!navigator.bluetooth}`, `secure context: ${window.isSecureContext}`,
       `last sync: ${JSON.stringify(last)}`, `dives stored on this phone: ${recs.length}`, `cloud: ${cloudState}`, ""];
     const dv = recs.slice(0, 60).map((r) => `dive ${r.startedAt} ${r.mode} ${r.durationSec}s ${r.maxDepthM}m header=${r.headerHex} profileBytes=${r.profileHex.length / 2}`);

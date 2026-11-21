@@ -66,6 +66,33 @@
       last: { date: dateKey(last), startedAt: last.startedAt, location: last.location || "", daysAgo: daysBetween(dateKey(last), today || new Date()) } };
   }
 
-  const api = { dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  // ---- month grouping (bulk locations for a dive trip) ----
+  const monthKey = (rec) => rec.startedAt.slice(0, 7);                         // "YYYY-MM"
+  function groupByMonth(recs) {
+    const m = new Map();
+    for (const r of recs.slice().sort(byStartDesc)) { const k = monthKey(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+    return [...m.entries()].map(([month, rs]) => ({ month, recs: rs }));
+  }
+  /** Fingerprints a bulk "whole month" action touches: only dives without a place unless `replace` is set. */
+  const bulkTargets = (recs, replace) => recs.filter((r) => replace || !r.location).map((r) => r.fingerprint);
+  /** The date rows of the location question, grouped by month (oldest month first), for a "whole month" input per month. */
+  function asksByMonth(asks) {
+    const m = new Map();
+    for (const a of asks) { const k = a.date.slice(0, 7); if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
+    return [...m.entries()].map(([month, rows]) => ({ month, asks: rows }));
+  }
+
+  // ---- regulator service counter ----
+  const REG_ORANGE = 70, REG_RED = 90;
+  /** Dives on the regulator: the starting count plus every dive that began after `since`. Freedives do not use a regulator. */
+  function regulatorCount(reg, recs) {
+    if (!reg) return 0;
+    return (reg.baseline || 0) + recs.filter((r) => r.mode !== "freedive" && (!reg.since || r.startedAt > reg.since)).length;
+  }
+  const regulatorLevel = (n) => (n >= REG_RED ? "red" : n >= REG_ORANGE ? "orange" : "ok");
+  /** Reset to 0: count only dives after the latest one logged so far. */
+  const regulatorReset = (reg, recs) => ({ ...reg, baseline: 0, since: recs.reduce((a, r) => (r.startedAt > a ? r.startedAt : a), "") });
+
+  const api = { monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

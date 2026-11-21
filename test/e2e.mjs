@@ -31,7 +31,9 @@ const fakeBle = () => {
   const dives = [{ h: hdr(2025, 3, 14, 9, 30, 42, 2, 32, 1013 + 1800, 1, 40, 270, 0), p: prof }, { h: hdr(2025, 3, 15, 8, 5, 1, 4, 0, 1013 + 1500, 2, 1, 260, 2), p: smp(260, 1013 + 1500) }];
   // window.__wrap: dive #3 lives at page 256 (wrapped) and physically overwrote dive #1's slot, like the real device
   const prof3 = []; for (let i = 0; i < 20; i++) prof3.push(...smp(255 + (i % 3), 1013 + Math.round(900 * Math.sin((i / 19) * Math.PI))));
-  if (window.__wrap) dives.push({ h: hdr(2025, 3, 16, 10, 0, 7, 2, 32, 1013 + 900, 3, 20, 255, 256), p: prof3 });
+  const d3 = { h: hdr(2025, 3, 16, 10, 0, 7, 2, 32, 1013 + 900, 3, 20, 255, 256), p: prof3 };
+  if (window.__wrap) dives.push(d3);
+  window.__dives = dives; window.__d3 = d3;
   const readProfile = (n) => { const d = dives[n - 1]; if (!window.__wrap) return d.p;
     const page = d.h[30] | (d.h[31] << 8), len = (d.h[28] | (d.h[29] << 8)) * 4;
     if (page >= 256) return new Array(len).fill(255);                                  // the device cannot read wrapped pages
@@ -330,6 +332,87 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.screenshot({ path: process.env.SHOT_LOC || "/tmp/shot-loc.png", fullPage: true });
     console.log("PASS summary + locations");
   } catch (e) { failed++; console.log("FAIL summary + locations\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-loc.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: new header/account structure, regulator colours (70 orange, 90 red) + reset, month bulk locations ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2025, 2, 17, 12, 0, 0) });
+  let reg = null; const regPuts = [], locCalls = [];
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", version: "9.9.9" } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => { locCalls.push(JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [] } }) : r.fulfill({ json: { stored: 1 } })));
+  await page.route("**/api/regulator", (r) => { const m = r.request().method();
+    if (m === "PUT") { reg = JSON.parse(r.request().postData()); regPuts.push(reg); } if (m === "DELETE") reg = null; return r.fulfill({ json: m === "GET" ? { regulator: reg } : { ok: true } }); });
+  await page.addInitScript(fakeBle); await page.goto(base);
+  const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
+  const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+  const chips = () => page.locator(".dh-loc").allInnerTexts().then((a) => a.map((t) => t.replace(/\s+/g, " ").trim()));
+  const card = () => page.locator("#sumReg").evaluate((e) => ({ cls: e.className, role: e.getAttribute("role"), border: getComputedStyle(e).borderLeftColor, big: getComputedStyle(e.querySelector(".sum-big")).color, count: e.querySelector("#sumRegCount").textContent, msg: e.querySelector("#sumRegMsg").textContent, bar: e.querySelector("#sumRegBar").style.width }));
+  try {
+    // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
+    assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1").innerText(), "Dive Manager");
+    const box = await page.locator("#acctBtn").boundingBox(), vw = page.viewportSize().width;
+    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 3, "Summary, Dive log, Device");
+    assert.equal(await page.locator("#verTop, #appFooter, #navAccount").count(), 0, "no version badge in the header/footer, no Account tab");
+    assert.ok(!/v\d+\.\d+\.\d+/.test(await page.locator("header").innerText()), "no version text in the header");
+    // 2. sync: the question has a 'whole month' input; a date's own entry wins over it
+    await page.click("#connectBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.waitForSelector("#locPrompt", { state: "visible", timeout: 5000 });
+    assert.equal(await page.locator("#locPrompt .month-in").count(), 1, "one month (March 2025) with two dates");
+    assert.match(await page.locator("#locPrompt .monthask label").first().innerText(), /March 2025 . 2 dates/);
+    await page.fill("#locPrompt .month-in", "Komodo"); await page.fill("#locIn0", "Banda"); await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
+    await until(async () => (await chips()).length === 2, "date headers");
+    const byDate = Object.fromEntries(await page.locator(".datehead").evaluateAll((els) => els.map((e) => [e.querySelector(".dh-date").textContent.trim(), e.querySelector(".dh-loc").textContent.replace(/\s+/g, " ").trim()])));
+    assert.deepEqual(Object.values(byDate).sort(), ["\u{1F4CD} Banda", "\u{1F4CD} Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
+    // 3. month bulk in the log: keeps places already set unless 'replace' is ticked
+    assert.match(await page.locator(".monthhead").first().innerText(), /March . 2 dives . Komodo, Banda/);
+    await page.locator(".mh-set").tap(); await page.waitForSelector(".mh-edit input[type=text]");
+    await page.fill(".mh-edit input[type=text]", "Tulamben"); await page.locator(".mh-save").tap(); await toastIs(/Every dive this month already has a place/);
+    await page.locator(".mh-replace").check(); await page.locator(".mh-save").tap(); await toastIs(/Location saved for 2 dives/);
+    await until(async () => (await chips()).every((c) => /Tulamben/.test(c)), "both dates to read Tulamben");
+    await until(() => locCalls.length >= 2 && locCalls.at(-1).length === 2 && locCalls.at(-1).every((i) => i.location === "Tulamben"), "the bulk update to reach the cloud");
+    // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
+    await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
+    await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "Regulator", "Help / app version"]);
+    await page.locator("details.acc[data-sec=help] > summary").click();
+    assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
+    assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
+    // 5. regulator: add it, watch the card turn green -> orange (70) -> red (90)
+    await page.locator("details.acc[data-sec=regulator] > summary").click();
+    await page.locator("#regAdd").tap(); await page.fill("#regName", "Apeks XTX50"); await page.fill("#regType", "Balanced piston"); await page.fill("#regBase", "68");
+    await page.locator("#regSave").tap(); await toastIs(/Regulator saved/);
+    assert.equal(await page.locator("#regShownCount").innerText(), "68"); assert.match(await page.locator("#regBadge").innerText(), /68 dives/);
+    assert.deepEqual({ ...regPuts.at(-1), since: typeof regPuts.at(-1).since }, { name: "Apeks XTX50", type: "Balanced piston", baseline: 68, since: "string" }, "stored with the starting count");
+    await page.click("#navSummary"); await until(async () => (await card()).count === "68", "the Summary card");
+    let c = await card(); assert.equal(c.cls, "card sum reg-ok"); assert.equal(c.border, "rgb(43, 138, 62)"); assert.match(c.msg, /Service is due at 70 dives \(2 to go\)/);
+    const edit = async (n) => { await page.click("#acctBtn"); await page.locator("#regEdit").tap(); await page.fill("#regBase", String(n)); await page.locator("#regSave").tap(); await toastIs(/Regulator saved/); await page.click("#navSummary"); await until(async () => (await card()).count === String(n), "count " + n); return card(); };
+    c = await edit(69); assert.equal(c.cls, "card sum reg-ok", "69 is still green");
+    c = await edit(70); assert.equal(c.cls, "card sum reg-orange", "70 turns orange"); assert.equal(c.border, "rgb(230, 119, 0)"); assert.equal(c.big, "rgb(217, 72, 15)"); assert.equal(c.role, "alert"); assert.match(c.msg, /Service soon: 20 dives to the 90-dive limit/);
+    c = await edit(89); assert.equal(c.cls, "card sum reg-orange", "89 is still orange");
+    c = await edit(90); assert.equal(c.cls, "card sum reg-red", "90 turns red"); assert.equal(c.border, "rgb(201, 42, 42)"); assert.equal(c.big, "rgb(201, 42, 42)"); assert.match(c.msg, /Service now/); assert.equal(c.bar, "100%");
+    assert.match(await page.locator("#regBadge").evaluate((e) => e.className), /red/, "badge in the Account list is red too");
+    // 6. reset to 0 (needs a second tap), then every new dive adds one
+    await page.click("#acctBtn"); await page.locator("#regReset").tap();
+    assert.match(await page.locator("#regReset").innerText(), /Tap again/); assert.equal(await page.locator("#regShownCount").innerText(), "90", "the first tap does not reset");
+    await page.locator("#regReset").tap(); await toastIs(/reset to 0/);
+    assert.equal(await page.locator("#regShownCount").innerText(), "0"); assert.deepEqual(regPuts.at(-1), { name: "Apeks XTX50", type: "Balanced piston", baseline: 0, since: "2025-03-15T08:05:00" }, "since = the latest dive logged so far");
+    await page.click("#navSummary"); await until(async () => (await card()).cls === "card sum reg-ok" && (await card()).count === "0", "green at 0");
+    await page.evaluate(() => window.__dives.push(window.__d3));                    // a new dive appears on the dive computer
+    await page.click("#navLog"); await page.click("#diveSyncBtn");
+    await page.waitForFunction(() => /Dive sync done: 3 on device, 1 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.click("#navSummary"); await until(async () => (await card()).count === "1", "the new dive to count");
+    assert.match((await card()).msg, /\(69 to go\)/);
+    // 7. remove
+    await page.click("#acctBtn"); await page.locator("#regRemove").tap(); await page.locator("#regRemove").tap(); await toastIs(/Regulator removed/);
+    await page.click("#navSummary"); await until(async () => !(await page.locator("#sumReg").isVisible()) && (await page.locator("#sumRegHint").isVisible()), "card gone, hint back");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll");
+    console.log("PASS account structure + regulator + month bulk");
+  } catch (e) { failed++; console.log("FAIL account structure + regulator + month bulk\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-acct.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

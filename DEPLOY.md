@@ -1,4 +1,4 @@
-# Cosmiq Manager: deploy guide
+# Dive Manager: deploy guide
 
 Mobile-friendly web app for the Deepblu Cosmiq+ Gen 5 dive computer: settings, **clock set to phone time on
 every connect**, **dive-log download**, cloud storage behind **Google sign-in**. Version is shown in the app
@@ -92,10 +92,28 @@ download and upload. Tap **Download raw backup** after the first sync.
   ("Backlight set to level 3"), or says the device did not apply or rejected it. The clock cannot be read back, so its
   message only says it was sent and not rejected.
 
+### Account area (the avatar at the top right)
+- **Profile picture:** cropped to a 256x256 JPEG in the browser and stored in your account; the header and Account page show it.
+- **Change password:** needs the current password and a current authenticator code; the authenticator stays the same
+  (**Reset authenticator** is the separate flow that shows a new QR code).
+- **Dive certifications:** upload a PDF/JPEG/PNG/WebP of a card (up to 1 MB; photos are shrunk automatically), with a name and an
+  optional certificate number. View, Save or Share it later, e.g. when registering for a dive. Up to 12 files. The server checks
+  the file's real type (first bytes), never serves it back as a web page, and only the owner can read it.
+- **Regulator:** name, type and a starting count. It counts your scuba and gauge dives (not freedives) that began after the last
+  reset, and updates itself on every sync. The Summary card is green below 70 dives, **orange from 70, red from 90**. "Reset to 0"
+  starts counting again after your latest logged dive. One regulator is tracked.
+- **Help / app version:** the version lives only here (and on the sign-in pages); "Check for update" clears the cached copy and reloads.
+- **Month bulk locations:** each month in the dive log has "Set place for the month"; the location question after a sync also has a
+  "whole month" box above the dates of each month (a date's own entry wins).
+
+Binary data (the picture, certification files) is stored as base64 text and the Worker never decodes it, which keeps requests far below
+the free plan's CPU limit.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
 npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql   # adds dives.location
+npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql    # profile picture, regulator, certifications (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

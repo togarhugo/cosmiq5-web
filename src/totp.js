@@ -37,6 +37,6 @@ export async function verifyTotp(secretBytes, code, lastStep = 0, nowMs = Date.n
   return matched;
 }
 
-export function otpauthUri(secretB32, email, issuer = "Cosmiq Dive") {
+export function otpauthUri(secretB32, email, issuer = "Dive Manager") {
   return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secretB32}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
