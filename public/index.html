@@ -416,6 +416,13 @@
             .res { display: block; width: 100%; text-align: left; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; min-height: 44px; font-size: 14px; color: #212529; }
             .res b { display: block; } .res span { display: block; font-size: 12px; }
             .leaflet-container { font: inherit; }
+            #locSuggest { position: fixed; z-index: 75; background: #fff; border: 1px solid #ced4da; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2); max-height: 280px; overflow-y: auto; box-sizing: border-box; }
+            #locSuggest[hidden] { display: none; }
+            #locSuggest .sg { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #f1f3f5; padding: 9px 12px; min-height: 44px; font-size: 14px; color: #212529; }
+            #locSuggest .sg b { display: block; } #locSuggest .sg .muted { display: block; font-size: 12px; } #locSuggest .sg:hover, #locSuggest .sg.hi { background: #e7f5ff; }
+            #locSuggest .sg-note { padding: 8px 12px; font-size: 12px; color: #c92a2a; }
+            #locSuggest .sg-foot { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; font-size: 11px; color: #868e96; background: #f8f9fa; } #locSuggest .sg-off { background: none; color: #1971c2; font-size: 11px; min-height: 28px; padding: 0 4px; }
+            input.onmap { border-color: #2b8a3e !important; box-shadow: 0 0 0 2px rgba(43,138,62,.18); }
             .chart { display: block; }
             #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed #74c0fc; border-radius: 14px; background: #f3faff; color: #1864ab; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
             #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: #495057; }
@@ -493,7 +500,7 @@
                 <div id="sumMap" class="mapbox" role="region" aria-label="Map of the places you have dived"></div>
                 <div id="mapMsg" class="muted"></div>
                 <div id="mapUnplaced"></div>
-                <details class="logwrap" style="margin-top:8px"><summary>All places</summary><div id="placeList"></div></details>
+                <details class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
             </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">

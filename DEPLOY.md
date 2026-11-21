@@ -135,6 +135,8 @@ the free plan's CPU limit.
   is joined to a position by name. Leaflet 1.9.4 (BSD-2, `public/vendor/leaflet.*`) draws OpenStreetMap tiles (`tile.openstreetmap.org`); place search is Nominatim
   (`nominatim.openstreetmap.org`), one request per tap, >= 1.1 s apart, never while typing. The app sends `referrer-policy: no-referrer`, so map requests set
   `referrerPolicy: "origin"` themselves (OSM asks to be identified). Map data (c) OpenStreetMap contributors, ODbL. For heavy use switch to a tile provider with a plan.
+  Suggestions while typing in the location boxes use Photon (`photon.komoot.io/api`, CORS open, public fair-use service; >= 3 letters, 0.5 s debounce, newest request cancels the
+  older one; `localStorage.mapSuggest = "0"` turns it off). A suggestion picked by the user is remembered per name until Save, then `Places.save()` stores its position.
 
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):

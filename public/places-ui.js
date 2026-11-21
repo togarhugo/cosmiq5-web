@@ -119,9 +119,60 @@ const PlacesUI = (() => {
   }
   function close() { if (!pk) return; try { pk.map.remove(); } catch (e) {} pk = null; $("placePicker").hidden = true; document.body.classList.remove("pp-open"); $("ppMap").innerHTML = ""; }
 
+  // ---------- map suggestions inside the location boxes ----------
+  const SEL = 'input[list="locList"]';                                  // every box where a dive location is typed
+  const pending = new Map();                                            // lower-case name -> {lat, lon, label}: positions you chose from a suggestion, waiting for Save
+  let box = null, sInput = null, sItems = [], sHi = -1, sTimer = null, sSeq = 0, picking = false;
+  const suggestOn = () => { try { return localStorage.getItem("mapSuggest") !== "0"; } catch (e) { return true; } };
+  function sBox() { if (box) return box; box = document.createElement("div"); box.id = "locSuggest"; box.setAttribute("role", "listbox"); box.hidden = true; document.body.appendChild(box); return box; }
+  function sPlace() { if (!sInput || !box || box.hidden) return; const r = sInput.getBoundingClientRect(); box.style.left = Math.max(4, r.left) + "px"; box.style.top = r.bottom + 3 + "px"; box.style.width = Math.min(r.width, window.innerWidth - 8) + "px"; }
+  function sHide() { if (box) box.hidden = true; sItems = []; sHi = -1; clearTimeout(sTimer); sSeq++; P.cancelSuggest(); }
+  function sRender(note) {
+    sBox(); box.innerHTML = sItems.map((it, i) => `<button type="button" role="option" class="sg${i === sHi ? " hi" : ""}" data-i="${i}"><span aria-hidden="true">\ud83d\udccd</span><span><b>${esc(it.name)}</b>${it.region ? `<span class="muted">${esc(it.region)}</span>` : ""}</span></button>`).join("") +
+      (note ? `<div class="sg-note">${esc(note)}</div>` : "") + `<div class="sg-foot"><span>Map suggestions &middot; &copy; OpenStreetMap</span><button type="button" class="sg-off">Turn off</button></div>`;
+    box.hidden = false; sPlace();
+  }
+  function sPick(i) {
+    const it = sItems[i]; if (!it || !sInput) return;
+    pending.set(it.name.toLowerCase(), { lat: it.lat, lon: it.lon, label: [it.name, it.region].filter(Boolean).join(", ") });
+    picking = true; sInput.value = it.name; picking = false;
+    sInput.classList.add("onmap"); sInput.title = "Position from the map: " + pending.get(it.name.toLowerCase()).label;
+    const input = sInput; sHide(); input.focus({ preventScroll: true });
+    say(`\u201c${it.name}\u201d found on the map${it.region ? " (" + it.region + ")" : ""}. It is added to your map when you save.`);
+  }
+  function onInput(e) {
+    const el = e.target; if (!el.matches || !el.matches(SEL) || picking) return;
+    el.classList.remove("onmap"); el.removeAttribute("title"); sInput = el; clearTimeout(sTimer);
+    const q = el.value.trim();
+    if (!suggestOn() || q.length < 3 || P.get(q)) { sHide(); return; }                                // nothing to look up: too short, switched off, or already on your map
+    const seq = ++sSeq;
+    sTimer = setTimeout(async () => {                                                                   // 0.5 s after the last key, so a few letters make one request
+      try { const rows = await P.suggest(q); if (seq !== sSeq || sInput !== el) return; sItems = rows; sHi = -1; if (rows.length) sRender(); else sHide(); }
+      catch (err) { if (err.name !== "AbortError" && seq === sSeq && navigator.onLine) { sItems = []; sRender(err.message); } else if (err.name !== "AbortError") sHide(); }
+    }, 500);
+  }
+  function sWire() {
+    document.addEventListener("input", onInput);
+    document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches(SEL)) sInput = e.target; else if (!(box && box.contains(e.target))) sHide(); });
+    document.addEventListener("focusout", () => setTimeout(() => { if (box && !box.hidden && !box.contains(document.activeElement) && document.activeElement !== sInput) sHide(); }, 180));
+    document.addEventListener("pointerdown", (e) => { if (box && !box.hidden && !box.contains(e.target) && e.target !== sInput) sHide(); }, true);
+    document.addEventListener("keydown", (e) => {
+      if (!box || box.hidden || e.target !== sInput) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const n = sItems.length; sHi = n ? (e.key === "ArrowDown" ? (sHi + 1) % n : (sHi - 1 + n) % n) : -1; sRender(); }
+      else if (e.key === "Enter" && sHi >= 0) { e.preventDefault(); e.stopImmediatePropagation(); sPick(sHi); }
+      else if (e.key === "Escape") { e.stopImmediatePropagation(); sHide(); }
+    }, true);
+    sBox().addEventListener("pointerdown", (e) => e.preventDefault());                                  // keep the focus in the text box
+    box.addEventListener("click", (e) => { const b = e.target.closest(".sg"); if (b) return sPick(+b.dataset.i); if (e.target.closest(".sg-off")) { try { localStorage.setItem("mapSuggest", "0"); } catch (err) {} sHide(); const c = $("sugOn"); if (c) c.checked = false; say("Map suggestions are off. You can turn them on again under All places on the Summary."); } });
+    window.addEventListener("resize", sPlace); window.addEventListener("scroll", sPlace, true);
+    const c = $("sugOn"); if (c) { c.checked = suggestOn(); c.addEventListener("change", () => { try { localStorage.setItem("mapSuggest", c.checked ? "1" : "0"); } catch (err) {} if (!c.checked) sHide(); }); }
+  }
+  /** The position chosen from a suggestion for this location text (once), or null. */
+  function takePending(name) { const k = String(name || "").trim().toLowerCase(), v = pending.get(k); pending.delete(k); return v || null; }
+
   let wired = false;
   function wire() {
-    if (wired || !$("mapCard")) return; wired = true;
+    if (wired || !$("mapCard")) return; wired = true; sWire();
     $("ppGo").addEventListener("click", search); $("ppQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
     $("ppResults").addEventListener("click", (e) => { const b = e.target.closest(".res"); if (b && $("ppResults")._rows) choose($("ppResults")._rows[+b.dataset.i]); });
     $("ppSkipAll").addEventListener("click", close);
@@ -139,5 +190,5 @@ const PlacesUI = (() => {
   }
   async function init() { wire(); await P.load(); if (typeof Dives !== "undefined") Dives.render(); }
 
-  return { render: renderFrom, shown, open, offer, init, pins: () => pins, missing: () => missing };
+  return { render: renderFrom, shown, open, offer, takePending, init, pins: () => pins, missing: () => missing };
 })();

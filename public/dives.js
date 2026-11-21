@@ -75,10 +75,21 @@ const Dives = (() => {
       await put({ ...r, location: loc || undefined, locDirty: true }); if (loc) entered.push(loc);
     }
     render(); await pushLocations(); render();
-    // a place you have just typed that is not on the map yet goes straight to the map search
-    const fresh = []; for (const n of entered) if (!fresh.some((f) => f.toLowerCase() === n.toLowerCase()) && !window.Places.get(n)) fresh.push(n);
+    // a place you picked from the map suggestions is put on the map with that position; any other new place goes to the map search
+    lastPlaced = []; const fresh = [];
+    for (const n of entered) {
+      if (fresh.some((f) => f.toLowerCase() === n.toLowerCase()) || lastPlaced.some((f) => f.toLowerCase() === n.toLowerCase())) continue;
+      const chosen = typeof PlacesUI !== "undefined" ? PlacesUI.takePending(n) : null;
+      if (window.Places.get(n)) continue;
+      if (chosen) { try { await window.Places.save(n, chosen.lat, chosen.lon); lastPlaced.push(n); continue; } catch (e) { say("Could not save the position of \u201c" + n + "\u201d: " + e.message, "warn"); } }
+      fresh.push(n);
+    }
+    if (lastPlaced.length) render();
     if (fresh.length && typeof PlacesUI !== "undefined") PlacesUI.offer(fresh);
   }
+  let lastPlaced = [];
+  /** "Location saved" + which places were added to the map by this save. */
+  const savedText = (base) => base + (lastPlaced.length ? ` \u00b7 ${lastPlaced.map((n) => "\u201c" + n + "\u201d").join(", ")} added to the map` : "");
   async function pushLocations() {
     const dirty = (await all()).filter((r) => r.locDirty && r.uploaded);                // a dive not yet in the cloud is uploaded (with its place) first
     if (!dirty.length) return 0;
@@ -413,7 +424,7 @@ const Dives = (() => {
         if (v) { a.fps.forEach((fp) => { map[fp] = v; }); n += a.fps.length; }
       });
       el.style.display = "none";
-      if (n) { await setLocations(map); say(`Location saved for ${n} dive${n === 1 ? "" : "s"}`); } else updateBanner(await all());
+      if (n) { await setLocations(map); say(savedText(`Location saved for ${n} dive${n === 1 ? "" : "s"}`)); } else updateBanner(await all());
     };
     const first = el.querySelector("input:not([value=''])") || el.querySelector("input"); if (first && !first.value) first.focus({ preventScroll: true });
   }
@@ -484,16 +495,16 @@ const Dives = (() => {
         if (!v) { say("Type a place first", "warn"); return; }
         const targets = U.bulkTargets((await all()).filter((r) => U.monthKey(r) === msave.dataset.month), replace);
         if (!targets.length) { say("Every dive this month already has a place. Tick \u201cReplace\u201d to change them.", "warn"); return; }
-        await setLocations(Object.fromEntries(targets.map((fp) => [fp, v]))); say(`Location saved for ${targets.length} dive${targets.length === 1 ? "" : "s"}`); return;
+        await setLocations(Object.fromEntries(targets.map((fp) => [fp, v]))); say(savedText(`Location saved for ${targets.length} dive${targets.length === 1 ? "" : "s"}`)); return;
       }
       if (e.target.closest(".dh-cancel")) { renderPending = false; render(); return; }
       const dsave = e.target.closest(".dh-save");
       if (dsave) {
         const date = dsave.dataset.date, v = dsave.parentElement.querySelector("input").value, rs = (await all()).filter((r) => U.dateKey(r) === date);
-        await setLocations(Object.fromEntries(rs.map((r) => [r.fingerprint, v]))); say(U.normalizeLocation(v) ? "Location saved" : "Location cleared"); return;
+        await setLocations(Object.fromEntries(rs.map((r) => [r.fingerprint, v]))); say(U.normalizeLocation(v) ? savedText("Location saved") : "Location cleared"); return;
       }
       const vsave = e.target.closest(".dive-loc-save");
-      if (vsave) { await setLocations({ [vsave.dataset.fp]: vsave.parentElement.querySelector("input").value }); say("Location saved"); }
+      if (vsave) { await setLocations({ [vsave.dataset.fp]: vsave.parentElement.querySelector("input").value }); say(savedText("Location saved")); }
     });
     list.addEventListener("keydown", (e) => {
       if (e.target.tagName !== "INPUT") return;

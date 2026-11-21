@@ -866,4 +866,67 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL location entry opens the map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-entry.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: the location box suggests places from the map while you type, and the chosen position is used on the Summary ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], photon = [], nominatim = []; page.on("pageerror", (e) => errs.push(e.message));
+  await ctx.addInitScript(() => { try { localStorage.removeItem("mapAsk"); localStorage.removeItem("mapSuggest"); } catch (e) {} });
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+  const feat = (name, lon, lat, extra = {}) => ({ type: "Feature", geometry: { type: "Point", coordinates: [lon, lat] }, properties: { name, state: "North Sulawesi", country: "Indonesia", ...extra } });
+  const DB = { bunak: [feat("Bunaken", 124.84, 1.55), feat("Bunaken National Park", 124.76, 1.67, { city: "Manado" }), feat("Bunakeng", 125.46, 2.69)], siladen: [feat("Siladen", 124.8, 1.62)] };
+  await page.route("**/photon.komoot.io/api/**", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); photon.push(q); const key = Object.keys(DB).find((k) => q.toLowerCase().startsWith(k));
+    return r.fulfill({ json: { type: "FeatureCollection", features: key ? DB[key] : [] }, headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { nominatim.push(new URL(r.request().url()).searchParams.get("q")); return r.fulfill({ json: [], headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") return r.fulfill({ json: { deleted: 0 } }); return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, n) => ({ fingerprint: (0x123000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: null, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2), mk("2025-03-16T09:00:00", 3), mk("2025-03-17T09:00:00", 4)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const box = page.locator("#locSuggest"); const toastHas = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+    await page.waitForFunction(() => /Dive log \(4\)/.test(document.getElementById("navLog").textContent)); await page.click("#navLog");
+    await page.locator("#locBannerBtn").click(); await page.waitForSelector("#locPrompt .locask input", { state: "visible" });
+    const ins = page.locator("#locPrompt .locask input");
+    // 1. typing quickly makes ONE lookup (0.5 s after the last key), shown under the box
+    await ins.nth(0).click(); await ins.nth(0).pressSequentially("bunak", { delay: 40 }); await box.locator(".sg").first().waitFor({ state: "visible", timeout: 8000 });
+    assert.deepEqual(photon, ["bunak"], "five key presses, one request"); assert.equal(await box.locator(".sg").count(), 3);
+    assert.match(await box.innerText(), /Bunaken[\s\S]*North Sulawesi, Indonesia[\s\S]*Bunaken National Park[\s\S]*Manado, North Sulawesi, Indonesia[\s\S]*OpenStreetMap/);
+    const ib = await ins.nth(0).boundingBox(), bb = await box.boundingBox(); assert.ok(bb.y >= ib.y + ib.height - 1 && Math.abs(bb.x - ib.x) < 6, "the list sits right under the box: " + JSON.stringify([ib, bb]));
+    // 2. keyboard: Down + Enter picks; the text becomes the place name and the box turns green
+    await page.keyboard.press("ArrowDown"); assert.ok(await box.locator(".sg.hi").count() === 1); await page.keyboard.press("Enter");
+    assert.equal(await ins.nth(0).inputValue(), "Bunaken"); assert.ok(await ins.nth(0).evaluate((e) => e.classList.contains("onmap")), "marked as found on the map"); assert.ok(!(await box.isVisible()), "list closed");
+    assert.match(await ins.nth(0).getAttribute("title"), /Bunaken, North Sulawesi, Indonesia/); assert.equal(photon.length, 1, "picking does not search again"); assert.ok(await page.locator("#locPrompt").isVisible(), "Enter did not save the whole form");
+    // 3. click a suggestion; text with no match shows no list; two letters make no request
+    await ins.nth(1).click(); await ins.nth(1).pressSequentially("Siladen", { delay: 30 }); await box.locator(".sg").first().waitFor({ state: "visible" }); await box.locator(".sg").first().click(); assert.equal(await ins.nth(1).inputValue(), "Siladen");
+    await ins.nth(2).click(); await ins.nth(2).pressSequentially("Raja Ampat", { delay: 20 }); await page.waitForTimeout(900); assert.ok(!(await box.isVisible()), "nothing found: no empty list");
+    const before = photon.length; await ins.nth(3).click(); await ins.nth(3).pressSequentially("xy", { delay: 20 }); await page.waitForTimeout(800); assert.equal(photon.length, before, "two letters: no request"); await ins.nth(3).fill("");
+    // 4. Save: Bunaken and Siladen go to the map with the chosen positions, no extra step; only Raja Ampat (typed, not picked) goes to the map search
+    await page.click("#locSave"); await page.waitForSelector("#placePicker", { state: "visible" });
+    assert.deepEqual(places.map((p) => [p.name, p.lat, p.lon]), [["Bunaken", 1.55, 124.84], ["Siladen", 1.62, 124.8]], "saved with the positions from the suggestions");
+    await page.waitForFunction(() => /Where is .Raja Ampat.\?/.test(document.getElementById("ppTitle").textContent)); assert.deepEqual(nominatim, ["Raja Ampat"], "the one place that was not picked uses the map search");
+    await toastHas(/“Bunaken”, “Siladen” added to the map/); await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    await page.click("#navSummary"); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.match(await page.locator("#mapMsg").innerText(), /3 places . 2 on the map . 1 still to place/);
+    // 5. the single-dive box works the same; editing the text after picking drops the chosen position
+    await page.click("#navLog"); await page.locator("details.dive").first().locator("summary").click(); const one = page.locator("details.dive[open] .dive-loc");
+    await one.click(); await one.pressSequentially("bunak", { delay: 30 }); await box.locator(".sg").first().waitFor({ state: "visible" }); await box.locator(".sg").first().click(); assert.ok(await one.evaluate((e) => e.classList.contains("onmap")));
+    await one.press("End"); await one.pressSequentially("2", { delay: 20 }); assert.ok(!(await one.evaluate((e) => e.classList.contains("onmap"))), "edited: no longer the chosen place");
+    await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForSelector("#placePicker", { state: "visible" }); await page.waitForFunction(() => /Where is .Bunaken2.\?/.test(document.getElementById("ppTitle").textContent)); await page.click("#ppSkip");
+    // 6. 'Turn off' stops the lookups
+    await one.fill(""); await one.pressSequentially("siladen", { delay: 20 }); await page.waitForTimeout(100); await box.locator(".sg-off").waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+    if (!(await box.isVisible())) await one.pressSequentially("x", { delay: 20 }); await box.locator(".sg-off").first().click({ timeout: 8000 });
+    assert.equal(await page.evaluate(() => localStorage.getItem("mapSuggest")), "0"); const n = photon.length; await one.fill(""); await one.pressSequentially("bunaken park", { delay: 20 }); await page.waitForTimeout(900);
+    assert.equal(photon.length, n, "switched off: no lookups"); assert.ok(!(await box.isVisible()));
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS map suggestions in the location box");
+  } catch (e) { failed++; console.log("FAIL map suggestions in the location box\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-suggest.png", fullPage: true }); }
+  await ctx.close();
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

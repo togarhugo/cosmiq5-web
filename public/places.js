@@ -46,6 +46,28 @@
       box: Array.isArray(x.boundingbox) ? x.boundingbox.map(Number) : null })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lon) && Math.abs(x.lat) <= 90 && Math.abs(x.lon) <= 180);
   }
 
-  const api2 = { load, coords, get, save, remove, search, keyOf };
+  // ---- suggestions while typing (Photon: a free OpenStreetMap search made for search-as-you-type; Nominatim forbids that) ----
+  let sctl = null;
+  /** Up to 6 matches for the text typed so far: [{name, region, lat, lon}]. A newer call cancels the one before. */
+  async function suggest(query) {
+    const q = String(query || "").trim(); if (q.length < 3) return [];
+    if (sctl) sctl.abort(); sctl = new AbortController();
+    const l = ((typeof navigator !== "undefined" && navigator.language) || "en").slice(0, 2).toLowerCase(), lang = ["en", "de", "fr", "it"].includes(l) ? l : "en";
+    const r = await fetch("https://photon.komoot.io/api/?limit=8&lang=" + lang + "&q=" + encodeURIComponent(q), { signal: sctl.signal, referrerPolicy: "origin", headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error(r.status === 429 ? "The map suggestions are busy: wait a moment." : "The map suggestions failed (" + r.status + ").");
+    const body = await r.json(), out = [];
+    for (const f of (body && body.features) || []) {
+      const p = f.properties || {}, c = f.geometry && f.geometry.coordinates, name = String(p.name || "").trim();
+      if (!name || !Array.isArray(c) || !Number.isFinite(c[0]) || !Number.isFinite(c[1]) || Math.abs(c[1]) > 90 || Math.abs(c[0]) > 180) continue;
+      if (out.some((o) => o.name.toLowerCase() === name.toLowerCase() && Math.abs(o.lat - c[1]) < 0.05 && Math.abs(o.lon - c[0]) < 0.05)) continue;     // the same place listed twice (district + town)
+      const region = [p.city || p.district || p.county, p.state, p.country].filter((x, i, a) => x && x !== name && a.indexOf(x) === i).join(", ");
+      out.push({ name: name.slice(0, 60), region, lat: c[1], lon: c[0] });
+      if (out.length === 6) break;
+    }
+    return out;
+  }
+  const cancelSuggest = () => { if (sctl) sctl.abort(); };
+
+  const api2 = { load, coords, get, save, remove, search, suggest, cancelSuggest, keyOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api2; else root.Places = api2;
 })(typeof self !== "undefined" ? self : this);

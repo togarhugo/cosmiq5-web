@@ -192,3 +192,18 @@ test("two dive computers: the Cosmiq+ dive is the one kept, in every situation s
   assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), { fingerprint: "x", startedAt: "2026-05-02T09:31:00", durationSec: 2600, maxDepthM: 28, device: "other" }]).length, 2);
   assert.equal(U.regulatorCount({ baseline: 0, since: "" }, all), 3, "the regulator counts a dive worn on both wrists once");
 });
+
+test("Places.suggest: parses Photon results, drops junk and duplicates, needs 3 letters, newest request wins", async () => {
+  const P = createRequire(import.meta.url)("../public/places.js"); const calls = [];
+  const feat = (name, lon, lat, props = {}) => ({ geometry: { coordinates: [lon, lat] }, properties: { name, state: "North Sulawesi", country: "Indonesia", ...props } });
+  globalThis.fetch = async (url, opts) => { calls.push({ url, opts }); return { ok: true, status: 200, json: async () => ({ features: [feat("Bunaken", 124.84, 1.55, { district: "Bunaken" }), feat("Bunaken", 124.78, 1.6), feat("Bunaken National Park", 124.76, 1.67, { city: "Manado" }), feat("", 1, 1), feat("Nowhere", 500, 1), feat("Bad", "x", 1), { properties: { name: "NoGeometry" } }, feat("Bunaken", 124.8401, 1.5501)] }) }; };
+  assert.deepEqual(await P.suggest("bu"), [], "fewer than 3 letters: no request"); assert.equal(calls.length, 0);
+  const r = await P.suggest("  bunak "); assert.equal(calls.length, 1); assert.match(calls[0].url, /photon\.komoot\.io\/api\/\?limit=8&lang=en&q=bunak$/); assert.equal(calls[0].opts.referrerPolicy, "origin");
+  assert.deepEqual(r.map((x) => x.name), ["Bunaken", "Bunaken", "Bunaken National Park"], "empty names, impossible coordinates and a near-identical repeat are dropped; two different Bunakens stay");
+  assert.deepEqual(r[0], { name: "Bunaken", region: "North Sulawesi, Indonesia", lat: 1.55, lon: 124.84 }, "region leaves out the name itself"); assert.equal(r[2].region, "Manado, North Sulawesi, Indonesia");
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({}) }); await assert.rejects(P.suggest("bunaken"), /busy/);
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) }); assert.deepEqual(await P.suggest("bunaken"), []);
+  let aborted = 0; globalThis.fetch = (url, o) => new Promise((res, rej) => { o.signal.addEventListener("abort", () => { aborted++; rej(Object.assign(new Error("aborted"), { name: "AbortError" })); }); setTimeout(() => res({ ok: true, json: async () => ({ features: [] }) }), 20); });
+  const first = P.suggest("bunak1"), second = P.suggest("bunak2"); await assert.rejects(first, /aborted/); await second; assert.equal(aborted, 1, "a newer request cancels the older one");
+  delete globalThis.fetch;
+});

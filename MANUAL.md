@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.11.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.12.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -151,6 +151,11 @@ Every dive location you type (for example *Tulamben*) is a **place**. A place ge
 
 **The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*.
 
+**The location box searches the map while you type.** In every box where you enter a dive location (the question after a sync, a date, a month, one dive), type at least three letters: a list of matching places from the map appears right under the box, with the region next to each name (for example *Bunaken · North Sulawesi, Indonesia*). Tap one (or use the arrow keys and Enter): the box takes that name and turns **green**, and when you save, the place is **added to your map with that exact position** and shows on the Summary at once. The message says which places were added. You can still type any name you like: a place you did not pick from the list goes to the map search described below. Edit the text after picking and it counts as a different place again.
+* The lookup waits half a second after your last key, so fast typing makes one request. It needs internet; without it you simply type as before.
+* Not wanted? Tap **Turn off** at the bottom of the list, or untick *Suggest places from the map while I type a location* under **All places** on the Summary.
+* The text you type (3 letters or more) is sent to **Photon** (photon.komoot.io, a free service that searches OpenStreetMap data and is made for suggestions while typing). Nothing else is sent. It is a shared free service: if it is busy the list shows a message and you carry on typing.
+
 **Entering a location opens the map.** When you save a location in the dive log that is **not on the map yet** (after a sync, for a date, for a month, or for one dive), the map search opens for it straight away, with the name already searched. Tap the right result (or tap the map), then **Save pin**. Several new places are done one after another; **Skip this one** / **Skip all** leave them for later. A location that is already on the map never asks again. If you would rather do it later, untick **Open the map when I enter a new location** at the bottom of the map screen: the orange buttons and the bar in the dive log remain.
 
 **Putting a place on the map yourself**
@@ -160,7 +165,7 @@ Every dive location you type (for example *Tulamben*) is a **place**. A place ge
 
 The name you typed stays as it is: the map only adds a position to it. Places with different capitalisation (*Tulamben* / *tulamben*) are one place. If you change a dive's location to a new name, that new place appears in the list to be put on the map.
 
-**Privacy and limits.** The map pictures and the place search come from **OpenStreetMap** (free). When you open a map or tap Search, OpenStreetMap sees the map area you look at, the text you search for, and that the request comes from this app; it never sees your dives, your account or the other places. Search runs only when you tap it (their usage rules ask for that). Without internet the pins and lists still show, but the map background and the search do not. Positions are saved in your account, up to 500 places.
+**Privacy and limits.** The map pictures and the place search come from **OpenStreetMap** (free). When you open a map or tap Search, OpenStreetMap sees the map area you look at, the text you search for, and that the request comes from this app; it never sees your dives, your account or the other places. The map search by button (Nominatim) runs only when you tap it, because their usage rules ask for that; the suggestions while typing come from Photon (see above). Without internet the pins and lists still show, but the map background and the search do not. Positions are saved in your account, up to 500 places.
 
 ---
 
