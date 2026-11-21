@@ -61,22 +61,39 @@
   // ---- several dive computers ----
   const DEVICES = [{ id: "cosmiq", name: "Cosmiq+ Gen 5", short: "Cosmiq+" }, { id: "peregrine", name: "Shearwater Peregrine", short: "Peregrine" }];
   const deviceOf = (rec) => rec.device || "cosmiq";
-  const endMs = (r) => Date.parse(r.startedAt + "Z") + (r.durationSec || 0) * 1000;
-  /**
-   * Dives to count in totals: when two computers recorded the same dive (worn together), it is counted once. A dive from a
-   * different computer that starts before an earlier dive has ended is that same dive. Same-computer dives never merge.
-   */
-  function uniqueDives(recs) {
-    const asc = recs.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt)), kept = [];
-    for (const r of asc) {
-      const t = Date.parse(r.startedAt + "Z");
-      let dup = false;
-      for (let i = kept.length - 1; i >= 0 && t - Date.parse(kept[i].startedAt + "Z") < 86400000; i--)
-        if (deviceOf(kept[i]) !== deviceOf(r) && t < endMs(kept[i])) { dup = true; break; }
-      if (!dup) kept.push(r);
-    }
-    return kept;
+  const startMs = (r) => Date.parse(r.startedAt + "Z"), HOUR = 3600000;
+  /** Do the two dives overlap on the clock (the other computer started a few minutes early or late)? */
+  const overlaps = (a, b) => { const as = startMs(a), bs = startMs(b); return as < bs + (b.durationSec || 0) * 1000 && bs < as + (a.durationSec || 0) * 1000; };
+  /** Clocks one or two whole hours apart (time zone / daylight saving: seen as exactly one hour in a real log): same length (5 min or 15 %) and depth (2 m or 10 %). */
+  function shiftedSame(a, b) {
+    const diff = startMs(b) - startMs(a), h = Math.round(diff / HOUR);
+    if (h === 0 || Math.abs(h) > 2 || Math.abs(diff - h * HOUR) > 5 * 60000) return false;
+    const ad = (a.durationSec || 0) * 1000, bd = (b.durationSec || 0) * 1000, ma = a.maxDepthM || 0, mb = b.maxDepthM || 0;
+    return Math.abs(ad - bd) <= Math.max(300000, 0.15 * Math.max(ad, bd)) && Math.abs(ma - mb) <= Math.max(2, 0.1 * Math.max(ma, mb));
   }
+  const sameDive = (a, b) => overlaps(a, b) || shiftedSame(a, b);
+  /**
+   * Dives recorded by two computers at once: {duplicate fingerprint -> the fingerprint it duplicates}. The computers are ranked in
+   * DEVICES order (the Cosmiq+ first): the higher-ranked computer's dive is the one that is kept and counted. Dives of the same
+   * computer are never duplicates of each other. A clock that is whole hours off is only trusted for a dive nothing else matched,
+   * and each kept dive is matched that way at most once (a second dive of the same size 1-2 hours away is a different dive).
+   */
+  function duplicateMap(recs) {
+    const out = new Map(), kept = [];
+    for (const dev of DEVICES) {
+      const mine = recs.filter((r) => deviceOf(r) === dev.id), matched = new Set(), claimed = new Set(), rest = [];
+      for (const r of mine) { const hit = kept.find((k) => Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && overlaps(k, r)); if (hit) { out.set(r.fingerprint, hit.fingerprint); matched.add(hit.fingerprint); } else rest.push(r); }
+      for (const r of rest) {
+        const hit = kept.find((k) => !matched.has(k.fingerprint) && !claimed.has(k.fingerprint) && Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && shiftedSame(k, r));
+        if (hit) { out.set(r.fingerprint, hit.fingerprint); claimed.add(hit.fingerprint); }
+      }
+      for (const r of mine) if (!out.has(r.fingerprint)) kept.push(r);
+    }
+    for (const r of recs) if (!DEVICES.some((d) => d.id === deviceOf(r))) kept.push(r);
+    return out;
+  }
+  /** Dives to count in totals: every dive once. When two computers recorded the same dive, the Cosmiq+ record is used. */
+  function uniqueDives(recs) { const dup = duplicateMap(recs); return recs.filter((r) => !dup.has(r.fingerprint)).sort((a, b) => a.startedAt.localeCompare(b.startedAt)); }
   /** Dive number to show: the computer's own count when it has one, otherwise its place in that computer's log (oldest = 1). */
   function diveNumbers(recs) {
     const out = new Map(), by = new Map();
@@ -103,10 +120,11 @@
 
   /** The summary page: last dive date and total dive time. */
   function summarize(recs, today) {
-    recs = uniqueDives(recs);
-    if (!recs.length) return { count: 0, totalSec: 0, last: null };
+    const all = recs; recs = uniqueDives(recs);
+    if (!recs.length) return { count: 0, totalSec: 0, last: null, duplicates: 0 };
     const last = recs.slice().sort(byStartDesc)[0];
     return { count: recs.length, totalSec: recs.reduce((a, r) => a + (r.durationSec || 0), 0),
+      duplicates: all.length - recs.length,
       last: { date: dateKey(last), startedAt: last.startedAt, location: last.location || "", daysAgo: daysBetween(dateKey(last), today || new Date()) } };
   }
 
@@ -165,6 +183,6 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { DEVICES, deviceOf, uniqueDives, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  const api = { DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

@@ -345,7 +345,7 @@ const Dives = (() => {
     $("sumLastDate").textContent = fmtDayLong(sm.last.date);
     $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
     $("sumHours").textContent = U.hoursText(sm.totalSec);
-    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}`;
+    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on both computers, counted once (Cosmiq+ used)` : "");
   }
   /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */
   function renderDiverCard() {
@@ -505,6 +505,7 @@ const Dives = (() => {
     const everything = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = everything.length ? `(${everything.length})` : "";
     renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(everything); wireList(list);
+    const dups = U.duplicateMap(everything);                                            // dives both computers recorded: only the Cosmiq+ one is counted
     const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
@@ -531,7 +532,7 @@ const Dives = (() => {
       const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
         ${numBox(num)}<span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
-        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}
+        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${dups.has(r.fingerprint) ? '<span class="badge also" title="Recorded by both computers: the Cosmiq+ dive is the one counted in the Summary">also on Cosmiq+</span>' : ""}
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };

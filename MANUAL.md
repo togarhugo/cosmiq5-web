@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.10.3. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.10.4. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -216,7 +216,9 @@ Shows the **app version**, whether a newer one is available, **Check for update*
 * **Time since last dive** is counted from the end of the previous dive to the start of this one.
 * **Profile memory is a ring.** The Cosmiq+ keeps depth profiles in a fixed-size memory (about the last 128 dives) and overwrites the oldest. Dive Manager matches every profile to the dive it really belongs to, recovers dives the device itself cannot read under their own number, and marks overwritten ones *summary only*. **Sync after every trip**: each new dive overwrites an old profile on the device.
 * **Peregrine dives** come from the Shearwater Cloud file (or Bluetooth) you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). From a Shearwater Cloud database the values are decoded from the dive computer's own records (depth, duration, temperature, first gas, depth samples) and the dive number is your Shearwater Cloud logbook number; from UDDF they are what Shearwater Cloud wrote.
-* **Two computers, one dive:** if you wore both and both logged the same dive, Summary totals and the regulator counter count it once (a dive from the other computer that starts before the first one has ended). Both stay visible in their own log.
+* **Two computers, one dive:** if you wore both and both logged the same dive, the Summary totals, the last dive and the regulator counter count it **once and use the Cosmiq+ record**. Both stay visible in their own log; the Peregrine copy is marked *also on Cosmiq+*, and the Summary says how many were counted once.
+  * The same dive is recognised when the two records **overlap in time** (the computers' clocks are often a few minutes apart) or when the clocks are **exactly one or two hours apart** (time zone or daylight saving) and the dive has the same length and depth. A dive on the Peregrine only is added.
+  * Limits: this is matching by time, length and depth, so two real dives of the same size exactly 1-2 hours apart while one clock is also off by that much could be confused. Very short Peregrine records (under a minute, at the surface) are counted as dives like any other.
 * **The Cosmiq+ dive log has no GPS** or location information; locations are what you type.
 * The device clock has no time zone: dive times are shown exactly as the dive computer recorded them.
 

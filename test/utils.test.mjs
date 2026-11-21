@@ -42,7 +42,7 @@ test("summarize: last dive date, total dive time, dive count, location of the la
   const s = U.summarize(r, new Date(2026, 10, 21, 15, 0));
   assert.equal(s.count, 3); assert.equal(s.totalSec, 4500 + 3600 + 7260);
   assert.deepEqual(s.last, { date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
-  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null });
+  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0 }); assert.equal(s.duplicates, 0);
   assert.equal(U.summarize([dive("2026-11-21T09:00:00", 60)], new Date(2026, 10, 21, 23, 59)).last.daysAgo, 0, "same calendar day = today");
 });
 
@@ -159,4 +159,36 @@ test("chart axes: round gridlines that always cover the data", () => {
   assert.deepEqual(U.timeTicks(23 * 60), { step: 300, ticks: [300, 600, 900, 1200] });
   assert.deepEqual(U.timeTicks(45 * 60).ticks, [600, 1200, 1800, 2400]); assert.ok(U.timeTicks(30).ticks.length <= 6);
   assert.ok(U.timeTicks(3 * 3600).ticks.every((t) => t < 3 * 3600)); assert.ok(U.timeTicks(86400).ticks.length <= 12);
+});
+
+test("two dive computers: the Cosmiq+ dive is the one kept, in every situation seen in a real log", () => {
+  const d = (startedAt, durationSec, depth, device) => ({ fingerprint: (device || "cosmiq") + startedAt, startedAt, durationSec, maxDepthM: depth, ...(device ? { device } : {}) });
+  const cosmiq = (a, b, c) => d(a, b, c), pere = (a, b, c) => d(a, b, c, "peregrine");
+  const keptOf = (recs) => U.uniqueDives(recs).map((r) => r.fingerprint);
+  // the Peregrine started first: still the Cosmiq record is used (it used to be the earlier one)
+  assert.deepEqual(keptOf([pere("2026-05-02T09:28:00", 2760, 28.4), cosmiq("2026-05-02T09:30:00", 2700, 28.5)]), ["cosmiq2026-05-02T09:30:00"]);
+  assert.deepEqual(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:28:00", 2760, 28.4)]), ["cosmiq2026-05-02T09:30:00"], "order of the list does not matter");
+  // clocks 12 minutes apart (September 2024 in the real log): they still overlap
+  assert.equal(keptOf([cosmiq("2024-09-07T12:00:00", 3600, 21.76), pere("2024-09-07T12:12:00", 3600, 22)]).length, 1);
+  // clocks exactly one hour apart (5 May 2022 in the real log): no overlap on the clock, but the same dive
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 2903, 13.5)]).length, 1, "one hour apart, same length and depth");
+  assert.equal(keptOf([cosmiq("2022-05-05T14:58:00", 3360, 20.77), pere("2022-05-05T13:58:00", 3120, 20.1)]).length, 1);
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 1200, 13.5)]).length, 2, "an hour apart but a very different length: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 3100, 30)]).length, 2, "an hour apart but a very different depth: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:25:00", 1800, 14.5)]).length, 2, "not a whole number of hours apart and no overlap: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:40:00", 3180, 14.5)]).length, 1, "overlapping on the clock = the same dive");
+  // separate dives: a later one, and a Peregrine-only dive
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T13:30:00", 2700, 28.5)]).length, 2, "hours later, same numbers: a different dive");
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T13:30:00", 2700, 28.5)]).length, 2, "4 h apart is not a clock offset we trust");
+  // a Cosmiq dive that already has its own Peregrine twin is not matched again by a look-alike an hour away
+  assert.equal(keptOf([cosmiq("2026-05-02T11:00:00", 3000, 20), pere("2026-05-02T11:01:00", 3000, 20), pere("2026-05-02T10:00:00", 3000, 20)]).length, 2, "the look-alike stays a separate dive");
+  const all = [cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:31:00", 2640, 28.4), pere("2026-05-03T07:00:00", 3000, 20, "peregrine"), cosmiq("2026-05-04T07:00:00", 3000, 20)];
+  const m = U.duplicateMap(all); assert.deepEqual([...m.entries()], [["peregrine2026-05-02T09:31:00", "cosmiq2026-05-02T09:30:00"]], "only the Peregrine copy is marked, and it points at the Cosmiq dive");
+  assert.equal(U.uniqueDives(all).length, 3); const sm = U.summarize(all, new Date(2026, 10, 21)); assert.equal(sm.count, 3); assert.equal(sm.duplicates, 1); assert.equal(sm.totalSec, 2700 + 3000 + 3000, "the Cosmiq length is used, not the Peregrine's");
+  // short surface blips on the Peregrine during a Cosmiq dive are not extra dives
+  assert.equal(keptOf([cosmiq("2022-06-09T08:16:00", 3900, 16.89), pere("2022-06-09T08:20:00", 20, 2.4)]).length, 1);
+  // same computer never merges with itself, and unknown computers are left alone
+  assert.equal(keptOf([pere("2026-05-02T09:30:00", 2700, 28), pere("2026-05-02T09:40:00", 600, 5)]).length, 2);
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), { fingerprint: "x", startedAt: "2026-05-02T09:31:00", durationSec: 2600, maxDepthM: 28, device: "other" }]).length, 2);
+  assert.equal(U.regulatorCount({ baseline: 0, since: "" }, all), 3, "the regulator counts a dive worn on both wrists once");
 });

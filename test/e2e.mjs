@@ -587,10 +587,12 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.setInputFiles("#impFile", good); await page.waitForFunction(() => /0 new dives imported, 3 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
     assert.equal(uploaded.length, 5, "no duplicate upload");
     await page.click("#navSummary");
-    assert.match(await page.locator("#sumCount").innerText(), /across 4 dives/, "5 logged, one recorded by both computers = 4");
+    assert.match(await page.locator("#sumCount").innerText(), /across 4 dives . 1 recorded on both computers, counted once \(Cosmiq\+ used\)/, "5 logged, one recorded by both computers = 4, and the Summary says so");
     assert.equal(await page.locator("#sumRegCount").innerText(), "3", "regulator: 4 dives minus the freedive; the dive on both wrists counted once");
     // location prompt covers imported dives, and saving it reaches them
     await page.click("#navLog"); await page.waitForSelector("#locPrompt input", { state: "visible" });
+    assert.equal(await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator(".badge.also").count(), 1, "the Peregrine copy of the dive Cosmiq also recorded is marked");
+    assert.equal(await page.locator("details.dive .badge.also").count(), 1, "and only that one");
     assert.match(await page.locator("#locPrompt h3").innerText(), /Where did you dive/); assert.match(await page.locator("#locPrompt").innerText(), /imported dives?/);
     const locCalls = []; await page.unroute("**/api/dives/location"); await page.route("**/api/dives/location", (r) => { locCalls.push(...JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
     const firstIn = page.locator("#locPrompt .locask input").first(); await firstIn.fill("Banda"); await page.click("#locSave");

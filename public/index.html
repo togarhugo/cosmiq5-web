@@ -397,6 +397,7 @@
             #devTabs { display: flex; gap: 6px; margin-bottom: 12px; }
             #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
             #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
+            .badge.also { background: #e7f5ff; color: #1864ab; text-transform: none; }
             .chart { display: block; }
             #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed #74c0fc; border-radius: 14px; background: #f3faff; color: #1864ab; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
             #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: #495057; }
@@ -834,7 +835,7 @@
                 </label>
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
-                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
                 <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
                     <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
                     <button id="pgBtn" class="btn-main" type="button" style="background:#6c757d">Download dives over Bluetooth</button>
