@@ -1,0 +1,25 @@
+name = "cosmiq-manager"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# API calls go to the Worker first; everything else is served as static files.
+run_worker_first = ["/api/*"]
+
+# Serve on your own domain (the zone must be on this Cloudflare account).
+routes = [{ pattern = "cosmiq.thmlab.org", custom_domain = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cosmiq"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+
+[vars]
+# Zero Trust > Settings > Custom Pages shows your team name: <team>.cloudflareaccess.com
+TEAM_DOMAIN = "REPLACE_TEAM.cloudflareaccess.com"
+# Zero Trust > Access > Applications > your app > "Application Audience (AUD) Tag"
+POLICY_AUD = "REPLACE_WITH_AUD_TAG"
+# Defence in depth: only this Google account may use the API (comma-separated allowed).
+ALLOWED_EMAILS = "togar.h@gmail.com"
