@@ -445,6 +445,12 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     validColor: getComputedStyle(document.getElementById("sumDanValid")).color, rowBorder: getComputedStyle(document.getElementById("sumDanRow")).borderLeftColor }));
   const setDan = async (n, plan, valid) => { await page.fill("#danNumber", n); await page.fill("#danPlan", plan); await page.fill("#danValid", valid); await page.click("#danSave"); await toastIs(/DAN details saved/); };
   try {
+    // icons: a dive flag for the certification, the DAN logo for the membership (no emoji)
+    assert.equal(await page.locator("#sumDiver .diver-row svg.flag").count(), 1, "dive flag on the certification row");
+    assert.equal(await page.locator("#sumDiver .diver-row .ico", { hasText: /\S/ }).count(), 0, "no emoji or text icons left");
+    assert.ok(await page.locator("#sumDanRow img.dan-logo").evaluate((i) => i.complete && i.naturalWidth > 50), "the DAN logo loads");
+    assert.equal(await page.locator("#sumDiver .diver-row svg.flag polygon").getAttribute("fill"), "#fff");
+    await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png" });
     // 1. nothing entered yet: placeholders and hints; your Google name is the fallback for the name
     await until(async () => (await diver()).name === "Google Name", "the Google name as a fallback");
     let d = await diver(); assert.equal(d.cert, "None added yet"); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.match(d.certSub, /Add one in Account/);
@@ -459,7 +465,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await setDan("4412 3399", "DAN Master", "2026-03-31");
     assert.deepEqual(calls.at(-1), ["dan", { number: "4412 3399", plan: "DAN Master", validUntil: "2026-03-31" }]);
     assert.match(await page.locator("#danState").innerText(), /Valid until .*2026 . 12 months left/); assert.equal(await page.locator("#danBadge").innerText(), "Valid");
-    await page.click("#navSummary"); d = await diver();
+    await page.click("#navSummary"); d = await diver(); await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER_DAN || "/tmp/shot-diver-dan.png" });
     assert.match(d.danCls, /dan-ok/); assert.equal(d.dan, "#4412 3399 \u00b7 DAN Master"); assert.match(d.valid, /Valid until .*2026 . 12 months left/); assert.equal(d.rowBorder, "rgb(43, 138, 62)"); assert.equal(d.validColor, "rgb(43, 138, 62)");
     await page.click("#acctBtn"); await setDan("4412 3399", "DAN Master", "2025-04-30"); await page.click("#navSummary"); d = await diver();
     assert.match(d.danCls, /dan-soon/); assert.match(d.valid, /Valid until .*2025 . 44 days left/); assert.equal(d.rowBorder, "rgb(230, 119, 0)"); assert.equal(d.validColor, "rgb(217, 72, 15)");

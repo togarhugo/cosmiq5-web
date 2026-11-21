@@ -12,5 +12,5 @@
     "qrcode-generator": "^2.0.4",
     "wrangler": "^4"
   },
-  "version": "0.10.4"
+  "version": "0.10.5"
 }

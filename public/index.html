@@ -371,7 +371,7 @@
             .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
             .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
             .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: #f8f9fa; }
-            .diver-row .ico { font-size: 22px; line-height: 1.2; } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
+            .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
             .diver-val { font-size: 16px; font-weight: 600; word-break: break-word; } .dan-valid { font-size: 13px; font-weight: 600; margin-top: 2px; }
             .diver-row.dan-ok { background: #ebfbee; border-left: 4px solid #2b8a3e; } .dan-ok .dan-valid { color: #2b8a3e; }
             .diver-row.dan-soon { background: #fff4e6; border-left: 4px solid #e67700; } .dan-soon .dan-valid, .dan-soon .diver-val { color: #d9480f; }
@@ -457,9 +457,9 @@
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
             <div id="sumDiver" class="card sum" style="display:none">
                 <div id="sumName" class="diver-name"></div>
-                <div class="diver-row"><span class="ico" aria-hidden="true">&#127891;</span>
+                <div class="diver-row"><span class="ico" aria-hidden="true"><svg class="flag" viewBox="0 0 36 24" width="34" height="23"><rect width="36" height="24" rx="2" fill="#d94b3c"/><polygon points="0,0 4.3,0 36,20.3 36,24 32.2,24 0,3.8" fill="#fff"/></svg></span>
                     <div><div class="lbl">Latest certification</div><div id="sumCert" class="diver-val"></div><div id="sumCertSub" class="muted"></div></div></div>
-                <div id="sumDanRow" class="diver-row dan-none"><span class="ico" aria-hidden="true">&#128737;</span>
+                <div id="sumDanRow" class="diver-row dan-none"><span class="ico" aria-hidden="true"><img class="dan-logo" src="dan-logo.png" alt="" width="31" height="32"></span>
                     <div><div class="lbl">DAN member</div><div id="sumDan" class="diver-val"></div><div id="sumDanValid" class="dan-valid"></div></div></div>
             </div>
             <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
