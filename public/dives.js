@@ -431,16 +431,17 @@ const Dives = (() => {
   const DEV_KEY = "logDevice";
   let selDevice = (() => { try { return localStorage.getItem(DEV_KEY); } catch (e) { return null; } })();
   /** Draws the computer selector, shows the matching sync / import card, and returns the computer being shown. */
+  let curDevice = "cosmiq";                                                                           // the log being shown (picked by you, or your newest dive's computer)
   function renderDeviceTabs(recs) {
     const ids = U.DEVICES.map((x) => x.id);
-    if (!ids.includes(selDevice)) selDevice = recs.length ? U.deviceOf(recs[0]) : "cosmiq";           // newest dive's computer
+    const shown = ids.includes(selDevice) ? selDevice : recs.length ? U.deviceOf(recs[0]) : "cosmiq";    // until you pick one: the computer of your newest dive (not remembered, so it follows the data as it arrives)
     const box = $("devTabs");
     if (box) box.innerHTML = U.DEVICES.map((x) => { const n = recs.filter((r) => U.deviceOf(r) === x.id).length;
-      return `<button type="button" role="tab" aria-selected="${x.id === selDevice}" class="${x.id === selDevice ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
+      return `<button type="button" role="tab" aria-selected="${x.id === shown}" class="${x.id === shown ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
     const sync = $("syncCard"), imp = $("importCard");
-    if (sync) sync.style.display = selDevice === "cosmiq" ? "" : "none";
-    if (imp) { imp.style.display = selDevice === "cosmiq" ? "none" : ""; }
-    return selDevice;
+    if (sync) sync.style.display = shown === "cosmiq" ? "" : "none";
+    if (imp) { imp.style.display = shown === "cosmiq" ? "none" : ""; }
+    curDevice = shown; return shown;
   }
   function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
 
@@ -454,11 +455,11 @@ const Dives = (() => {
       const over = (on) => card.classList.toggle("dropping", on);
       card.addEventListener("dragenter", (e) => { e.preventDefault(); over(true); }); card.addEventListener("dragover", (e) => { e.preventDefault(); over(true); });
       card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) over(false); });
-      card.addEventListener("drop", async (e) => { e.preventDefault(); over(false); const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (fs.length) await importFiles(fs, selDevice); });
+      card.addEventListener("drop", async (e) => { e.preventDefault(); over(false); const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (fs.length) await importFiles(fs, curDevice); });
     }
     const zone = $("dropZone"); if (zone) zone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("impFile").click(); } });
     const pick = $("impFile");
-    if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, selDevice); });
+    if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, curDevice); });
     list.addEventListener("click", async (e) => {
       const head = e.target.closest(".dh-loc");
       if (head) {                                                                // swap the chip for an editor
