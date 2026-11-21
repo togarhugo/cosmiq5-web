@@ -75,3 +75,14 @@ CREATE TABLE IF NOT EXISTS certs (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS certs_by_user ON certs (user_email, created_at);
+
+-- Where each dive place is on the map (see migrations/0006_places.sql).
+CREATE TABLE IF NOT EXISTS places (
+  user_email TEXT NOT NULL,
+  k          TEXT NOT NULL,                 -- lower-case place name
+  name       TEXT NOT NULL,                 -- the spelling you use
+  lat        REAL NOT NULL,
+  lon        REAL NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_email, k)
+);

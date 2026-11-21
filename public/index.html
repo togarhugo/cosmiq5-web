@@ -11,6 +11,7 @@
         <link rel="apple-touch-icon" href="icon-192.png" />
         <link rel="icon" href="icon-192.png" />
         <title>Dive Manager</title>
+        <link rel="stylesheet" href="vendor/leaflet.css" />
         <style>
             :root {
                 --blue: #007bff;
@@ -398,6 +399,23 @@
             #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
             #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
             .badge.also { background: #e7f5ff; color: #1864ab; text-transform: none; }
+            .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: #dbe9f3; margin: 8px 0; }
+            .mapbox.tall { height: 300px; flex: 0 0 auto; }
+            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: #495057; margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
+            .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid #ffe08a; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #6b5200; }
+            #mapUnplaced { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+            .chip { background: #fff4e6; color: #d9480f; border: 1px solid #ffd8a8; border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
+            .place-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee; flex-wrap: wrap; font-size: 14px; }
+            #placeBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+            #placePicker { position: fixed; inset: 0; z-index: 55; background: #fff; overflow-y: auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; max-width: 640px; margin: 0 auto; }
+            #placePicker[hidden] { display: none; }
+            body.pp-open { overflow: hidden; }
+            .pp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; } .pp-head b { font-size: 17px; }
+            .pp-search { display: flex; gap: 6px; } .pp-search input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            #ppResults { max-height: 190px; overflow-y: auto; margin-top: 6px; }
+            .res { display: block; width: 100%; text-align: left; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; min-height: 44px; font-size: 14px; color: #212529; }
+            .res b { display: block; } .res span { display: block; font-size: 12px; }
+            .leaflet-container { font: inherit; }
             .chart { display: block; }
             #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed #74c0fc; border-radius: 14px; background: #f3faff; color: #1864ab; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
             #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: #495057; }
@@ -470,6 +488,13 @@
                 <div id="sumRegMsg" class="reg-msg"></div>
             </div>
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
+            <div id="mapCard" class="card" style="display:none">
+                <div class="sum-label">Where you have dived</div>
+                <div id="sumMap" class="mapbox" role="region" aria-label="Map of the places you have dived"></div>
+                <div id="mapMsg" class="muted"></div>
+                <div id="mapUnplaced"></div>
+                <details class="logwrap" style="margin-top:8px"><summary>All places</summary><div id="placeList"></div></details>
+            </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
                     <div class="sum-label">Last dive</div>
@@ -818,6 +843,8 @@
             <div id="locPrompt" class="card" style="display:none" role="region" aria-label="Dive locations"></div>
             <div id="locBanner" class="card" style="display:none"><span aria-hidden="true">&#128205;</span> <span id="locBannerText"></span>
                 <button id="locBannerBtn" class="btn-set" type="button" style="margin-left:8px">Add locations</button></div>
+            <div id="placeBanner" class="card" style="display:none"><span aria-hidden="true">&#128506;</span> <span id="placeBannerText"></span>
+                <button id="placeBannerBtn" class="btn-set" type="button" style="margin-left:8px">Place on map</button></div>
             <datalist id="locList"></datalist>
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
             <div id="importCard" class="card" style="display:none">
@@ -1057,17 +1084,30 @@
             <a id="signOut" class="btn-main" href="/auth/logout" style="background:#6c757d;text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
+        <div id="placePicker" role="dialog" aria-modal="true" aria-labelledby="ppTitle" hidden>
+            <div class="pp-head"><b id="ppTitle">Where is it?</b><button id="ppClose" class="btn-set" type="button" style="background:#6c757d" aria-label="Close">&#10005;</button></div>
+            <div class="pp-search"><input id="ppQuery" type="search" placeholder="Search a place, e.g. Tulamben" maxlength="80" autocomplete="off" aria-label="Search for a place" /><button id="ppGo" class="btn-set" type="button">Search</button></div>
+            <div id="ppResults"></div>
+            <div id="ppMap" class="mapbox tall"></div>
+            <div id="ppHint" class="muted"></div><div id="ppCoords" class="muted" style="font-family:var(--mono)"></div>
+            <div class="row" style="margin-top:10px"><button id="ppSave" class="btn-main" type="button" disabled>Save pin</button><button id="ppSkip" class="btn-set" type="button" style="background:#6c757d">Cancel</button></div>
+            <p class="muted" style="margin-top:10px">Map and search: &copy; OpenStreetMap contributors. Only the place name you search for is sent to OpenStreetMap.</p>
+        </div>
+
         <div id="toast" role="status" aria-live="polite"></div>
 
         <details class="logwrap"><summary>Activity log</summary>
         <div id="log">Waiting for connection...</div></details>
+        <script src="vendor/leaflet.js"></script>
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
         <script src="shearwater.js"></script>
         <script src="sqlite-lite.js"></script>
         <script src="shearwater-cloud.js"></script>
+        <script src="places.js"></script>
         <script src="dives.js"></script>
+        <script src="places-ui.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
@@ -1120,7 +1160,7 @@
                 if (v === "account") { Account.load(); AccountArea.show(); }
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
-                if (v === "summary") Dives.render();
+                if (v === "summary") Dives.render().then(() => PlacesUI.shown());
             }
             const isConnected = () => !!(dev && dev.gatt && dev.gatt.connected && txChar);
             function opt(id, def) { try { const v = localStorage.getItem(id); return v === null ? def : v === "1"; } catch (e) { return def; } }
@@ -1753,6 +1793,7 @@
             }
             window.addEventListener("load", () => {
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
+                PlacesUI.init();                                                             // map pins of the places you have dived
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });

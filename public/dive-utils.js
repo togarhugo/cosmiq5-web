@@ -128,6 +128,24 @@
       last: { date: dateKey(last), startedAt: last.startedAt, location: last.location || "", daysAgo: daysBetween(dateKey(last), today || new Date()) } };
   }
 
+  // ---- places (the dive locations, for the map) ----
+  /** Every place you have dived (free-text location, case-insensitive): [{key, name, count, first, last}], most dives first. Each dive counts once. */
+  function placeStats(recs) {
+    const m = new Map();
+    for (const r of uniqueDives(recs).sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
+      if (!r.location) continue;
+      const key = r.location.trim().toLowerCase(), e = m.get(key) || { key, name: r.location, count: 0, first: r.startedAt, last: r.startedAt };
+      e.count++; e.last = r.startedAt; e.name = r.location; m.set(key, e);                  // the newest spelling wins
+    }
+    return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }
+  /** Split the places into those with a position (pins) and those still to be put on the map. `coords`: key -> {lat, lon}. */
+  function pinsAndMissing(stats, coords) {
+    const pins = [], missing = [];
+    for (const e of stats) { const c = coords[e.key]; if (c) pins.push({ ...e, lat: c.lat, lon: c.lon }); else missing.push(e); }
+    return { pins, missing };
+  }
+
   // ---- month grouping (bulk locations for a dive trip) ----
   const monthKey = (rec) => rec.startedAt.slice(0, 7);                         // "YYYY-MM"
   function groupByMonth(recs) {
@@ -183,6 +201,6 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  const api = { placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

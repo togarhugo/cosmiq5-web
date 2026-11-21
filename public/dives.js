@@ -505,6 +505,7 @@ const Dives = (() => {
     const everything = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = everything.length ? `(${everything.length})` : "";
     renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(everything); wireList(list);
+    if (typeof PlacesUI !== "undefined") PlacesUI.render(everything);                  // map pins + places still to put on the map
     const dups = U.duplicateMap(everything);                                            // dives both computers recorded: only the Cosmiq+ one is counted
     const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
     const last = loadLast(), ls = $("lastSync");

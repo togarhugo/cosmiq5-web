@@ -1,6 +1,7 @@
 import ASSETS from "./assets.generated.js";
 import { configError, currentUser, handleAuth } from "./auth.js";
 import { handleAccount, handlePasswordAuth } from "./password.js";
+import { handlePlaces } from "./places.js";
 import { handleAccountData } from "./account-data.js";
 import { VERSION } from "./version.js";
 
@@ -77,6 +78,8 @@ export default {
       const r = await handleAccountData(request, url, env, email);
       if (r) return r;
     }
+
+    if (url.pathname === "/api/places") return handlePlaces(request, url, env, email);
 
     // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.
     if (url.pathname === "/api/dives/location" && request.method === "POST") {

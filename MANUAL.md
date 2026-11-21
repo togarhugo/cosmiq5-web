@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.10.5. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.11.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -142,6 +142,23 @@ A location is just **the area**, for example *Banda*, *Komodo*, *Tulamben*. No e
 * Every **dive** has its own Location field.
 
 Your 7–14 dives from a single trip are one tap with *Set place for the month*.
+
+---
+
+## 6b. Maps and places
+
+Every dive location you type (for example *Tulamben*) is a **place**. A place gets a position on the map once, and then all dives with that location are on the map.
+
+**The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*.
+
+**Putting a place on the map**
+1. Orange buttons under the map (and a bar in the **Dive log**) show places that are *not on the map yet*. Tap one.
+2. The place name is searched automatically. Tap the right result: the pin drops there and the map zooms in. If nothing is found, or it is the wrong spot, **tap the map** to drop the pin, and **drag** it to fine-tune. Search again with another spelling or a nearby town if you like.
+3. **Save pin.** The next place waits in line; **Skip this one** leaves it for later.
+
+The name you typed stays as it is: the map only adds a position to it. Places with different capitalisation (*Tulamben* / *tulamben*) are one place. If you change a dive's location to a new name, that new place appears in the list to be put on the map.
+
+**Privacy and limits.** The map pictures and the place search come from **OpenStreetMap** (free). When you open a map or tap Search, OpenStreetMap sees the map area you look at, the text you search for, and that the request comes from this app; it never sees your dives, your account or the other places. Search runs only when you tap it (their usage rules ask for that). Without internet the pins and lists still show, but the map background and the search do not. Positions are saved in your account, up to 500 places.
 
 ---
 

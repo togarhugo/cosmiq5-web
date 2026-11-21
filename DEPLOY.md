@@ -131,6 +131,11 @@ the free plan's CPU limit.
   Tested against a simulator (`test/peregrine-sim.mjs`) written from the same source, **not yet against a real Peregrine**.
 - **Latest certification:** `profiles.latest_cert_id` (empty = newest by date); deleting that file clears it.
 
+- **Maps:** `places` table (`k` lower-case name, `name`, `lat`, `lon`; up to 500 per user, API `/api/places` GET/PUT/DELETE in `src/places.js`). Dives are unchanged: the free-text `location`
+  is joined to a position by name. Leaflet 1.9.4 (BSD-2, `public/vendor/leaflet.*`) draws OpenStreetMap tiles (`tile.openstreetmap.org`); place search is Nominatim
+  (`nominatim.openstreetmap.org`), one request per tap, >= 1.1 s apart, never while typing. The app sends `referrer-policy: no-referrer`, so map requests set
+  `referrerPolicy: "origin"` themselves (OSM asks to be identified). Map data (c) OpenStreetMap contributors, ODbL. For heavy use switch to a tile provider with a plan.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
@@ -138,6 +143,7 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql
 npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql    # profile picture, regulator, certifications (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql   # name, DAN details, certification kind/date (run once)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_latest_cert.sql   # dives.device/extra, pinned latest certification (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

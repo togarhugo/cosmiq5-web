@@ -10,11 +10,11 @@ import { makeDb, dive as cloudDive, zip as makeZip } from "./cloud-fixture.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
-const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
   if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream" }); fs.createReadStream(f).pipe(res);
+  res.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream", "referrer-policy": "no-referrer" }); fs.createReadStream(f).pipe(res);   // like the Worker: the app sends no referrer unless a request asks for one
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
 
@@ -740,6 +740,75 @@ if (process.env.REAL_DB) {
     await page.locator("details.dive").first().locator("summary").click(); await page.locator("details.dive[open] svg.chart").waitFor(); await page.screenshot({ path: process.env.SHOT_REAL || "/tmp/shot-real.png", fullPage: true });
     assert.deepEqual(errs, [], "page errors"); console.log("PASS real shearwater export");
   } catch (e) { failed++; console.log("FAIL real shearwater export\n ", e.message.split("\n").slice(0, 8).join(" | ")); await page.screenshot({ path: "/tmp/fail-real.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: dive places on a map (Summary map with pins, place search, tap / drag, queue of places to put on the map) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], calls = [], referers = []; page.on("pageerror", (e) => errs.push(e.message));
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  let nominatimMode = "ok";
+  await page.route("**/tile.openstreetmap.org/**", (r) => { referers.push(["tile", r.request().headers().referer]); return r.fulfill({ body: PNG1, contentType: "image/png" }); });
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); calls.push(q); referers.push(["search", r.request().headers().referer]);
+    if (nominatimMode === "busy") return r.fulfill({ status: 429, body: "slow down" });
+    const rows = { Tulamben: [{ name: "Tulamben", display_name: "Tulamben, Kubu, Karangasem, Bali, Indonesia", lat: "-8.2948774", lon: "115.5941905", boundingbox: ["-8.33", "-8.25", "115.55", "115.62"] }, { name: "Tulamben Wreck", display_name: "USAT Liberty Wreck, Tulamben, Bali", lat: "-8.2744", lon: "115.5922" }], Banda: [] }[q] || [];
+    return r.fulfill({ json: rows, headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places.splice(i, 1); return r.fulfill({ json: { deleted: i >= 0 ? 1 : 0 } }); }
+    return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, loc, n) => ({ fingerprint: (0xabc000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: loc, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", "Tulamben", 1), mk("2025-03-14T13:00:00", "tulamben", 2), mk("2025-03-15T09:00:00", "Tulamben", 3), mk("2024-07-02T09:00:00", "Komodo", 4), mk("2023-05-02T09:00:00", "Banda", 5), mk("2023-05-03T09:00:00", "", 6)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const sumMsg = () => page.locator("#mapMsg").innerText();
+    await page.waitForFunction(() => /3 places/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
+    assert.ok(await page.locator("#mapCard").isVisible()); assert.match(await sumMsg(), /3 places . 0 on the map . 3 still to place/, "Tulamben and tulamben are one place; the dive without a place is not counted");
+    await page.locator("#sumMap .leaflet-container, #sumMap.leaflet-container").first().waitFor();
+    assert.equal(await page.locator("#sumMap .leaflet-marker-icon").count(), 0, "no pins yet");
+    assert.deepEqual(await page.locator("#mapUnplaced .chip").allInnerTexts().then((a) => a.map((x) => x.replace(/[^\w ]/g, "").trim().replace(/\s+/g, " "))), ["Tulamben 3", "Banda 1", "Komodo 1"], "most dives first");
+    assert.match(await page.locator("#sumMap .leaflet-control-attribution").innerText(), /OpenStreetMap/, "attribution shown");
+    // 1. search -> pick a result -> save
+    await page.locator("#mapUnplaced .chip").first().click(); await page.waitForSelector("#placePicker", { state: "visible" });
+    assert.match(await page.locator("#ppTitle").innerText(), /Where is .Tulamben.\? \(2 more after this\)/); assert.equal(await page.inputValue("#ppQuery"), "Tulamben");
+    await page.waitForSelector("#ppResults .res"); assert.deepEqual(calls, ["Tulamben"], "one search request, started by opening the picker"); assert.equal(await page.locator("#ppResults .res").count(), 2);
+    assert.equal(await page.locator("#ppSave").isDisabled(), true, "nothing is saved until you choose");
+    await page.locator("#ppResults .res").first().click(); assert.match(await page.locator("#ppCoords").innerText(), /-8\.2949, 115\.5942/); assert.equal(await page.locator("#ppSave").isDisabled(), false);
+    await page.click("#ppSave"); await page.waitForFunction(() => /Banda/.test(document.getElementById("ppTitle").textContent));
+    assert.deepEqual(places, [{ name: "Tulamben", lat: -8.2948774, lon: 115.5941905 }], "saved under the name you use, with the position from the search");
+    // 2. nothing found -> tap on the map instead, drag-free
+    await page.waitForFunction(() => /Nothing found/.test(document.getElementById("ppResults").textContent), null, { timeout: 8000 }); assert.equal(await page.locator("#ppSave").isDisabled(), true);
+    await page.locator("#ppMap").click({ position: { x: 150, y: 120 } }); assert.equal(await page.locator("#ppMap .leaflet-marker-icon").count(), 1, "pin dropped where you tapped"); assert.equal(await page.locator("#ppSave").isDisabled(), false);
+    const first = await page.locator("#ppCoords").innerText(); await page.locator("#ppMap").click({ position: { x: 60, y: 200 } }); assert.notEqual(await page.locator("#ppCoords").innerText(), first, "tapping again moves the pin");
+    await page.click("#ppSave"); await page.waitForFunction(() => /Komodo/.test(document.getElementById("ppTitle").textContent)); assert.equal(places.length, 2);
+    assert.equal(await page.locator("#ppSkip").innerText(), "Cancel", "the last place: Skip is a Cancel");
+    // 3. Komodo: a failing search is explained, and the picker can simply be closed (nothing saved)
+    nominatimMode = "busy"; await page.fill("#ppQuery", "Komodo island"); await page.click("#ppGo");
+    await page.waitForFunction(() => /busy/.test(document.getElementById("ppResults").textContent), null, { timeout: 8000 });
+    await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" }); assert.equal(places.length, 2);
+    // 4. the Summary now shows pins, a popup with the dive count, and what is still to place
+    await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.match(await sumMsg(), /2 on the map . 1 still to place/); assert.equal(await page.locator("#mapUnplaced .chip").count(), 1);
+    await page.locator("#sumMap .leaflet-marker-icon").first().click(); await page.waitForSelector("#sumMap .pin-pop");
+    assert.match(await page.locator("#sumMap .pin-pop").innerText(), /Tulamben[\s\S]*3 dives[\s\S]*Mar 2025/); assert.equal(await page.locator("#sumMap .pin-pop .btn-set").innerText(), "Move pin");
+    assert.match((await page.locator("#sumMap .leaflet-marker-icon svg text").first().textContent()), /3|1/, "the number of dives is on the pin");
+    // 5. the dive log says what is missing, and the app tells OpenStreetMap who is asking
+    await page.click("#navLog"); await page.waitForSelector("#placeBanner", { state: "visible" }); assert.match(await page.locator("#placeBannerText").innerText(), /1 place is not on the map yet/);
+    const origin = new URL(base).origin + "/"; assert.ok(referers.length > 3 && referers.every(([, ref]) => ref === origin), "tiles and search send the app's origin as referrer: " + JSON.stringify(referers.slice(0, 3)));
+    // 6. remove a pin from the list
+    await page.click("#navSummary"); await page.locator("#mapCard details summary").click(); await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
+    await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 1, null, { timeout: 8000 }); assert.equal(places.length, 1);
+    // 7. a reload brings the pins back from the account
+    await page.reload(); await page.waitForFunction(() => /1 on the map/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
+    await page.screenshot({ path: process.env.SHOT_MAP || "/tmp/shot-map.png", fullPage: true });
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS places on a map");
+  } catch (e) { failed++; console.log("FAIL places on a map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-map.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

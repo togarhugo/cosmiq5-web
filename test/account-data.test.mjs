@@ -152,3 +152,28 @@ test("latest certification: pin one of your own, clear it, deleting the pinned o
   assert.equal((await send(env, other, "DELETE", "/api/certs/" + idB)).status, 200, "another user's delete matches nothing");
   await send(env, me, "PUT", "/api/profile/latest-cert", { id: idB }); assert.equal(await pinned(), idB, "...and did not touch my pin");
 });
+
+test("places on the map: validated, one per name (any capitalisation), updatable, removable, private per user", async () => {
+  const { env, me, other } = await two();
+  const list = async (c) => (await (await send(env, c, "GET", "/api/places")).json()).places;
+  assert.deepEqual(await list(me), []);
+  assert.equal((await send(env, me, "PUT", "/api/places", { name: "  Tulamben ", lat: -8.2767891, lon: 115.5922 })).status, 200);
+  assert.deepEqual(await list(me), [{ name: "Tulamben", lat: -8.276789, lon: 115.5922 }], "trimmed, rounded to 6 decimals");
+  await send(env, me, "PUT", "/api/places", { name: "tulamben", lat: -8.3, lon: 115.6 }); assert.deepEqual(await list(me), [{ name: "tulamben", lat: -8.3, lon: 115.6 }], "same place in another capitalisation = update, not a second place");
+  await send(env, me, "PUT", "/api/places", { name: "Banda", lat: -4.52, lon: 129.9 }); await send(env, me, "PUT", "/api/places", { name: "Komodo", lat: -8.55, lon: 119.49 });
+  assert.deepEqual((await list(me)).map((p) => p.name), ["Banda", "Komodo", "tulamben"], "sorted by name");
+  assert.deepEqual(await list(other), [], "another user sees nothing");
+  for (const [name, body] of [["no name", { lat: 1, lon: 1 }], ["blank name", { name: "  ", lat: 1, lon: 1 }], ["name too long", { name: "x".repeat(61), lat: 1, lon: 1 }], ["lat too big", { name: "A", lat: 91, lon: 1 }], ["lon too big", { name: "A", lat: 1, lon: 181 }],
+    ["text coordinates", { name: "A", lat: "1", lon: "1" }], ["NaN", { name: "A", lat: null, lon: 1 }], ["missing lon", { name: "A", lat: 1 }], ["name not text", { name: 5, lat: 1, lon: 1 }]])
+    assert.equal((await send(env, me, "PUT", "/api/places", body)).status, 400, name);
+  assert.equal((await send(env, me, "PUT", "/api/places", { name: "Ban\u0000da\n", lat: 1, lon: 1 })).status, 200); assert.ok((await list(me)).some((p) => p.name === "Ban da"), "control characters become spaces");
+  assert.equal((await send(env, me, "PUT", "/api/places", { name: "X", lat: 1, lon: 1 }, { origin: "https://evil.example" })).status, 403, "cross-origin");
+  assert.equal((await send(env, other, "DELETE", "/api/places", { name: "Komodo" })).status, 200); assert.ok((await list(me)).some((p) => p.name === "Komodo"), "another user cannot delete my place");
+  assert.deepEqual(await (await send(env, me, "DELETE", "/api/places", { name: "KOMODO" })).json(), { deleted: 1 }); assert.ok(!(await list(me)).some((p) => p.name === "Komodo"));
+  assert.equal((await send(env, me, "DELETE", "/api/places", {})).status, 400);
+  assert.equal((await call(env, "/api/places", { method: "GET" })).status, 401, "signed-out");
+  // the limit: 500 places
+  for (let i = 0; i < 500; i++) await env.DB.prepare("INSERT OR IGNORE INTO places (user_email, k, name, lat, lon) VALUES (?,?,?,?,?)").bind("me@example.com", "fill" + i, "fill" + i, 0, 0).run();
+  const full = await send(env, me, "PUT", "/api/places", { name: "One too many", lat: 1, lon: 1 }); assert.equal(full.status, 409);
+  assert.equal((await send(env, me, "PUT", "/api/places", { name: "Banda", lat: -4.6, lon: 129.95 })).status, 200, "an existing place can still be moved when full");
+});
