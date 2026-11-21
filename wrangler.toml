@@ -13,9 +13,10 @@ database_name = "cosmiq"
 database_id = "da3daca5-ced2-46b5-924e-0021b8afb5f3"
 
 [vars]
-# Zero Trust > Settings > Custom Pages shows your team name: <team>.cloudflareaccess.com
-TEAM_DOMAIN = "thmlab.cloudflareaccess.com"
-# Zero Trust > Access > Applications > your app > "Application Audience (AUD) Tag"
-POLICY_AUD = "eb3ad840c3830079a65a97276591bd701aff9946fd53aa3f305d34c513a0cbe0"
-# Defence in depth: only these Google accounts may use the API.
-# Set as a secret instead of committing it:  npx wrangler secret put ALLOWED_EMAILS  (your Google email; comma-separated for several)
+# Google OAuth client (public identifier, same one the other thmlab apps use).
+# Its redirect URI list in Google Cloud Console must include https://dive-comp.thmlab.org/auth/callback
+GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID"
+# Secrets (never commit these):
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   npx wrangler secret put SESSION_SECRET      (32+ random chars, e.g. `openssl rand -hex 32`)
+#   npx wrangler secret put ALLOWED_EMAILS      (comma-separated Google emails allowed to sign in)

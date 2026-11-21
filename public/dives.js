@@ -8,6 +8,7 @@ const Dives = (() => {
   const P = window.CosmiqDive;
   const DB_NAME = "cosmiq", STORE = "dives";
   let dbp = null, busy = false, cloudState = "unknown";
+  const failState = (e) => (e && e.status === 401 ? "signedout" : navigator.onLine ? "unavailable" : "offline");
 
   // ---------- local storage ----------
   function openDb() {
@@ -36,12 +37,12 @@ const Dives = (() => {
   async function cloudPull() {
     try {
       const r = await fetch("/api/dives", { credentials: "same-origin", redirect: "error" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
+      if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
       const { dives } = await r.json();
       const have = new Set((await all()).map((d) => d.fingerprint));
       for (const d of dives) if (!have.has(d.fingerprint)) await put({ ...toRecord(d), uploaded: true });
       cloudState = "ok";
-    } catch (e) { cloudState = navigator.onLine ? "unavailable" : "offline"; }
+    } catch (e) { cloudState = failState(e); }
     render();
   }
   async function cloudPush() {
@@ -52,12 +53,12 @@ const Dives = (() => {
         const batch = pending.slice(i, i + 20);
         const r = await fetch("/api/dives", { method: "POST", credentials: "same-origin", redirect: "error",
           headers: { "content-type": "application/json" }, body: JSON.stringify({ dives: batch }) });
-        if (!r.ok) throw new Error("HTTP " + r.status);
+        if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
         for (const d of batch) await put({ ...d, uploaded: true });
         stored += batch.length;
       }
       cloudState = "ok";
-    } catch (e) { cloudState = navigator.onLine ? "unavailable" : "offline"; log("Cloud upload failed: " + e.message, "log-err"); }
+    } catch (e) { cloudState = failState(e); log("Cloud upload failed: " + e.message, "log-err"); }
     return stored;
   }
 
@@ -118,7 +119,7 @@ const Dives = (() => {
     const list = $("diveList"); if (!list) return;
     const recs = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = recs.length ? `${recs.length} dive${recs.length === 1 ? "" : "s"}` : "";
-    const cloudTxt = { ok: "☁ synced to cloud", unavailable: "☁ cloud unavailable", offline: "offline", unknown: "" }[cloudState];
+    const cloudTxt = { ok: "☁ synced to cloud", unavailable: "☁ cloud unavailable", offline: "offline", signedout: "🔒 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
     if (!recs.length) { list.innerHTML = "<p class='muted'>No dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>"; return; }
     list.innerHTML = recs.map((r) => `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>

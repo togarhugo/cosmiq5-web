@@ -6,6 +6,7 @@
         <meta name="theme-color" content="#007bff" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <script src="version.js"></script>
         <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
         <link rel="apple-touch-icon" href="icon-192.png" />
         <link rel="icon" href="icon-192.png" />
@@ -329,7 +330,7 @@
     </head>
     <body>
         <header>
-            <h1>Cosmiq Manager</h1>
+            <h1>Cosmiq Manager <span id="verTop" class="muted"></span></h1>
             <div id="status" class="status">Disconnected</div>
         </header>
 
@@ -694,6 +695,11 @@
             </div>
             <div id="diveList"></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
+        </div>
+
+        <div id="appFooter" class="muted" style="text-align:center;margin-top:18px">
+            Cosmiq Manager <span id="appVer"></span><span id="who"></span>
+            <a id="signOut" href="/auth/logout" style="display:none;margin-left:6px">Sign out</a>
         </div>
 
         <details class="logwrap"><summary>Activity log</summary>
@@ -1416,6 +1422,19 @@
                 b.classList.add("show");
             }
             window.addEventListener("load", () => {
+                const ver = "v" + (self.APP_VERSION || "?");
+                document.getElementById("verTop").textContent = ver;
+                document.getElementById("appVer").textContent = ver;
+                fetch("/api/me", { credentials: "same-origin", redirect: "error" })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((me) => {
+                        if (!me) return;
+                        document.getElementById("who").textContent = " · " + me.email;
+                        document.getElementById("signOut").style.display = "";
+                        if (me.version && me.version !== self.APP_VERSION)
+                            document.getElementById("appVer").textContent = ver + " (server v" + me.version + ", reload to update)";
+                    })
+                    .catch(() => {});
                 if (!navigator.bluetooth) showBtHelp();
                 for (const [id, def] of [["optClock", true], ["optDives", true]]) {
                     const el = document.getElementById(id);

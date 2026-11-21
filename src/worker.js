@@ -1,46 +1,12 @@
 import ASSETS from "./assets.generated.js";
+import { configError, currentUser, handleAuth } from "./auth.js";
+import { VERSION } from "./version.js";
 
-// Cosmiq Manager API. Cloudflare Access (Google login) sits in front of the whole site;
-// this Worker ALSO verifies the Access JWT, so the API stays closed even if Access is
-// misconfigured or the *.workers.dev URL is hit directly. Fails closed.
+// Cosmiq Manager: static app + dive-log API. Sign-in is Google OAuth inside this Worker
+// (see auth.js). Everything except /auth/* requires a valid session: fails closed.
 
-const enc = new TextEncoder();
-const b64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 const json = (o, status = 200) =>
-  new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
-
-let jwksCache = { at: 0, keys: null };
-async function getKeys(env) {
-  if (jwksCache.keys && Date.now() - jwksCache.at < 3600_000) return jwksCache.keys;
-  const r = await fetch(`https://${env.TEAM_DOMAIN}/cdn-cgi/access/certs`);
-  if (!r.ok) throw new Error("cannot fetch Access certs");
-  jwksCache = { at: Date.now(), keys: (await r.json()).keys };
-  return jwksCache.keys;
-}
-
-/** Returns the authenticated email, or throws. */
-export async function authenticate(request, env) {
-  if (!env.TEAM_DOMAIN || env.TEAM_DOMAIN.startsWith("REPLACE") || !env.POLICY_AUD || env.POLICY_AUD.startsWith("REPLACE"))
-    throw Object.assign(new Error("Access not configured"), { status: 503 });
-  const token = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!token) throw Object.assign(new Error("missing token"), { status: 401 });
-  const [h, p, s] = token.split(".");
-  if (!h || !p || !s) throw Object.assign(new Error("malformed token"), { status: 401 });
-  const header = JSON.parse(new TextDecoder().decode(b64u(h)));
-  const payload = JSON.parse(new TextDecoder().decode(b64u(p)));
-  if (header.alg !== "RS256") throw Object.assign(new Error("bad alg"), { status: 401 });
-  const jwk = (await getKeys(env)).find((k) => k.kid === header.kid);
-  if (!jwk) throw Object.assign(new Error("unknown key"), { status: 401 });
-  const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-  const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64u(s), enc.encode(`${h}.${p}`));
-  const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (!ok || !aud.includes(env.POLICY_AUD) || payload.iss !== `https://${env.TEAM_DOMAIN}` || payload.exp * 1000 < Date.now())
-    throw Object.assign(new Error("invalid token"), { status: 401 });
-  const email = String(payload.email || "").toLowerCase();
-  const allowed = (env.ALLOWED_EMAILS || "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
-  if (!email || (allowed.length && !allowed.includes(email))) throw Object.assign(new Error("not allowed"), { status: 403 });
-  return email;
-}
+  new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", "cache-control": "no-store", "x-app-version": VERSION } });
 
 const HEX = /^[0-9a-f]*$/;
 function validDive(d) {
@@ -56,21 +22,35 @@ function serveAsset(request, pathname) {
   if (!a) return json({ error: "not found" }, 404);
   const bin = Uint8Array.from(atob(a.b), (c) => c.charCodeAt(0));
   return new Response(request.method === "HEAD" ? null : bin, {
-    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff" },
+    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "x-app-version": VERSION },
   });
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Everything (pages too) requires a valid Cloudflare Access login: fails closed.
-    let email;
-    try { email = await authenticate(request, env); }
-    catch (e) { return json({ error: e.message }, e.status || 401); }
+    const bad = configError(env);
+    if (bad) return json({ error: bad }, 503);
+
+    const auth = await handleAuth(request, url, env);
+    if (auth) return auth;
+
+    const user = await currentUser(request, env);
+    if (!user) {
+      const wantsPage = request.method === "GET" && (request.headers.get("accept") || "").includes("text/html");
+      return wantsPage ? Response.redirect(url.origin + "/auth/login", 302) : json({ error: "not signed in" }, 401);
+    }
+    const email = user.email;
+
+    // CSRF defence in depth (cookie is SameSite=Lax): state-changing calls must be same-origin.
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({ error: "cross-origin request refused" }, 403);
+    }
 
     if (!url.pathname.startsWith("/api/")) return serveAsset(request, url.pathname);
 
-    if (url.pathname === "/api/me") return json({ email });
+    if (url.pathname === "/api/me") return json({ email, name: user.name, version: VERSION });
 
     if (url.pathname === "/api/dives" && request.method === "GET") {
       const { results } = await env.DB.prepare(

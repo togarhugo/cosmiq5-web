@@ -1,6 +1,7 @@
 // Minimal offline shell. Never caches /api, and never caches redirected (login) responses.
-const CACHE = "cosmiq-shell-v1";
-const SHELL = ["./", "index.html", "dive-protocol.js", "dives.js", "manifest.webmanifest", "icon-192.png"];
+importScripts("version.js");
+const CACHE = "cosmiq-shell-" + self.APP_VERSION;
+const SHELL = ["./", "index.html", "dive-protocol.js", "dives.js", "version.js", "manifest.webmanifest", "icon-192.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {
