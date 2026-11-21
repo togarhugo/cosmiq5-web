@@ -44,7 +44,7 @@ const ApiKeys = (() => {
   }
   function render() {
     const active = keys.filter((k) => k.status === "active").length;
-    const badge = $("apiBadge"); badge.style.display = active ? "" : "none"; badge.textContent = active + (active === 1 ? " key" : " keys");
+    const badge = $("apiBadge"); badge.style.display = active ? "" : "none"; badge.textContent = active ? active + (active === 1 ? " key" : " keys") : "";
     $("apiCount").textContent = `${active} of ${max} active keys`;
     $("apiList").innerHTML = keys.length ? keys.map((k) => { const st = status(k);
       return `<div class="keyrow ${st.cls}" data-id="${esc(k.id)}"><div class="kr-top"><b>${esc(k.description)}</b><span class="kchip ${st.cls}">${esc(st.text)}</span></div>

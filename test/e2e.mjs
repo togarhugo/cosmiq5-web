@@ -1032,8 +1032,8 @@ if (process.env.REAL_DB) {
     let { ctx, page, errs } = await run(dives);
     // 1. totals: scuba (incl. gauge) and freedive, each with its time and number of dives; they add up to the total
     const kinds = await page.evaluate(() => [...document.querySelectorAll("#sumKinds .kindrow")].map((r) => ({ chip: r.querySelector(".kindchip").textContent, cls: r.querySelector(".kindchip").className, time: r.querySelector("b").textContent, n: r.querySelector(".muted").textContent })));
-    assert.deepEqual(kinds.map((k) => [k.chip, k.time, k.n]), [["Scuba", "3 h 02 min", "4 dives"], ["Freedive", "6 min 38 s", "4 dives"]], "gauge counts as scuba; freedive time in minutes and seconds: " + JSON.stringify(kinds));
-    assert.match(kinds[0].cls, /kind-scuba/); assert.match(kinds[1].cls, /kind-freedive/); assert.equal(await page.locator("#sumHours").innerText(), "3 h 09 min", "total = scuba + freedive"); assert.match(await page.locator("#sumCount").innerText(), /across 8 dives/);
+    assert.deepEqual(kinds.map((k) => [k.chip, k.time, k.n]), [["Scuba", "3 h 20 min", "4 dives"], ["Freedive", "6 min 38 s", "4 dives"]], "gauge counts as scuba; freedive time in minutes and seconds: " + JSON.stringify(kinds));
+    assert.match(kinds[0].cls, /kind-scuba/); assert.match(kinds[1].cls, /kind-freedive/); assert.equal(await page.locator("#sumHours").innerText(), "3 h 27 min", "total = scuba + freedive (12000 s + 398 s)"); assert.match(await page.locator("#sumCount").innerText(), /across 8 dives/);
     assert.equal(await page.locator("#sumLastKind").innerText(), "Freedive", "the last dive is a freedive"); assert.match(await page.locator("#sumLastKind").getAttribute("class"), /kind-freedive/);
     // 2. the map: a filter with the number of places per kind, pins coloured by kind, the count on a pin follows the filter
     assert.deepEqual((await page.locator("#mapKinds button").allInnerTexts()).map((t) => t.replace(/\s+/g, " ")), ["All · 3", "Scuba · 2", "Freedive · 2"]); assert.ok(await page.locator("#mapLegend").isVisible());
