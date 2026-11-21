@@ -74,7 +74,8 @@ const PlacesUI = (() => {
     const banner = $("placeBanner");
     if (banner) { banner.style.display = missing.length ? "flex" : "none"; $("placeBannerText").textContent = `${missing.length} place${missing.length === 1 ? " is" : "s are"} not on the map yet`; }
     if (!stats.length) return;
-    $("mapMsg").textContent = `${stats.length} place${stats.length === 1 ? "" : "s"} · ${pins.length} on the map` + (missing.length ? ` · ${missing.length} still to place` : "");
+    const onMap = stats.length - missing.length;                                       // every place that has a position, whatever the filter shows
+    $("mapMsg").textContent = `${stats.length} place${stats.length === 1 ? "" : "s"} · ${onMap} on the map` + (missing.length ? ` · ${missing.length} still to place` : "") + (kindFilter !== "all" ? ` · showing ${kindFilter} only` : "");
     $("mapUnplaced").innerHTML = missing.length ? missing.map((m) => `<button type="button" class="chip" data-key="${esc(m.key)}">📍 ${esc(m.name)} <span class="muted">${m.count}</span> ›</button>`).join("") : "";
     $("placeList").innerHTML = stats.map((s) => { const has = !!P.get(s.name);
       return `<div class="place-row"><span><b>${esc(s.name)}</b> <span class="muted">${s.count} dive${s.count === 1 ? "" : "s"}</span></span><span class="row" style="margin:0;gap:6px"><button type="button" class="btn-set pl-set" data-key="${esc(s.key)}">${has ? "Move" : "Set on map"}</button>${has ? `<button type="button" class="btn-set pl-del" data-key="${esc(s.key)}" style="background:var(--bg-6c757d)">Remove pin</button>` : ""}</span></div>`; }).join("");

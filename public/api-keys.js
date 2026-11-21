@@ -15,12 +15,13 @@ const ApiKeys = (() => {
     return data;
   }
   const note = (text, bad) => { const el = $("apiMsg"); el.textContent = text || ""; el.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; };
-  /** Two-step button: the first tap arms it, a second tap within 4 s does it. */
+  /** Two-step button: the first tap turns it into a red "Sure?", a second tap within 4 s does it. */
   function confirmTap(btn, label, action) {
-    if (armed && armed.btn === btn) { clearTimeout(armed.t); btn.textContent = armed.orig; btn.classList.remove("armed"); armed = null; return action(); }
-    if (armed) { clearTimeout(armed.t); armed.btn.textContent = armed.orig; armed.btn.classList.remove("armed"); armed = null; }
-    const orig = btn.textContent; btn.textContent = label; btn.classList.add("armed");
-    armed = { btn, orig, t: setTimeout(() => { btn.textContent = orig; btn.classList.remove("armed"); armed = null; }, 4000) };
+    const reset = (b) => { b.innerHTML = b.dataset.html; b.classList.remove("armed"); b.removeAttribute("data-armed"); };
+    if (armed && armed.btn === btn) { clearTimeout(armed.t); reset(btn); armed = null; return action(); }
+    if (armed) { clearTimeout(armed.t); reset(armed.btn); armed = null; }
+    btn.dataset.html = btn.innerHTML; btn.textContent = "Sure?"; btn.classList.add("armed"); btn.setAttribute("data-armed", label);
+    armed = { btn, t: setTimeout(() => { reset(btn); armed = null; }, 4000) };
   }
   const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   const ago = (iso) => { const d = Math.floor((Date.now() - Date.parse(iso)) / 86400000); return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 60 ? d + " days ago" : day(iso); };
@@ -36,20 +37,29 @@ const ApiKeys = (() => {
   }
 
   // ---------- the list ----------
+  /** Short text for the one-line row, and the full sentence for the details. */
   function status(k) {
-    if (k.status === "revoked") return { cls: "revoked", text: "Revoked" + (k.revokedAt ? " " + ago(k.revokedAt) : "") };
-    if (k.status === "expired") return { cls: "expired", text: "Expired " + day(k.expiresAt) };
-    if (!k.expiresAt) return { cls: "active", text: "Active · never expires" };
-    const n = inDays(k.expiresAt); return { cls: n <= 3 ? "soon" : "active", text: `Active · expires ${day(k.expiresAt)} (${n <= 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days"})` };
+    if (k.status === "revoked") return { cls: "revoked", short: "Revoked", full: "Revoked" + (k.revokedAt ? " " + ago(k.revokedAt) : "") };
+    if (k.status === "expired") return { cls: "expired", short: "Expired", full: "Expired " + day(k.expiresAt) };
+    if (!k.expiresAt) return { cls: "active", short: "Never", full: "Active \u00b7 never expires" };
+    const n = inDays(k.expiresAt); return { cls: n <= 3 ? "soon" : "active", short: n <= 0 ? "Today" : n + " d", full: `Active \u00b7 expires ${day(k.expiresAt)} (${n <= 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days"})` };
   }
+  const ICON = {
+    rotate: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.6L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.6L20 16"/><path d="M20 20v-4h-4"/></svg>',
+    revoke: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+    del: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>',
+  };
+  const act = (cls, icon, label, name, extra) => `<button class="kact ${cls}" type="button" title="${label}" aria-label="${label}: ${esc(name)}" data-icon="${esc(icon)}"${extra || ""}>${ICON[icon]}</button>`;
   function render() {
     const active = keys.filter((k) => k.status === "active").length;
     const badge = $("apiBadge"); badge.style.display = active ? "" : "none"; badge.textContent = active ? active + (active === 1 ? " key" : " keys") : "";
     $("apiCount").textContent = `${active} of ${max} active keys`;
+    const open = new Set([...document.querySelectorAll("#apiList .keyrow.open")].map((r) => r.dataset.id));                      // keep the details you had open
     $("apiList").innerHTML = keys.length ? keys.map((k) => { const st = status(k);
-      return `<div class="keyrow ${st.cls}" data-id="${esc(k.id)}"><div class="kr-top"><b>${esc(k.description)}</b><span class="kchip ${st.cls}">${esc(st.text)}</span></div>
-        <div class="muted"><span class="kprefix">${esc(k.prefix)}…</span> · made ${esc(day(k.createdAt))} · ${k.lastUsedAt ? "last used " + esc(ago(k.lastUsedAt)) : "never used"}</div>
-        <div class="row wrap" style="margin:8px 0 0">${k.status !== "revoked" ? '<button class="btn-set k-rotate" type="button">Rotate</button>' : ""}${k.status === "active" ? '<button class="btn-set k-revoke" type="button" style="background:var(--bg-6c757d)">Revoke</button>' : ""}${k.status !== "active" ? '<button class="btn-set k-delete" type="button" style="background:var(--bg-6c757d)">Delete</button>' : ""}</div></div>`; }).join("")
+      return `<div class="keyrow ${st.cls}${open.has(k.id) ? " open" : ""}" data-id="${esc(k.id)}"><div class="kline">
+        <button class="kmain" type="button" aria-expanded="${open.has(k.id)}" title="Show details"><i class="kdot ${st.cls}" aria-hidden="true"></i><span class="kname">${esc(k.description)}</span><span class="kchip ${st.cls}">${esc(st.short)}</span></button>
+        ${k.status !== "revoked" ? act("k-rotate", "rotate", "Rotate", k.description) : ""}${k.status === "active" ? act("k-revoke", "revoke", "Revoke", k.description) : ""}${k.status !== "active" ? act("k-delete", "del", "Delete", k.description) : ""}</div>
+        <div class="kdetail muted"><span class="kprefix">${esc(k.prefix)}\u2026</span> \u00b7 ${esc(st.full)}<br>Made ${esc(day(k.createdAt))} \u00b7 ${k.lastUsedAt ? "last used " + esc(ago(k.lastUsedAt)) : "never used"}</div></div>`; }).join("")
       : '<p class="muted" style="margin:0">No keys yet.</p>';
   }
   async function load() {
@@ -94,9 +104,10 @@ const ApiKeys = (() => {
     $("apiCopyBase").addEventListener("click", (e) => copy($("apiBase").textContent, e.currentTarget, "Copy")); $("apiCopyCurl").addEventListener("click", (e) => copy($("apiCurl").textContent, e.currentTarget, "Copy"));
     $("apiList").addEventListener("click", (e) => {
       const b = e.target.closest("button"), row = e.target.closest(".keyrow"); if (!b || !row) return; const id = row.dataset.id;
-      if (b.classList.contains("k-rotate")) confirmTap(b, "Tap again to rotate", () => rotate(id));
-      else if (b.classList.contains("k-revoke")) confirmTap(b, "Tap again to revoke", () => revoke(id));
-      else if (b.classList.contains("k-delete")) confirmTap(b, "Tap again to delete", () => remove(id));
+      if (b.classList.contains("kmain")) { const o = row.classList.toggle("open"); b.setAttribute("aria-expanded", String(o)); return; }
+      if (b.classList.contains("k-rotate")) confirmTap(b, "rotate", () => rotate(id));
+      else if (b.classList.contains("k-revoke")) confirmTap(b, "revoke", () => revoke(id));
+      else if (b.classList.contains("k-delete")) confirmTap(b, "delete", () => remove(id));
     });
     load();                                                                            // for the count on the section title
   }

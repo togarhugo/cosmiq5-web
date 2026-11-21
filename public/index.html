@@ -455,9 +455,15 @@
             .keybox code { display: block; font-family: var(--mono); font-size: 13px; word-break: break-all; background: var(--bg-fff); border: 1px solid var(--bd-ced4da); border-radius: 8px; padding: 10px; user-select: all; -webkit-user-select: all; }
             .kb-warn { margin-top: 8px; font-size: 12.5px; color: var(--tx-d9480f); }
             .apihead { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 6px; }
-            .keyrow { border: 1px solid var(--bd-e9ecef); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-fff); } .keyrow.revoked, .keyrow.expired { opacity: .75; }
-            .kr-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
-            .kchip { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; } .kchip.active { background: var(--bg-ebfbee); color: var(--tx-2b8a3e); } .kchip.soon { background: var(--bg-fff4e6); color: var(--tx-d9480f); } .kchip.expired { background: var(--bg-fff5f5); color: var(--tx-c92a2a); } .kchip.revoked { background: var(--bg-e9ecef); color: var(--tx-6c757d); }
+            .keyrow { border-bottom: 1px solid var(--bd-e9ecef); } .keyrow:first-child { border-top: 1px solid var(--bd-e9ecef); }
+            .kline { display: flex; align-items: center; gap: 6px; min-height: 46px; }
+            .kmain { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 9px; background: none; color: var(--text); text-align: left; padding: 6px 2px; min-height: 44px; font-weight: 600; font-size: 15px; border-radius: 8px; }
+            .kname { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .keyrow.revoked .kname, .keyrow.expired .kname { color: var(--tx-868e96); font-weight: 500; }
+            .kdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--tx-2b8a3e); } .kdot.soon { background: var(--tx-e67700); } .kdot.expired { background: var(--tx-c92a2a); } .kdot.revoked { background: var(--tx-adb5bd); }
+            .kchip { flex: none; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; } .kchip.active { background: var(--bg-ebfbee); color: var(--tx-2b8a3e); } .kchip.soon { background: var(--bg-fff4e6); color: var(--tx-d9480f); } .kchip.expired { background: var(--bg-fff5f5); color: var(--tx-c92a2a); } .kchip.revoked { background: var(--bg-e9ecef); color: var(--tx-6c757d); }
+            .kact { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; width: auto; min-height: 40px; padding: 0 8px; border-radius: 10px; background: var(--bg-e9ecef); color: var(--tx-495057); font-size: 12px; font-weight: 700; } .kact.k-rotate { color: var(--tx-1864ab); }
+            .kact.armed { background: var(--bg-dc3545); color: var(--tx-fff); }
+            .kdetail { display: none; padding: 0 2px 10px 21px; line-height: 1.5; } .keyrow.open .kdetail { display: block; } .keyrow.open .kmain { background: var(--bg-f1f3f5); }
             .kprefix { font-family: var(--mono); }
             .chart { display: block; }
             .chart .g-axis { stroke: var(--bd-adb5bd); } .chart .g-grid { stroke: var(--bd-dee2e6); } .chart .g-grid2 { stroke: var(--bd-e9ecef); } .chart .g-lbl { fill: var(--tx-6c757d); } .chart .g-gap { fill: var(--tx-adb5bd); }
@@ -1175,7 +1181,7 @@
                     <div class="apihead"><b>Your keys</b><span id="apiCount" class="muted"></span></div>
                     <div id="apiList"></div>
                     <div id="apiMsg" class="msg" role="status"></div>
-                    <p class="muted" style="margin:6px 0 0"><b>Rotate</b> gives the same key a new secret and a fresh time limit, and the old secret stops working at once. <b>Revoke</b> switches a key off for good.</p>
+                    <p class="muted" style="margin:8px 0 0">Tap a key for details. <b>&#8635; Rotate</b>: new secret and a fresh time limit, the old secret stops working at once. <b>&#8856; Revoke</b>: off for good. <b>Delete</b> removes it from the list. Each asks &ldquo;Sure?&rdquo; first.</p>
                 </div>
             </details>
 

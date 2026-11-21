@@ -246,9 +246,11 @@ Account → **API access** lets another program (a dashboard, a script, a spread
 3. Tap **Generate key**. The key (it starts with `dm_`) appears in a green box. **Copy it now**: it is shown **only once**. The app keeps only a one-way fingerprint of it, so nobody (not even you or the app) can show it again. Lose it? **Rotate** the key to get a new one.
 
 **Your keys**
-Each key is listed with its description, the first letters of the key, when it was made, when it was **last used** (updated at most once an hour) and its state: **Active** (with the date it expires, orange in the last 3 days), **Expired** or **Revoked**.
-* **Rotate** (tap twice): the same key gets a **new secret and a fresh time limit** (a 7-day key is good for 7 more days). **The old secret stops working at once**, so update your tool with the new key. An expired key can be rotated back to life.
-* **Revoke** (tap twice): switches the key off for good. It stays in the list, greyed out, until you **Delete** it.
+Every key is **one line**: a coloured dot (green active, orange when it ends within 3 days, red expired, grey revoked), its description, and how long it has left (*18 d*, *Never*, *Expired*, *Revoked*), then small buttons. **Tap the line** to open its details: the first letters of the key, when it was made, when it was **last used** (updated at most once an hour) and the exact expiry date.
+* **↻ Rotate**: the same key gets a **new secret and a fresh time limit** (a 7-day key is good for 7 more days). **The old secret stops working at once**, so update your tool with the new key. An expired key can be rotated back to life.
+* **⊘ Revoke**: switches the key off for good. It stays in the list, greyed out, until you delete it.
+* **Delete** (bin, for revoked or expired keys): removes it from the list.
+* Each of these buttons first turns red and says **Sure?**; tap it again within 4 seconds to do it. Rotating shows the new key once, in the green box.
 * You can have **10 active keys** (one for each tool is a good habit: then you can cut one off without touching the others).
 
 **Using the API**
