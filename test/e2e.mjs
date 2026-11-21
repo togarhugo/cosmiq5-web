@@ -383,7 +383,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
     await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
     await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
-    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "Help / app version"]);
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "API access", "Help / app version"]);
     await page.locator("details.acc[data-sec=help] > summary").click();
     assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
     assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
@@ -989,7 +989,7 @@ if (process.env.REAL_DB) {
   const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = [], bad = []; page.on("pageerror", (e) => errs.push(e.message)); page.on("response", (r) => { if (r.status() >= 400) bad.push(r.status() + " " + r.url()); });
   await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
   await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
-  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
   const mk = (when, n) => ({ fingerprint: (0x777000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: "Komodo", deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
   await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2)] } }));
   await page.goto(base);
