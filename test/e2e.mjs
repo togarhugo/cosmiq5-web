@@ -929,4 +929,53 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL map suggestions in the location box\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-suggest.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: light / dark switch at the top of the page (left = light, right = dark), remembered, follows the phone until chosen ----
+{
+  const mkPage = async (opts, pre) => {
+    const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block", ...opts }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+    if (pre) await ctx.addInitScript(pre);
+    await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+    await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+    await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Togar Hugo", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+    await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
+    await page.goto(base); await page.waitForSelector("header .theme-switch"); return { ctx, page, errs };
+  };
+  const look = (page) => page.evaluate(() => { const cs = (s) => getComputedStyle(document.querySelector(s)); const lum = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05); const sw = document.querySelector(".theme-switch");
+    return { theme: document.documentElement.dataset.theme, page: cs("body").backgroundColor, card: cs("#sumDiver").backgroundColor, nameRatio: ratio(cs("#sumName").color, cs("#sumDiver").backgroundColor), checked: sw.getAttribute("aria-checked"), knobX: document.querySelector(".ts-knob").getBoundingClientRect().x - sw.getBoundingClientRect().x, scheme: cs("html").colorScheme, meta: document.querySelector('meta[name="theme-color"]').content }; });
+  try {
+    // 1. nothing chosen yet: the phone's own setting decides
+    let { ctx, page, errs } = await mkPage({ colorScheme: "dark" }); let d = await look(page);
+    assert.equal(d.theme, "dark", "follows a dark phone"); assert.equal(d.checked, "true"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.equal(d.card, "rgb(22, 27, 34)"); assert.equal(d.scheme, "dark"); assert.equal(d.meta, "#0d1117"); assert.ok(d.nameRatio > 7, "readable: " + d.nameRatio);
+    assert.equal(await page.evaluate(() => localStorage.getItem("theme")), null, "following the phone is not a saved choice");
+    await ctx.close();
+    ({ ctx, page, errs } = await mkPage({ colorScheme: "light" })); d = await look(page); assert.equal(d.theme, "light"); assert.equal(d.checked, "false"); assert.equal(d.page, "rgb(248, 249, 250)"); assert.equal(d.card, "rgb(255, 255, 255)"); assert.equal(d.meta, "#007bff"); assert.ok(d.nameRatio > 7);
+    // 2. the switch: at the top of the page, a real switch, light on the left and dark on the right
+    const sw = page.locator("header .theme-switch"); assert.equal(await sw.getAttribute("role"), "switch"); assert.equal(await sw.getAttribute("aria-label"), "Dark mode");
+    const box = await sw.boundingBox(), hb = await page.locator("header h1").boundingBox(); assert.ok(box.y < 60 && box.x < hb.x, "at the top left, level with the title: " + JSON.stringify(box));
+    assert.ok(box.width >= 56 && box.height >= 28, "big enough to tap"); const lightKnob = d.knobX; assert.ok(lightKnob < 8, "light: the knob is on the left (" + lightKnob + ")");
+    assert.ok((await page.locator(".theme-switch .ts-sun").boundingBox()).x < (await page.locator(".theme-switch .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
+    await sw.click(); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);
+    assert.equal(await page.evaluate(() => localStorage.getItem("theme")), "dark");
+    // 3. remembered after a reload, no flash (the script runs in <head> before the page is painted)
+    assert.equal(await page.evaluate(() => { const s = document.querySelector('head script[src="/auth/theme.js"]'); return !!s && !s.async && !s.defer; }), true, "theme.js blocks painting so there is no light flash");
+    await page.reload(); await page.waitForSelector("header .theme-switch"); d = await look(page); assert.equal(d.theme, "dark", "still dark after a reload");
+    // 4. keyboard works, and a chosen light beats a dark phone
+    await page.locator("header .theme-switch").focus(); await page.keyboard.press("Enter"); assert.equal((await look(page)).theme, "light"); await page.keyboard.press("Space"); assert.equal((await look(page)).theme, "dark"); await page.keyboard.press("Enter");
+    await ctx.close();
+    ({ ctx, page } = await mkPage({ colorScheme: "dark" }, () => { try { localStorage.setItem("theme", "light"); } catch (e) {} })); d = await look(page); assert.equal(d.theme, "light", "your choice wins over the phone's setting"); assert.equal(d.checked, "false");
+    // 5. every screen is readable in dark: no text with a contrast below 3:1 (Summary, Dive log, Device, Account)
+    await page.locator("header .theme-switch").click();
+    const lowContrast = () => page.evaluate(() => { const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(",").map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+      const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const bgOf = (el) => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0) { layers.push(c); if (c.a >= 0.99) break; } } let out = layers.length && layers[layers.length - 1].a >= 0.99 ? layers.pop() : { r: 13, g: 17, b: 23 }; while (layers.length) { const l = layers.pop(); out = { r: l.r * l.a + out.r * (1 - l.a), g: l.g * l.a + out.g * (1 - l.a), b: l.b * l.a + out.b * (1 - l.a) }; } return out; };
+      const bad = []; for (const el of document.querySelectorAll("body *")) { if (el.closest("svg, .leaflet-container, script, style")) continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue; const cs = getComputedStyle(el); if (cs.visibility === "hidden" || +cs.opacity === 0) continue;
+        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue; const fg = parse(cs.color), bg = bgOf(el), a = lum(fg), b = lum(bg), ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        if (ratio < 2.9) bad.push(`${el.tagName}#${el.id}.${el.className} "${el.textContent.trim().slice(0, 25)}" ${ratio.toFixed(2)}`); } return bad; });
+    for (const [name, go] of [["Summary", () => page.click("#navSummary")], ["Dive log", () => page.click("#navLog")], ["Device", () => page.click("#navDevice")], ["Account", async () => { await page.click("#acctBtn"); for (const sec of ["profile", "password", "certs", "dan", "regulator", "help"]) await page.locator(`details.acc[data-sec=${sec}] > summary`).click(); }]]) {
+      await go(); await page.waitForTimeout(250); const bad = await lowContrast(); const ok = bad.filter((x) => !/regbadge/.test(x)); assert.deepEqual(ok, [], name + " has hard-to-read text in dark mode");
+    }
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS light/dark switch");
+  } catch (e) { failed++; console.log("FAIL light/dark switch\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); }
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

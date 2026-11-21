@@ -16,7 +16,7 @@ const AccountArea = (() => {
     if (!r.ok) throw Object.assign(new Error(data.error || "Request failed (" + r.status + ")"), { status: r.status });
     return data;
   }
-  const note = (id, text, bad) => { const el = $(id); if (!el) return; el.textContent = text || ""; el.style.color = bad ? "#c92a2a" : "#2b8a3e"; };
+  const note = (id, text, bad) => { const el = $(id); if (!el) return; el.textContent = text || ""; el.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; };
   /** Two-step button: first tap arms it ("Tap again to ..."), a second tap within 4 s confirms. */
   function confirmTap(btn, label, action) {
     if (armed && armed.btn === btn) { clearTimeout(armed.t); btn.textContent = armed.orig; btn.classList.remove("armed"); armed = null; return action(); }
@@ -72,7 +72,7 @@ const AccountArea = (() => {
     const line = $("danState");
     line.textContent = !d.number ? "" : st.state === "none" ? "Add the date your membership is valid until to see when it needs renewing."
       : st.state === "expired" ? `Expired ${fmtDay(d.validUntil)} \u00b7 ${st.days === -1 ? "yesterday" : -st.days + " days ago"}` : `Valid until ${fmtDay(d.validUntil)} \u00b7 ${U.danText(st.days)}`;
-    line.style.color = st.state === "expired" ? "#c92a2a" : st.state === "soon" ? "#d9480f" : st.state === "ok" ? "#2b8a3e" : "";
+    line.style.color = st.state === "expired" ? "var(--tx-c92a2a)" : st.state === "soon" ? "var(--tx-d9480f)" : st.state === "ok" ? "var(--tx-2b8a3e)" : "";
     Dives.render();                                                              // refresh the Summary card
   }
   async function saveName() {
@@ -127,7 +127,7 @@ const AccountArea = (() => {
       const mine = allFiles.filter((f) => (f.kind || "cert") === c.kind).sort((a, b) => (b.certifiedOn || "").localeCompare(a.certifiedOn || "") || String(b.createdAt).localeCompare(String(a.createdAt)));
       const latest = c.kind === "cert" ? U.latestCert(allFiles, pinnedCert) : null;
       box.innerHTML = mine.length ? mine.map((f) => { const isLatest = latest && latest.id === f.id; return `<div class="cert${isLatest ? " latest" : ""}" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${isLatest ? '<span class="latest-tag">\u2605 Latest</span>' : ""}${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
-        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:#6c757d">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:#6c757d">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:#6c757d">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:#2b8a3e">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
+        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-6c757d)">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:var(--bg-2b8a3e)">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
         : `<p class="muted" style="margin:0">${c.none}</p>`;
     }
     if (pinnedCert && !allFiles.some((f) => f.id === pinnedCert && (f.kind || "cert") === "cert")) pinnedCert = "";   // the pinned file was deleted: back to automatic
@@ -225,7 +225,7 @@ const AccountArea = (() => {
     $("appVer").textContent = "v" + (self.APP_VERSION || "?");
     const sv = me && me.version, el = $("serverVer");
     el.textContent = !sv ? "" : sv === self.APP_VERSION ? "You have the latest version." : `A newer version (v${sv}) is available: tap "Check for update".`;
-    el.style.color = sv && sv !== self.APP_VERSION ? "#e67700" : "";
+    el.style.color = sv && sv !== self.APP_VERSION ? "var(--tx-e67700)" : "";
   }
 
   function open(sec) { const d = document.querySelector(`details.acc[data-sec="${sec}"]`); if (d) { d.open = true; d.scrollIntoView({ block: "start" }); } }

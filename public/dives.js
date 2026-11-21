@@ -161,7 +161,7 @@ const Dives = (() => {
     samples: window.DiveImport.thin(d.samples), headerHex: "", profileHex: "", uploaded: false });
   /** Files: a Shearwater Cloud database (.db) or its ZIP, or a UDDF export (XML). The kind is recognised from the content, not the name. */
   async function importFiles(files, deviceId) {
-    const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : "#2b8a3e"; } };
+    const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
     busy = true; say2("Reading\u2026");
     const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0; const problems = [];
@@ -202,7 +202,7 @@ const Dives = (() => {
   let pgCancel = false;
   async function syncPeregrine() {
     const out = $("pgMsg"), bar = $("pgBar"), btn = $("pgBtn"), cancel = $("pgCancel");
-    const say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : ""; } };
+    const say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : ""; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
     busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0";
     const fp = (startedAt) => window.DiveImport.fingerprint("peregrine|" + startedAt.slice(0, 16));
@@ -255,21 +255,21 @@ const Dives = (() => {
     const pts = [[0, 0], ...s.map((x) => [x.t, x.depthM])].map(([t, m]) => `${X(t).toFixed(1)},${Y(m).toFixed(1)}`).join(" ");
     let grid = "";
     for (let m = 0; m <= maxD + 1e-9; m += ax.step)
-      grid += `<line x1="${pl}" y1="${Y(m).toFixed(1)}" x2="${W - pr}" y2="${Y(m).toFixed(1)}" stroke="${m === 0 ? "#adb5bd" : "#dee2e6"}" stroke-width="${m === 0 ? 1 : 0.8}"/>` +
-        `<text x="${pl - 5}" y="${(Y(m) + 3).toFixed(1)}" font-size="10" fill="#6c757d" text-anchor="end">${m}${m === 0 ? " m" : ""}</text>`;
+      grid += `<line x1="${pl}" y1="${Y(m).toFixed(1)}" x2="${W - pr}" y2="${Y(m).toFixed(1)}" class="${m === 0 ? "g-axis" : "g-grid"}" stroke-width="${m === 0 ? 1 : 0.8}"/>` +
+        `<text x="${pl - 5}" y="${(Y(m) + 3).toFixed(1)}" font-size="10" class="g-lbl" text-anchor="end">${m}${m === 0 ? " m" : ""}</text>`;
     for (const t of tk.ticks)
-      grid += `<line x1="${X(t).toFixed(1)}" y1="${pt}" x2="${X(t).toFixed(1)}" y2="${H - pb}" stroke="#e9ecef" stroke-width="0.8"/>` +
-        `<text x="${X(t).toFixed(1)}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="middle">${Math.round(t / 60)}</text>`;
-    const gap = missing ? `<rect x="${X(lastT).toFixed(1)}" y="${pt}" width="${(X(maxT) - X(lastT)).toFixed(1)}" height="${H - pt - pb}" fill="#adb5bd" opacity=".25"/>
-      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">not</text>
-      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2 + 10).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">recovered</text>` : "";
+      grid += `<line x1="${X(t).toFixed(1)}" y1="${pt}" x2="${X(t).toFixed(1)}" y2="${H - pb}" class="g-grid2" stroke-width="0.8"/>` +
+        `<text x="${X(t).toFixed(1)}" y="${H - 8}" font-size="10" class="g-lbl" text-anchor="middle">${Math.round(t / 60)}</text>`;
+    const gap = missing ? `<rect x="${X(lastT).toFixed(1)}" y="${pt}" width="${(X(maxT) - X(lastT)).toFixed(1)}" height="${H - pt - pb}" class="g-gap" opacity=".25"/>
+      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2).toFixed(1)}" font-size="8" class="g-lbl" text-anchor="middle">not</text>
+      <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2 + 10).toFixed(1)}" font-size="8" class="g-lbl" text-anchor="middle">recovered</text>` : "";
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Depth profile, gridlines every ${ax.step} m and ${Math.round(tk.step / 60)} min">
       ${grid}${gap}
-      <line x1="${pl}" y1="${pt}" x2="${pl}" y2="${H - pb}" stroke="#adb5bd"/>
+      <line x1="${pl}" y1="${pt}" x2="${pl}" y2="${H - pb}" class="g-axis"/>
       <polygon fill="rgba(0,123,255,.15)" points="${pts} ${X(lastT).toFixed(1)},${Y(0).toFixed(1)}"/>
       <polyline fill="none" stroke="#007bff" stroke-width="2" stroke-linejoin="round" points="${pts}"/>
-      <text x="${pl}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="middle">0</text>
-      <text x="${W - pr}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="end">${fmtDur(maxT)}</text></svg>`;
+      <text x="${pl}" y="${H - 8}" font-size="10" class="g-lbl" text-anchor="middle">0</text>
+      <text x="${W - pr}" y="${H - 8}" font-size="10" class="g-lbl" text-anchor="end">${fmtDur(maxT)}</text></svg>`;
   }
 
   // Layout of the 36-byte dive header. Fields come from libdivecomputer's Cosmiq parser plus our own decoding of a real
@@ -367,7 +367,7 @@ const Dives = (() => {
     const d = typeof AccountArea !== "undefined" ? AccountArea.diver() : null; if (!d) { card.style.display = "none"; return; }
     const day = (k) => { const [y, m, dd] = k.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); };
     card.style.display = "";
-    $("sumName").textContent = d.name || "Your name"; $("sumName").style.color = d.name ? "" : "#868e96";
+    $("sumName").textContent = d.name || "Your name"; $("sumName").style.color = d.name ? "" : "var(--tx-868e96)";
     const c = d.latestCert;
     $("sumCert").textContent = c ? c.label : "None added yet";
     $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in Account \u203a Dive certifications";
@@ -410,7 +410,7 @@ const Dives = (() => {
         g.asks.map((a) => { const i = idx++; a.i = i;
           return `<div class="locask"><label for="locIn${i}">${esc(fmtDayLong(a.date))} <span class="muted">\u00b7 ${a.count} dive${a.count === 1 ? "" : "s"}</span></label>
           <div class="row" style="margin:6px 0 10px"><input id="locIn${i}" data-i="${i}" list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(a.prefill)}">${i ? `<button class="btn-set same" type="button" data-i="${i}" title="Use the place above">\u2191 same</button>` : ""}</div></div>`; }).join("") + `</div>`).join("") +
-      `</div><div class="row" style="margin:0"><button id="locSave" class="btn-set" type="button">Save</button><button id="locLater" class="btn-set" type="button" style="background:#6c757d">Later</button></div>`;
+      `</div><div class="row" style="margin:0"><button id="locSave" class="btn-set" type="button">Save</button><button id="locLater" class="btn-set" type="button" style="background:var(--bg-6c757d)">Later</button></div>`;
     el.style.display = "block"; updateBanner(recs); el.scrollIntoView({ behavior: "smooth", block: "start" });
     el.onclick = async (e) => {
       const same = e.target.closest(".same");
@@ -477,7 +477,7 @@ const Dives = (() => {
         const date = head.dataset.date, cur = head.classList.contains("empty") || head.dataset.mixed ? "" : head.dataset.loc || "";
         await fillSuggestions();
         const span = document.createElement("span"); span.className = "dh-edit";
-        span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:#6c757d" aria-label="Cancel">\u2715</button>`;
+        span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:var(--bg-6c757d)" aria-label="Cancel">\u2715</button>`;
         head.replaceWith(span); span.querySelector("input").focus(); return;
       }
       const mset = e.target.closest(".mh-set");
@@ -486,7 +486,7 @@ const Dives = (() => {
         const month = mset.dataset.month, n = (await all()).filter((r) => U.monthKey(r) === month).length, box = document.createElement("div"); box.className = "mh-edit";
         box.innerHTML = `<input type="text" list="locList" maxlength="60" autocomplete="off" placeholder="One place for all ${n} dives, e.g. Komodo" aria-label="Place for the whole month">
           <label class="chk"><input type="checkbox" class="mh-replace"> Replace places that are already set</label>
-          <div class="row" style="margin:0"><button class="btn-set mh-save" type="button" data-month="${esc(month)}">Apply to the month</button><button class="btn-set dh-cancel" type="button" style="background:#6c757d">Cancel</button></div>`;
+          <div class="row" style="margin:0"><button class="btn-set mh-save" type="button" data-month="${esc(month)}">Apply to the month</button><button class="btn-set dh-cancel" type="button" style="background:var(--bg-6c757d)">Cancel</button></div>`;
         mset.parentElement.appendChild(box); mset.style.display = "none"; box.querySelector("input[type=text]").focus(); return;
       }
       const msave = e.target.closest(".mh-save");
@@ -524,7 +524,7 @@ const Dives = (() => {
     const dups = U.duplicateMap(everything);                                            // dives both computers recorded: only the Cosmiq+ one is counted
     const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
     const last = loadLast(), ls = $("lastSync");
-    if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
+    if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "var(--tx-c92a2a)" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
     if (!recs.length) { list.innerHTML = dev === "cosmiq" ? "<p class='muted'>No Cosmiq+ dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>" : `<p class='muted'>No ${esc(deviceName(dev))} dives yet. Export your log from its app as UDDF and choose the file above.</p>`; return; }

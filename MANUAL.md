@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.12.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.13.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -54,6 +54,8 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 * The big blue **Connect & Sync** button is always at the top.
 * While syncing, a **progress banner with Cancel** appears on every tab.
 * A small green/amber/red **message at the bottom** confirms what just happened.
+
+* **Light / dark switch** at the top left of every page (also on the sign-in pages): **left = light, right = dark**. Until you use it, the app follows your phone's own light or dark setting; once you choose, your choice is remembered on that device. The map background and the dive charts follow the theme too.
 
 ---
 

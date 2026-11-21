@@ -40,7 +40,7 @@ test("signed-out: pages go to the login page; API/assets/POST get 401; only logi
   assert.equal((await call(env, "/auth/login.js")).status, 200);
   assert.equal((await call(env, "/auth/kdf.js")).status, 200);
   assert.equal((await call(env, "/auth/mfa.js")).status, 200);
-  for (const [p, type] of [["/auth/favicon.svg", /image\/svg\+xml/], ["/auth/apple-touch-icon.png", /image\/png/]]) { const r = await call(env, p); assert.equal(r.status, 200, p + " is public: the sign-in pages show the app icon"); assert.match(r.headers.get("content-type"), type); }
+  for (const [p, type] of [["/auth/favicon.svg", /image\/svg\+xml/], ["/auth/apple-touch-icon.png", /image\/png/], ["/auth/theme.js", /javascript/], ["/auth/theme.css", /text\/css/]]) { const r = await call(env, p); assert.equal(r.status, 200, p + " is public: the sign-in pages show the app icon"); assert.match(r.headers.get("content-type"), type); }
   for (const p of ["/favicon.svg", "/icon-192.png", "/apple-touch-icon.png", "/auth/icon-192.png"]) assert.notEqual((await call(env, p)).status, 200, p + " is not served without signing in");
   assert.equal((await call(env, "/auth/mfa.html")).status, 404, "raw template not exposed");
   assert.equal((await call(env, "/auth/mfa", html)).status, 302, "the code page needs the password step first");

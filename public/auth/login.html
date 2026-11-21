@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#007bff">
+<meta name="color-scheme" content="light dark">
+<script src="/auth/theme.js"></script>
 <link rel="icon" href="/auth/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/auth/apple-touch-icon.png">
 <title>Sign in · Dive Manager</title>
 <style>
   :root { --blue:#007bff; --bg:#f8f9fa; --text:#212529; --muted:#6c757d; --card:#fff; --line:#dee2e6; --red:#c92a2a; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#16181b; --text:#e9ecef; --muted:#9aa3ab; --card:#212529; --line:#3b4148; --red:#ff8787; } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg:#16181b; --text:#e9ecef; --muted:#9aa3ab; --card:#212529; --line:#3b4148; --red:#ff8787; }
+  .theme-corner { position: fixed; top: 12px; right: 12px; line-height: 0; }
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text);
          min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -33,6 +36,7 @@
 </style>
 </head>
 <body>
+<div class="theme-corner" data-theme-switch></div>
 <main>
   <h1>Dive Manager</h1>
   <div class="ver">v__APP_VERSION__</div>
