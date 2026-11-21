@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.7.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.8.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -62,7 +62,8 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 The Summary opens first and shows, from top to bottom:
 
 1. **You**: your name, your **latest certification**, and your **DAN membership** with how long it is valid.
-   * Latest certification = the one with the **newest date earned**. Certifications without a date only count if none of them has a date, so add the date to each one.
+   * Latest certification = the one you chose with **Set as my latest certification** (Account → Dive certifications). If you never chose one, it is the one with the **newest date earned**; certifications without a date only count if none of them has a date. Tip: add the date to each certification, or just pick the right one yourself.
+   * Total dive time and the dive count include both dive computers; a dive recorded by both at the same time is counted once.
    * DAN is **green** while valid, **orange** when it expires within 60 days, **red** once expired.
 2. **Regulator service**: dives on your regulator since its last reset, with a progress bar. **Green** below 70, **orange from 70**, **red from 90**.
 3. **Last dive**: the date, how long ago, and where.
@@ -90,10 +91,12 @@ Good to know:
 
 ## 5. Dive log
 
-Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number, time, mode (scuba / freedive / gauge), maximum depth and duration.
+At the top, choose the dive computer: **Cosmiq+ Gen 5** or **Shearwater Peregrine**. Each has its **own log**; the app remembers your choice.
+
+Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number (bold, in a small box), time, mode (scuba / freedive / gauge), maximum depth and duration.
 
 Tap a dive to open it:
-* **Depth chart** (when the profile is available).
+* **Depth chart** with a **grid**: horizontal lines at round depths (in metres, down the left) and vertical lines at round minutes (along the bottom), so you can read depth and time off the line.
 * **Max depth, duration, minimum temperature, O₂ %, dive number, average depth, time since your last dive, surface pressure.**
 * **Location** field for that dive.
 * **Technical details**: the raw header bytes, for the curious.
@@ -104,6 +107,14 @@ A badge may appear on a dive:
 | *(none)* | Complete depth profile. |
 | **PARTIAL PROFILE** | The device had already overwritten the last minutes of the profile; the chart shows the gap. All summary numbers are still correct. |
 | **SUMMARY ONLY** | The device overwrote this dive's whole profile (it keeps roughly the last 128). Depth, duration and temperature are intact. |
+
+### Importing the Shearwater Peregrine
+The Peregrine is imported from a **file**, not over Bluetooth (see [Understanding your dive data](#9-understanding-your-dive-data)).
+1. In the **Shearwater Cloud** app (download your dives from the Peregrine there first), export your dives as **UDDF** (Export › UDDF) and keep the file on your phone or laptop.
+2. In Dive Manager open **Dive log → Shearwater Peregrine → Choose UDDF file(s)**.
+3. You see *"3 new dives imported, 0 already there"* and are asked where you dived. Importing the same file (or a newer export that includes the old dives) again only adds the new dives.
+
+If a file cannot be read you get a plain message (for example "not a UDDF dive log"). Subsurface can also export UDDF, so any app that exports UDDF works.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
 
@@ -168,7 +179,7 @@ Keep a scan or photo of each certification card for dive registrations.
 1. Enter a **name** (e.g. *PADI Advanced Open Water*), optionally the **certificate number** and the **date certified**.
 2. **Choose file** (PDF, JPEG, PNG or WebP) → **Upload**. Photos are shrunk automatically; a PDF must be **under 1 MB** (otherwise use a photo).
 3. Each file has **Open/View**, **Save**, **Share** (where your browser supports it) and **Delete** (tap twice).
-Up to 12 files. The newest **date certified** appears on the Summary.
+Up to 12 files. The Summary shows your **latest certification**: tap **Set as my latest certification** on the right one (it gets a green ★ Latest tag). **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic.
 
 ### DAN insurance
 * **DAN member number** (required), **plan** (optional, e.g. *DAN Master*) and **valid until**. Tap **Save DAN details**. A badge next to the section title shows *Valid*, *N days left* or *Expired*.
@@ -196,7 +207,9 @@ Shows the **app version**, whether a newer one is available, **Check for update*
 * **Minimum temperature** comes from the dive header and is the true minimum, which can be a little lower than the lowest value on the chart.
 * **Time since last dive** is counted from the end of the previous dive to the start of this one.
 * **Profile memory is a ring.** The Cosmiq+ keeps depth profiles in a fixed-size memory (about the last 128 dives) and overwrites the oldest. Dive Manager matches every profile to the dive it really belongs to, recovers dives the device itself cannot read under their own number, and marks overwritten ones *summary only*. **Sync after every trip**: each new dive overwrites an old profile on the device.
-* **The dive log has no GPS** or location information; locations are what you type.
+* **Peregrine dives come from the file** you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). The Peregrine is not connected over Bluetooth by this app.
+* **Two computers, one dive:** if you wore both and both logged the same dive, Summary totals and the regulator counter count it once (a dive from the other computer that starts before the first one has ended). Both stay visible in their own log.
+* **The Cosmiq+ dive log has no GPS** or location information; locations are what you type.
 * The device clock has no time zone: dive times are shown exactly as the dive computer recorded them.
 
 ---

@@ -116,3 +116,47 @@ test("danStatus: ok / soon (within 60 days, including today) / expired; wording"
   assert.deepEqual([null, -1, -51, 0, 1, 45, 130, 400].map(U.danText), ["", "expired yesterday", "expired 51 days ago", "expires today", "1 day left", "45 days left", "4 months left", "13 months left"]);
   assert.equal(U.daysUntil("2027-02-28", new Date(2026, 1, 28)), 365); assert.equal(U.daysUntil("2024-03-01", new Date(2024, 1, 28)), 2, "leap year");
 });
+
+test("latestCert: a certification you pinned always wins; a stale or non-certification pin is ignored", () => {
+  const certs = [{ id: "a", kind: "cert", label: "Advance", certifiedOn: "2020-01-01", createdAt: "2026-01-01" }, { id: "b", kind: "cert", label: "Dive Master", certifiedOn: "2024-06-01", createdAt: "2025-01-01" },
+    { id: "d", kind: "dan", label: "DAN card", certifiedOn: "2026-01-01", createdAt: "2026-02-01" }];
+  assert.equal(U.latestCert(certs).id, "b", "by date when nothing is pinned");
+  assert.equal(U.latestCert(certs, "a").id, "a", "pinned beats the newer date");
+  assert.equal(U.latestCert(certs, "d").id, "b", "an insurance file cannot be pinned as a certification");
+  assert.equal(U.latestCert(certs, "gone").id, "b", "pin of a deleted file falls back to the dates");
+  // the user's real case: no dates at all, so upload order decided it
+  const undated = [{ id: "1", label: "Dive Master", createdAt: "2026-05-01 10:00:00" }, { id: "2", label: "Advance Adventurer", createdAt: "2026-05-01 10:05:00" }];
+  assert.equal(U.latestCert(undated).id, "2", "without dates the last upload wins (the bug)"); assert.equal(U.latestCert(undated, "1").id, "1", "...unless you choose");
+});
+
+test("uniqueDives: a dive recorded by two computers counts once; separate dives and same-computer dives never merge", () => {
+  const d = (startedAt, durationSec, device, fp) => ({ fingerprint: fp || device + startedAt, startedAt, durationSec, ...(device ? { device } : {}) });
+  const cosmiq = d("2026-05-02T09:30:00", 2700), peregrine = d("2026-05-02T09:34:00", 2640, "peregrine");
+  assert.equal(U.uniqueDives([cosmiq, peregrine]).length, 1, "overlap = same dive");
+  assert.equal(U.uniqueDives([peregrine, cosmiq]).length, 1, "order does not matter");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T11:00:00", 2400, "peregrine")]).length, 2, "a later dive is a different dive");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T09:40:00", 600, undefined, "c2")]).length, 2, "same computer never merges");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T10:15:00", 2400, "peregrine")]).length, 2, "starting exactly when the other ended is a new dive");
+  assert.equal(U.uniqueDives([]).length, 0);
+  // totals and the regulator use it
+  assert.equal(U.summarize([cosmiq, peregrine]).count, 1); assert.equal(U.summarize([cosmiq, peregrine]).totalSec, 2700);
+  assert.equal(U.regulatorCount({ baseline: 10, since: "" }, [cosmiq, peregrine]), 11);
+  assert.equal(U.regulatorCount({ baseline: 0, since: "" }, [cosmiq, peregrine, d("2026-05-03T09:00:00", 3000, "peregrine")]), 2);
+});
+
+test("diveNumbers: the computer's own number, else the place in that computer's log; numbered per computer", () => {
+  const recs = [{ fingerprint: "a", startedAt: "2026-05-03T09:00:00", device: "peregrine" }, { fingerprint: "b", startedAt: "2026-05-01T09:00:00", device: "peregrine" },
+    { fingerprint: "c", startedAt: "2026-05-02T09:00:00", device: "peregrine", number: 41 }, { fingerprint: "x", startedAt: "2026-05-02T09:00:00", number: 106 }];
+  const n = U.diveNumbers(recs);
+  assert.equal(n.get("b"), 1); assert.equal(n.get("a"), 3); assert.equal(n.get("c"), 41, "own number wins"); assert.equal(n.get("x"), 106);
+});
+
+test("chart axes: round gridlines that always cover the data", () => {
+  for (const [max, step, top] of [[7, 2, 8], [3.4, 1, 4], [28.4, 10, 30], [18, 5, 20], [40, 10, 40], [41, 10, 50], [12, 5, 15], [0.5, 0.1, 0.5], [1, 0.2, 1], [100, 20, 100]]) {
+    const a = U.niceAxis(max, 5); assert.ok(a.max >= max - 1e-9, `covers ${max}`); assert.ok(Math.abs(a.step - step) < 1e-9 && Math.abs(a.max - top) < 1e-9, `${max}: ${JSON.stringify(a)}`);
+    assert.ok(Math.round(a.max / a.step) <= 5, "at most 5 gridlines");
+  }
+  assert.deepEqual(U.timeTicks(23 * 60), { step: 300, ticks: [300, 600, 900, 1200] });
+  assert.deepEqual(U.timeTicks(45 * 60).ticks, [600, 1200, 1800, 2400]); assert.ok(U.timeTicks(30).ticks.length <= 6);
+  assert.ok(U.timeTicks(3 * 3600).ticks.every((t) => t < 3 * 3600)); assert.ok(U.timeTicks(86400).ticks.length <= 12);
+});

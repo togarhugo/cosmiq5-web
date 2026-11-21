@@ -118,7 +118,8 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.equal(await page.locator("details.year").count(), 1);
       assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*2 dives[\s\S]*max \d+\.\d m/);
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
-      assert.match(await page.locator("details.dive").first().innerText(), /#2/); assert.match(await page.locator("details.dive").last().innerText(), /#1/);
+      assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
+      assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
       assert.match(await page.locator("#diveList > p").first().innerText(), /2 dives . 2 with full depth profile/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
@@ -190,11 +191,11 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     assert.equal(await page.locator("details.dive").count(), 3);
     assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
-    const row = (n) => page.locator("details.dive", { hasText: `#${n}` });
+    const row = (n) => page.locator("details.dive", { has: page.locator(".dive-num", { hasText: new RegExp("^" + n + "$") }) });
     assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
     assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
     await row(3).locator("summary").click(); await page.waitForSelector("details.dive[open] svg polyline");
-    assert.match(await row(3).innerText(), /#3[\s\S]*dive number/);
+    assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
     assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
@@ -488,6 +489,121 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png", fullPage: true });
     console.log("PASS diver card + DAN");
   } catch (e) { failed++; console.log("FAIL diver card + DAN\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-diver.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: choose which certification is your latest (the Summary was showing the wrong one) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  let pinned = ""; const calls = [];
+  const files = [["0000000000000001", "PADI Dive Master", "2026-05-01 10:00:00"], ["0000000000000002", "SSI Advance Adventurer", "2026-05-01 10:05:00"], ["0000000000000003", "PADI EFR", "2026-05-01 10:02:00"]]
+    .map(([id, label, createdAt]) => ({ id, label, number: "", kind: "cert", certifiedOn: "", filename: label + ".jpg", mime: "image/jpeg", size: 100, createdAt }));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: pinned, dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/profile/latest-cert", (r) => { const b = JSON.parse(r.request().postData()); calls.push(b.id); pinned = b.id; return r.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: files } }));
+  await page.goto(base);
+  try {
+    const cert = () => page.locator("#sumCert").innerText();
+    await page.waitForFunction(() => document.getElementById("sumCert").textContent !== "None added yet", null, { timeout: 8000 });
+    assert.equal(await cert(), "SSI Advance Adventurer", "without dates the last upload is picked (the wrong result the user saw)");
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click();
+    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked latest"); assert.match(await page.locator("#certList .cert.latest").innerText(), /Advance Adventurer/);
+    assert.equal(await page.locator("#certList .cert-latest").count(), 2, "the other two offer 'Set as my latest certification'");
+    assert.equal(await page.locator("#certAuto").isVisible(), false, "no 'use newest' button while automatic");
+    await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".cert-latest").click();
+    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    assert.deepEqual(calls, ["0000000000000001"]); assert.equal(await page.locator("#certList .latest-tag").count(), 1);
+    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/);
+    await page.click("#navSummary"); assert.equal(await cert(), "PADI Dive Master", "the Summary now shows the one you chose");
+    await page.reload(); await page.waitForFunction(() => /Dive Master/.test(document.getElementById("sumCert").textContent), null, { timeout: 8000 });
+    assert.equal(await cert(), "PADI Dive Master", "still the one you chose after a reload (saved in your account)");
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click(); await page.click("#certAuto");
+    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    assert.deepEqual(calls, ["0000000000000001", ""], "back to automatic");
+    console.log("PASS latest certification");
+  } catch (e) { failed++; console.log("FAIL latest certification\n ", e.message.split("\n").slice(0, 6).join(" | ")); await page.screenshot({ path: "/tmp/fail-latest.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: second dive computer (Shearwater Peregrine): import a UDDF file, separate log, grid chart, boxed numbers ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errors2 = []; page.on("pageerror", (e) => errors2.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: { name: "Tecline", type: "R4", baseline: 0, since: "" } } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.addInitScript(fakeBle); await page.addInitScript(() => { window.__wrap = false; });
+  await page.goto(base);
+  const wp = (t, d, k) => `<waypoint><divetime>${t}</divetime><depth>${d}</depth><temperature>${k}</temperature></waypoint>`;
+  const dive = (when, num, maxd, dur) => `<dive id="d${num}"><informationbeforedive><datetime>${when}</datetime><divenumber>${num}</divenumber></informationbeforedive><tankdata><link ref="ean32"/></tankdata><samples>${[wp(0, 0, 302.15), wp(60, maxd / 2, 301.65), wp(120, maxd, 301.15), wp(180, maxd / 2, 301.65), wp(240, 0, 302.15)].join("")}</samples><informationafterdive><greatestdepth>${maxd}</greatestdepth><diveduration>${dur}</diveduration><lowesttemperature>301.15</lowesttemperature></informationafterdive></dive>`;
+  const uddf = (dives) => Buffer.from(`<?xml version="1.0"?><uddf version="3.2.0" xmlns="http://www.streit.cc/uddf/3.2/"><gasdefinitions><mix id="ean32"><o2>0.32</o2></mix></gasdefinitions><profiledata><repetitiongroup>${dives}</repetitiongroup></profiledata></uddf>`);
+  try {
+    // two Cosmiq dives first (14 and 15 March 2025), then the Peregrine file with one dive that overlaps Cosmiq dive 1 (same dive worn on both wrists) and two new ones
+    await page.click("#connectBtn"); await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.click("#locLater").catch(() => {});
+    assert.ok(await page.locator("#devTabs").isVisible(), "computer selector in the dive log");
+    assert.equal(await page.locator("#devTabs button").count(), 2); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
+    assert.ok(await page.locator("#syncCard").isVisible() && !(await page.locator("#importCard").isVisible()), "Cosmiq shows the sync card");
+    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#importCard", { state: "visible" });
+    assert.ok(await page.locator("#importCard").isVisible() && !(await page.locator("#syncCard").isVisible()), "Peregrine shows the import card, not the Bluetooth sync");
+    assert.match(await page.locator("#diveList").innerText(), /No Shearwater Peregrine dives yet/);
+    const bad = { name: "log.uddf", mimeType: "application/xml", buffer: Buffer.from("<html><body>hello</body></html>") };
+    await page.setInputFiles("#impFile", bad); await page.waitForFunction(() => /not a UDDF/.test(document.getElementById("impMsg").textContent), null, { timeout: 5000 });
+    assert.equal(uploaded.filter((d) => d.device === "peregrine").length, 0, "nothing uploaded from a bad file"); assert.equal(await page.locator("details.dive").count(), 0);
+    const good = { name: "shearwater.uddf", mimeType: "application/xml", buffer: uddf(dive("2025-03-14T09:33:10", 41, 28.4, 2520) + dive("2025-03-16T10:00:00", 42, 18.2, 2400) + dive("2025-03-16T14:00:00", 43, 12.5, 3000)) };
+    await page.setInputFiles("#impFile", good);
+    await page.waitForFunction(() => /3 new dives imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.match(await page.locator("#impMsg").innerText(), /3 uploaded/);
+    assert.equal(uploaded.length, 5, "2 Cosmiq + 3 Peregrine"); const u = uploaded.find((d) => d.startedAt === "2025-03-16T10:00:00");
+    assert.equal(u.device, "peregrine"); assert.equal(u.headerHex, ""); assert.equal(u.maxDepthM, 18.2); assert.equal(u.o2Percent, 32); const x = JSON.parse(u.extra); assert.equal(x.n, 42); assert.equal(x.s.length, 5); assert.deepEqual(x.s[2], [120, 18.2, 28]);
+    // separate logs: Peregrine tab lists only its 3 dives, the Cosmiq tab still only its 2
+    assert.equal(await page.locator("details.dive").count(), 3); assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/);
+    assert.match(await page.locator("#diveList > p").first().innerText(), /^3 dives$/);
+    await page.locator("#devTabs button", { hasText: "Cosmiq" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 2, null, { timeout: 5000 });
+    assert.match(await page.locator("#navLog").innerText(), /Dive log \(5\)/, "the nav counts every dive");
+    // the choice is remembered
+    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 3, null, { timeout: 5000 });
+    // dive numbers: bold, boxed, no '#'
+    const num = page.locator("details.dive .dive-num").first();
+    assert.equal(await num.innerText(), "43"); const st = await num.evaluate((e) => { const c = getComputedStyle(e); return { w: c.fontWeight, br: c.borderTopWidth, bg: c.backgroundColor, rad: c.borderTopLeftRadius }; });
+    assert.ok(+st.w >= 700, "bold"); assert.equal(st.br, "1px"); assert.notEqual(st.bg, "rgba(0, 0, 0, 0)"); assert.notEqual(st.rad, "0px");
+    // a dive with the grid: horizontal depth lines labelled in metres, vertical time lines in minutes
+    await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator("summary").click();
+    const svg = page.locator("details.dive[open] svg.chart"); await svg.waitFor();
+    const lines = await svg.locator("line").count(); assert.ok(lines >= 6, "grid lines drawn: " + lines);
+    const labels = await svg.locator("text").evaluateAll((els) => els.map((e) => e.textContent)); assert.ok(labels.includes("0 m") && labels.includes("10") && labels.includes("30"), "depth labels: " + labels.join(","));
+    await page.screenshot({ path: process.env.SHOT_PEREGRINE || "/tmp/shot-peregrine.png", fullPage: true });
+    assert.match(await svg.getAttribute("aria-label"), /gridlines every 10 m/);
+    assert.match(await page.locator("details.dive[open]").innerText(), /28\.4 m[\s\S]*42 min[\s\S]*28\.0 .C[\s\S]*32%/);
+    assert.match(await page.locator("details.dive[open]").innerText(), /Imported from a file/);
+    // the same file again adds nothing; the same dive on both wrists counts once in the Summary and the regulator
+    await page.setInputFiles("#impFile", good); await page.waitForFunction(() => /0 new dives imported, 3 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.equal(uploaded.length, 5, "no duplicate upload");
+    await page.click("#navSummary");
+    assert.match(await page.locator("#sumCount").innerText(), /across 4 dives/, "5 logged, one recorded by both computers = 4");
+    assert.equal(await page.locator("#sumRegCount").innerText(), "3", "regulator: 4 dives minus the freedive; the dive on both wrists counted once");
+    // location prompt covers imported dives, and saving it reaches them
+    await page.click("#navLog"); await page.waitForSelector("#locPrompt input", { state: "visible" });
+    assert.match(await page.locator("#locPrompt h3").innerText(), /Where did you dive/); assert.match(await page.locator("#locPrompt").innerText(), /imported dives?/);
+    const locCalls = []; await page.unroute("**/api/dives/location"); await page.route("**/api/dives/location", (r) => { locCalls.push(...JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+    const firstIn = page.locator("#locPrompt .locask input").first(); await firstIn.fill("Banda"); await page.click("#locSave");
+    await page.waitForFunction(() => /Location saved for/.test(document.getElementById("toast").textContent), null, { timeout: 5000 });
+    assert.ok(locCalls.length >= 1 && locCalls.every((i) => i.location === "Banda"), "the place of imported dives is sent to the cloud: " + JSON.stringify(locCalls));
+    // reload: imported dives come back from the cloud (device + extra) and the selected computer is remembered
+    const stored = uploaded.filter((d) => d.device === "peregrine");
+    await page.unroute("**/api/dives"); await page.route("**/api/dives", (r) => r.request().method() === "GET" ? r.fulfill({ json: { dives: stored.map((d) => ({ ...d, deviceMac: null, location: null })) } }) : r.fulfill({ json: { stored: 0 } }));
+    await page.evaluate(() => indexedDB.deleteDatabase("cosmiq")); await page.reload();
+    await page.waitForFunction(() => /Dive log \(3\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
+    await page.click("#navLog"); assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/, "remembered the computer");
+    await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator("summary").click(); await page.locator("details.dive[open] svg.chart").waitFor();
+    assert.deepEqual(errors2, [], "page errors");
+    console.log("PASS second dive computer");
+  } catch (e) { failed++; console.log("FAIL second dive computer\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-peregrine.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

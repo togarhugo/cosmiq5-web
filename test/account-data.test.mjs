@@ -11,13 +11,13 @@ async function two() { const env = makeEnv(); return { env, me: (await googleSes
 
 test("everything in the account area needs a signed-in user", async () => {
   const env = makeEnv();
-  for (const [m, p] of [["GET", "/api/profile"], ["PUT", "/api/profile/avatar"], ["PUT", "/api/profile/name"], ["PUT", "/api/profile/dan"], ["DELETE", "/api/profile/dan"], ["DELETE", "/api/profile/avatar"], ["GET", "/api/regulator"], ["PUT", "/api/regulator"], ["GET", "/api/certs"], ["POST", "/api/certs"], ["GET", "/api/certs/0123456789abcdef"], ["DELETE", "/api/certs/0123456789abcdef"]])
+  for (const [m, p] of [["GET", "/api/profile"], ["PUT", "/api/profile/avatar"], ["PUT", "/api/profile/name"], ["PUT", "/api/profile/dan"], ["PUT", "/api/profile/latest-cert"], ["DELETE", "/api/profile/dan"], ["DELETE", "/api/profile/avatar"], ["GET", "/api/regulator"], ["PUT", "/api/regulator"], ["GET", "/api/certs"], ["POST", "/api/certs"], ["GET", "/api/certs/0123456789abcdef"], ["DELETE", "/api/certs/0123456789abcdef"]])
     assert.equal((await call(env, p, { method: m, body: m === "GET" ? undefined : "{}" })).status, 401, m + " " + p);
 });
 
 test("profile picture: only small JPEGs; replace, read back, remove; private per user", async () => {
   const { env, me, other } = await two(); const url = "data:image/jpeg;base64,";
-  assert.deepEqual(await (await send(env, me, "GET", "/api/profile")).json(), { avatar: null, fullName: "", dan: { number: "", plan: "", validUntil: "" } });
+  assert.deepEqual(await (await send(env, me, "GET", "/api/profile")).json(), { avatar: null, fullName: "", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } });
   const good = url + b64(pad(JPEG, 3000));
   assert.equal((await send(env, me, "PUT", "/api/profile/avatar", { dataUrl: good })).status, 200);
   assert.equal((await (await send(env, me, "GET", "/api/profile")).json()).avatar, good);
@@ -132,4 +132,23 @@ test("files have a kind (certification or DAN document) and a date certified; th
   assert.equal((await up({ label: "one too many" })).status, 409, "13th certification refused");
   assert.equal((await up({ label: "second DAN doc", kind: "dan" })).status, 200, "DAN documents have their own allowance");
   assert.equal((await up({ label: "x", kind: "dan" }, other)).status, 200, "limits are per user");
+});
+
+test("latest certification: pin one of your own, clear it, deleting the pinned one unpins it, private per user", async () => {
+  const { env, me, other } = await two();
+  const upload = async (cookie, label, kind = "cert") => (await (await send(env, cookie, "POST", "/api/certs", { kind, label, mime: "application/pdf", filename: label + ".pdf", data: b64(pad(PDF, 300)) })).json()).id;
+  const idA = await upload(me, "Advanced"), idB = await upload(me, "Dive Master"), idDan = await upload(me, "DAN card", "dan"), idOther = await upload(other, "Someone else");
+  const pinned = async () => (await (await send(env, me, "GET", "/api/profile")).json()).latestCertId;
+  assert.equal(await pinned(), "", "nothing pinned by default");
+  assert.equal((await send(env, me, "PUT", "/api/profile/latest-cert", { id: idB })).status, 200); assert.equal(await pinned(), idB);
+  assert.equal((await send(env, me, "PUT", "/api/profile/latest-cert", { id: idA })).status, 200); assert.equal(await pinned(), idA, "can be changed");
+  for (const [name, id, status] of [["another user's file", idOther, 404], ["insurance file, not a certification", idDan, 404], ["unknown id", "0123456789abcdef", 404], ["malformed id", "../../x", 400], ["not a string", 5, 400], ["missing", undefined, 400]]) {
+    assert.equal((await send(env, me, "PUT", "/api/profile/latest-cert", { id })).status, status, name); assert.equal(await pinned(), idA, name + ": pin unchanged");
+  }
+  assert.equal((await send(env, me, "PUT", "/api/profile/latest-cert", { id: idB }, { origin: "https://evil.example" })).status, 403, "cross-origin");
+  assert.equal((await (await send(env, other, "GET", "/api/profile")).json()).latestCertId, "", "another user's profile is untouched");
+  assert.equal((await send(env, me, "DELETE", "/api/certs/" + idA)).status, 200); assert.equal(await pinned(), "", "deleting the pinned file unpins it");
+  await send(env, me, "PUT", "/api/profile/latest-cert", { id: idB }); assert.equal((await send(env, me, "PUT", "/api/profile/latest-cert", { id: "" })).status, 200); assert.equal(await pinned(), "", "cleared = automatic");
+  assert.equal((await send(env, other, "DELETE", "/api/certs/" + idB)).status, 200, "another user's delete matches nothing");
+  await send(env, me, "PUT", "/api/profile/latest-cert", { id: idB }); assert.equal(await pinned(), idB, "...and did not touch my pin");
 });

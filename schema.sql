@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS dives (
   header_hex   TEXT NOT NULL,          -- raw 36-byte header: source of truth
   profile_hex  TEXT NOT NULL,          -- raw profile bytes: source of truth
   location     TEXT,                   -- free-text dive area ("Komodo"); NULL = not set
+  device       TEXT NOT NULL DEFAULT 'cosmiq',  -- which dive computer: 'cosmiq' (Bluetooth) or an imported one ('peregrine')
+  extra        TEXT,                   -- imported dives: decoded values + depth samples as JSON (header_hex/profile_hex are empty)
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, fingerprint)
 );
@@ -48,6 +50,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   dan_number TEXT NOT NULL DEFAULT '',          -- DAN member number
   dan_plan   TEXT NOT NULL DEFAULT '',          -- membership / plan name
   dan_valid_until TEXT NOT NULL DEFAULT '',     -- YYYY-MM-DD, '' = not set
+  latest_cert_id TEXT NOT NULL DEFAULT '',      -- certification pinned as "latest" ('' = work it out from the dates)
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS regulators (

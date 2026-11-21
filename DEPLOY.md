@@ -113,12 +113,20 @@ download and upload. Tap **Download raw backup** after the first sync.
 Binary data (the picture, certification files) is stored as base64 text and the Worker never decodes it, which keeps requests far below
 the free plan's CPU limit.
 
+- **Second dive computer (Shearwater Peregrine):** dives carry a `device` column (`cosmiq` default, `peregrine`). Imported dives have no raw
+  bytes: `header_hex`/`profile_hex` are empty and their decoded values + depth samples are JSON in `extra` (the Worker stores it as text,
+  never parses it, caps it at 120 KB per dive and 700 KB per request). The file is parsed in the browser (UDDF, `public/dive-import.js`);
+  the fingerprint is a hash of device + start minute so re-importing adds nothing. Totals de-duplicate overlapping dives from two devices.
+  Direct Bluetooth download from the Peregrine is **not** implemented: it needs Shearwater's own BLE protocol and could not be tested without the device.
+- **Latest certification:** `profiles.latest_cert_id` (empty = newest by date); deleting that file clears it.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
 npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql   # adds dives.location
 npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql    # profile picture, regulator, certifications (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql   # name, DAN details, certification kind/date (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_latest_cert.sql   # dives.device/extra, pinned latest certification (run once)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

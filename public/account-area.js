@@ -116,7 +116,7 @@ const AccountArea = (() => {
     return { mime: "image/jpeg", filename: file.name.replace(/\.[^.]*$/, "") + ".jpg", data: url.split(",")[1] };
   }
 
-  let allFiles = [];
+  let allFiles = [], pinnedCert = diverData.pinnedCertId || "";
   const FILE_KINDS = [
     { kind: "cert", list: "certList", label: "certLabel", number: "certNumber", date: "certDate", file: "certFile", fileName: "certFileName", add: "certAdd", msg: "certMsg", none: "No certifications yet.", numberTag: "#", deleted: "Certification deleted", uploaded: "Certification uploaded" },
     { kind: "dan", list: "danList", label: "danLabel", number: "danDocNumber", file: "danFile", fileName: "danFileName", add: "danAdd", msg: "danMsg", none: "No insurance documents yet.", numberTag: "policy #", deleted: "Document deleted", uploaded: "Insurance document uploaded", defaultLabel: "DAN insurance card" },
@@ -125,11 +125,17 @@ const AccountArea = (() => {
     for (const c of FILE_KINDS) {
       const box = $(c.list); if (!box) continue;
       const mine = allFiles.filter((f) => (f.kind || "cert") === c.kind).sort((a, b) => (b.certifiedOn || "").localeCompare(a.certifiedOn || "") || String(b.createdAt).localeCompare(String(a.createdAt)));
-      box.innerHTML = mine.length ? mine.map((f) => `<div class="cert" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
-        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:#6c757d">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:#6c757d">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:#6c757d">Delete</button></div><div class="cert-preview"></div></div>`).join("")
+      const latest = c.kind === "cert" ? U.latestCert(allFiles, pinnedCert) : null;
+      box.innerHTML = mine.length ? mine.map((f) => { const isLatest = latest && latest.id === f.id; return `<div class="cert${isLatest ? " latest" : ""}" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${isLatest ? '<span class="latest-tag">\u2605 Latest</span>' : ""}${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
+        <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:#6c757d">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:#6c757d">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:#6c757d">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:#2b8a3e">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
         : `<p class="muted" style="margin:0">${c.none}</p>`;
     }
-    diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles) || {});
+    if (pinnedCert && !allFiles.some((f) => f.id === pinnedCert && (f.kind || "cert") === "cert")) pinnedCert = "";   // the pinned file was deleted: back to automatic
+    diverData.pinnedCertId = pinnedCert;
+    diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles, pinnedCert) || {});
+    const hint = $("certLatestHint");
+    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose the latest certification yourself." : "Shown on your Summary: the newest by date. Tap \u201cSet as my latest certification\u201d on one to choose it yourself.";
+    if ($("certAuto")) $("certAuto").style.display = pinnedCert ? "" : "none";
     saveDiver(); Dives.render();
   }
   async function loadFiles() {
@@ -141,6 +147,7 @@ const AccountArea = (() => {
     const item = e.target.closest(".cert"); if (!item) return;
     const id = item.dataset.id, btn = e.target.closest("button"); if (!btn) return;
     try {
+      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; say("Latest certification updated"); return renderFiles(); }
       if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); say(cfg.deleted); loadFiles(); });
       const { cert, blob } = await fetchFile(id), url = URL.createObjectURL(blob);
       if (btn.classList.contains("cert-view")) {
@@ -230,7 +237,7 @@ const AccountArea = (() => {
       Dives.render();
     }).catch(() => {});
     api("GET", "/api/profile").then((p) => {
-      setAvatar(p.avatar); diverData.fullName = p.fullName || ""; diverData.dan = p.dan || diverData.dan; saveDiver();
+      setAvatar(p.avatar); pinnedCert = p.latestCertId || ""; diverData.fullName = p.fullName || ""; diverData.dan = p.dan || diverData.dan; saveDiver();
       if (document.activeElement !== $("fullName")) $("fullName").value = diverData.fullName || (me && me.name) || "";
       renderDan();
     }).catch(() => renderDan());
@@ -242,6 +249,7 @@ const AccountArea = (() => {
       $(cfg.file).addEventListener("change", (e) => { const f = e.target.files[0]; $(cfg.fileName).textContent = f ? f.name : ""; if (f && !$(cfg.label).value) $(cfg.label).value = cfg.defaultLabel || f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
       $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
     }
+    $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Latest certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
     $("nameSave").addEventListener("click", saveName); $("fullName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveName(); });
     $("danSave").addEventListener("click", saveDan); $("danClear").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", clearDan));
     const sum = $("sumDiver");                                                    // the Summary card leads to the matching Account section
@@ -249,7 +257,7 @@ const AccountArea = (() => {
     $("regAdd").addEventListener("click", () => openRegForm(null)); $("regEdit").addEventListener("click", () => openRegForm(regulator));
     $("regCancel").addEventListener("click", () => { $("regForm").style.display = "none"; note("regMsg", ""); renderRegulator(); });
     $("regSave").addEventListener("click", saveReg);
-    $("regUseLogged").addEventListener("click", async () => { const n = (await Dives.all()).filter((r) => r.mode !== "freedive").length; $("regBase").value = n; note("regMsg", `Filled in with your ${n} logged scuba/gauge dives.`); });
+    $("regUseLogged").addEventListener("click", async () => { const n = U.uniqueDives(await Dives.all()).filter((r) => r.mode !== "freedive").length; $("regBase").value = n; note("regMsg", `Filled in with your ${n} logged scuba/gauge dives.`); });
     $("regReset").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to reset to 0", resetReg));
     $("regRemove").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", removeReg));
     $("updateBtn").addEventListener("click", checkUpdate);

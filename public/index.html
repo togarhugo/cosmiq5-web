@@ -392,7 +392,13 @@
             details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid #dee2e6; margin-bottom: 8px; }
             details.year > summary::-webkit-details-marker { display: none; }
             details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
-            .dive-num { font-family: var(--mono); font-size: 12px; color: #6c757d; min-width: 34px; }
+            .dive-num, .numtile { display: inline-block; box-sizing: border-box; min-width: 30px; padding: 2px 7px; border: 1px solid #ced4da; border-radius: 6px; background: #f1f3f5; color: #212529; font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1.3; text-align: center; }
+            .stats b.numtile { display: block; width: max-content; margin: 0 auto 2px; font-size: 14px; }
+            #devTabs { display: flex; gap: 6px; margin-bottom: 12px; }
+            #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
+            #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
+            .chart { display: block; }
+            .cert.latest { border-color: #2b8a3e; } .latest-tag { font-size: 11px; font-weight: 700; color: #2b8a3e; background: #ebfbee; border-radius: 10px; padding: 2px 8px; }
             .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
             p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
             #toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none;
@@ -808,7 +814,16 @@
             <div id="locBanner" class="card" style="display:none"><span aria-hidden="true">&#128205;</span> <span id="locBannerText"></span>
                 <button id="locBannerBtn" class="btn-set" type="button" style="margin-left:8px">Add locations</button></div>
             <datalist id="locList"></datalist>
-            <div class="card">
+            <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
+            <div id="importCard" class="card" style="display:none">
+                <h3 id="impTitle">Import from Shearwater Peregrine</h3>
+                <p class="muted" style="margin:0 0 10px">Export your dives from the Shearwater Cloud app as <b>UDDF</b> (Export &rsaquo; UDDF), then choose the file here. Dives you have already imported are skipped, so you can import the same or a newer file again.</p>
+                <label class="btn-set" for="impFile" style="display:inline-block;box-sizing:border-box;text-align:center;cursor:pointer">Choose UDDF file(s)</label>
+                <input id="impFile" type="file" accept=".uddf,.xml,application/xml,text/xml" multiple style="position:absolute;left:-9999px" />
+                <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
+                <p class="muted" style="margin:8px 0 0">The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded at the same time is counted once in the Summary and the regulator counter.</p>
+            </div>
+            <div id="syncCard" class="card">
                 <h3>Sync</h3>
                 <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
                 <div class="bar"><div id="diveBar"></div></div>
@@ -914,6 +929,8 @@
                 <div class="acc-body">
                     <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
                     <div id="certList"></div>
+                    <p id="certLatestHint" class="muted" style="margin:8px 0 0"></p>
+                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Use the newest by date instead</button>
                     <div class="subcard" style="margin-top:10px">
                         <h4>Add a certification</h4>
                         <label class="label" for="certLabel">Name</label>
@@ -1025,6 +1042,7 @@
         <div id="log">Waiting for connection...</div></details>
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
+        <script src="dive-import.js"></script>
         <script src="dives.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>

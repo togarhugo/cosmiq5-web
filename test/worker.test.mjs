@@ -174,3 +174,30 @@ test("dive locations: stored cleaned, returned, updatable, clearable, validated,
   assert.equal((await post(env, "/api/dives/location", { items: [] })).status, 401);
   assert.equal((await send(me, "/api/dives/location", { items: [] }, { origin: "https://evil.example" })).status, 403);
 });
+
+test("imported dives (another computer): stored with their samples, listed with device, validated, capped", async () => {
+  const env = makeEnv(); const { cookie: me } = await googleSession(env); const { cookie: other } = await googleSession(env, { email: "other@example.com" });
+  const extra = JSON.stringify({ n: 7, t: 28.5, iv: 10, s: [[0, 0, 29], [10, 5.5, 28.5], [20, 12.1, 28.5]] });
+  const imp = (o = {}) => ({ fingerprint: "0123456789ab", device: "peregrine", startedAt: "2026-05-02T09:30:00", mode: "scuba", durationSec: 2700, maxDepthM: 28.4, o2Percent: 32, headerHex: "", profileHex: "", extra, ...o });
+  const send = (cookie, body, h = {}) => post(env, "/api/dives", body, { cookie, ...h });
+  assert.equal((await (await send(me, { dives: [imp()] })).json()).stored, 1);
+  const row = (await (await call(env, "/api/dives", { headers: { cookie: me } })).json()).dives[0];
+  assert.equal(row.device, "peregrine"); assert.equal(row.extra, extra); assert.equal(row.maxDepthM, 28.4); assert.equal(row.headerHex, "");
+  assert.equal((await (await send(me, { dives: [imp()] })).json()).stored, 0, "re-importing the same dive adds nothing");
+  assert.equal((await (await call(env, "/api/dives", { headers: { cookie: other } })).json()).dives.length, 0, "private");
+  // a Cosmiq dive still comes back as device 'cosmiq' with no extra
+  await send(me, { dives: [{ fingerprint: "aaaaaaaaaaaa", headerHex: "00".repeat(36), profileHex: "", startedAt: "2025-03-14T09:30:00" }] });
+  const rows = (await (await call(env, "/api/dives", { headers: { cookie: me } })).json()).dives, cosmiq = rows.find((r) => r.fingerprint === "aaaaaaaaaaaa");
+  assert.equal(cosmiq.device, "cosmiq"); assert.equal(cosmiq.extra, null);
+  for (const [name, d] of [["unknown device", imp({ device: "evil", fingerprint: "111111111111" })], ["no extra", imp({ fingerprint: "111111111111", extra: undefined })], ["extra not an object", imp({ fingerprint: "111111111111", extra: "[1,2]" })],
+    ["extra too big", imp({ fingerprint: "111111111111", extra: '{"s":"' + "x".repeat(120_000) + '"}' })], ["extra not text", imp({ fingerprint: "111111111111", extra: { s: [] } })], ["bad start", imp({ fingerprint: "111111111111", startedAt: "yesterday" })],
+    ["start with a zone", imp({ fingerprint: "111111111111", startedAt: "2026-05-02T09:30:00Z" })], ["bad mode", imp({ fingerprint: "111111111111", mode: "rebreather" })], ["negative depth", imp({ fingerprint: "111111111111", maxDepthM: -3 })],
+    ["absurd depth", imp({ fingerprint: "111111111111", maxDepthM: 9000 })], ["text duration", imp({ fingerprint: "111111111111", durationSec: "long" })], ["raw bytes on an import", imp({ fingerprint: "111111111111", headerHex: "00".repeat(36) })],
+    ["bad fingerprint", imp({ fingerprint: "../../../" })]])
+    assert.equal((await send(me, { dives: [d] })).status, 400, name);
+  assert.equal((await send(me, { dives: [imp({ fingerprint: "222222222222", location: "x".repeat(61) })] })).status, 400, "location still validated");
+  assert.equal((await send(me, { dives: [imp({ fingerprint: "222222222222" })] }, { origin: "https://evil.example" })).status, 403, "cross-origin");
+  assert.equal((await call(env, "/api/dives", { method: "POST", headers: { cookie: me, "content-type": "application/json", "content-length": "800000" }, body: JSON.stringify({ dives: [] }) })).status, 413, "oversized request refused before parsing");
+  // the dive location API works for imported dives too
+  assert.deepEqual(await (await post(env, "/api/dives/location", { items: [{ fingerprint: "0123456789ab", location: "Banda" }] }, { cookie: me })).json(), { updated: 1 });
+});

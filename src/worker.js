@@ -18,11 +18,22 @@ function cleanLocation(v) {
   const t = v.replace(/\s+/g, " ").trim();
   return t.length > 60 ? false : t || null;
 }
+const IMPORTED_DEVICES = ["peregrine"];              // dive computers whose logs are imported from a file (the Cosmiq arrives over Bluetooth)
+const STARTED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+const MAX_EXTRA_CHARS = 120_000;                     // decoded samples of one imported dive, as JSON text
+const num = (v, max) => v === undefined || v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max);
 function validDive(d) {
-  return d && typeof d.fingerprint === "string" && /^[0-9a-f]{12}$/.test(d.fingerprint) &&
-    typeof d.headerHex === "string" && d.headerHex.length === 72 && HEX.test(d.headerHex) &&
+  if (!d || typeof d.fingerprint !== "string" || !/^[0-9a-f]{12}$/.test(d.fingerprint) || typeof d.startedAt !== "string") return false;
+  if (d.device !== undefined && d.device !== null && d.device !== "cosmiq") {            // imported dive: decoded values, no raw device bytes
+    // The JSON text is stored as is (parsing up to 120 KB per dive would eat the free plan's CPU budget); only the browser reads it back.
+    return IMPORTED_DEVICES.includes(d.device) && STARTED.test(d.startedAt) && !d.headerHex && !d.profileHex &&
+      typeof d.extra === "string" && d.extra.length <= MAX_EXTRA_CHARS && d.extra.startsWith("{") && d.extra.endsWith("}") &&
+      typeof d.mode === "string" && ["scuba", "gauge", "freedive"].includes(d.mode) &&
+      num(d.durationSec, 86400) && num(d.maxDepthM, 400) && num(d.o2Percent, 100);
+  }
+  return typeof d.headerHex === "string" && d.headerHex.length === 72 && HEX.test(d.headerHex) &&
     typeof d.profileHex === "string" && d.profileHex.length <= 400_000 && HEX.test(d.profileHex) && d.profileHex.length % 2 === 0 &&
-    typeof d.startedAt === "string" && d.startedAt.length <= 32;
+    d.startedAt.length <= 32;
 }
 
 function serveAsset(request, pathname) {
@@ -82,22 +93,24 @@ export default {
 
     if (url.pathname === "/api/dives" && request.method === "GET") {
       const { results } = await env.DB.prepare(
-        "SELECT fingerprint, device_mac AS deviceMac, started_at AS startedAt, mode, duration_sec AS durationSec, max_depth_m AS maxDepthM, o2_percent AS o2Percent, header_hex AS headerHex, profile_hex AS profileHex, location FROM dives WHERE user_email = ? ORDER BY started_at DESC LIMIT 2000"
+        "SELECT fingerprint, device_mac AS deviceMac, started_at AS startedAt, mode, duration_sec AS durationSec, max_depth_m AS maxDepthM, o2_percent AS o2Percent, header_hex AS headerHex, profile_hex AS profileHex, location, device, extra FROM dives WHERE user_email = ? ORDER BY started_at DESC LIMIT 2000"
       ).bind(email).all();
       return json({ dives: results });
     }
 
     if (url.pathname === "/api/dives" && request.method === "POST") {
+      if (Number(request.headers.get("content-length") || 0) > 700_000) return json({ error: "too much data in one request: send fewer dives" }, 413);   // keeps JSON parsing inside the free plan's CPU budget
       let body;
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
       const dives = Array.isArray(body.dives) ? body.dives : [];
       if (dives.length > 50) return json({ error: "max 50 dives per request" }, 413);
       if (!dives.every(validDive) || !dives.every((d) => cleanLocation(d.location) !== false)) return json({ error: "invalid dive record" }, 400);
       const stmt = env.DB.prepare(
-        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
       );
       const res = await env.DB.batch(dives.map((d) => stmt.bind(email, d.fingerprint, d.deviceMac ?? null, d.startedAt,
-        d.mode ?? null, d.durationSec ?? null, d.maxDepthM ?? null, d.o2Percent ?? null, d.headerHex, d.profileHex, cleanLocation(d.location))));
+        d.mode ?? null, d.durationSec ?? null, d.maxDepthM ?? null, d.o2Percent ?? null, d.headerHex || "", d.profileHex || "", cleanLocation(d.location),
+        d.device || "cosmiq", d.device && d.device !== "cosmiq" ? d.extra : null)));
       return json({ stored: res.reduce((n, r) => n + (r.meta.changes || 0), 0), received: dives.length });
     }
 
