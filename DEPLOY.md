@@ -99,6 +99,10 @@ download and upload. Tap **Download raw backup** after the first sync.
 - **Dive certifications:** upload a PDF/JPEG/PNG/WebP of a card (up to 1 MB; photos are shrunk automatically), with a name and an
   optional certificate number. View, Save or Share it later, e.g. when registering for a dive. Up to 12 files. The server checks
   the file's real type (first bytes), never serves it back as a web page, and only the owner can read it.
+- **Your name** (Profile section; the Google name is suggested) and **DAN insurance** (member number, plan, valid-until date, plus
+  uploads of your card or policy, kept apart from the certification files). **Certifications** take an optional date earned.
+- **Summary, top card:** your name, your **latest certification** (the newest date earned; files without a date only count when none
+  has one) and your **DAN membership with its validity**: green while valid, orange within 60 days of expiry, red once expired.
 - **Regulator:** name, type and a starting count. It counts your scuba and gauge dives (not freedives) that began after the last
   reset, and updates itself on every sync. The Summary card is green below 70 dives, **orange from 70, red from 90**. "Reset to 0"
   starts counting again after your latest logged dive. One regulator is tracked.
@@ -114,6 +118,7 @@ Run each new migration once, **before** deploying the Worker that needs it (fres
 ```bash
 npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql   # adds dives.location
 npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql    # profile picture, regulator, certifications (idempotent)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql   # name, DAN details, certification kind/date (run once)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

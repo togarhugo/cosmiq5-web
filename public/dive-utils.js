@@ -93,6 +93,32 @@
   /** Reset to 0: count only dives after the latest one logged so far. */
   const regulatorReset = (reg, recs) => ({ ...reg, baseline: 0, since: recs.reduce((a, r) => (r.startedAt > a ? r.startedAt : a), "") });
 
-  const api = { monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  // ---- diver profile (Summary): latest certification, DAN validity ----
+  /** Whole days from today (local) until `key` (YYYY-MM-DD): positive = in the future, 0 = today, negative = past. */
+  const daysUntil = (key, today) => 0 - daysBetween(key, today);          // (0 - x, not -x: avoids a negative zero)
+  /**
+   * The most recent dive certification (files of kind "dan" are insurance, not certifications). Ranked by the date it was earned;
+   * certifications without a date only count when none has one (otherwise an old card uploaded today would look like the latest).
+   */
+  function latestCert(certs) {
+    const mine = (certs || []).filter((c) => (c.kind || "cert") === "cert");
+    const dated = mine.filter((c) => c.certifiedOn);
+    const pool = dated.length ? dated : mine;
+    const when = (c) => c.certifiedOn || String(c.createdAt || "").slice(0, 10);
+    return pool.slice().sort((a, b) => when(b).localeCompare(when(a)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0] || null;
+  }
+  /** DAN membership validity: state "none" (no date), "ok", "soon" (within `soonDays`, including today) or "expired". */
+  function danStatus(validUntil, today, soonDays) {
+    if (!validUntil) return { state: "none", days: null };
+    const days = daysUntil(validUntil, today || new Date());
+    return { state: days < 0 ? "expired" : days <= (soonDays == null ? 60 : soonDays) ? "soon" : "ok", days };
+  }
+  function danText(days) {
+    if (days == null) return "";
+    if (days < 0) return days === -1 ? "expired yesterday" : `expired ${-days} days ago`;
+    return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
+  }
+
+  const api = { daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

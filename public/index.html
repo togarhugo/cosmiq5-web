@@ -369,6 +369,14 @@
             .sum.reg-ok { border-left: 5px solid #2b8a3e; } .sum.reg-ok .reg-msg { color: #2b8a3e; }
             .sum.reg-orange { border-left: 5px solid #e67700; background: #fff4e6; } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: #d9480f; } .sum.reg-orange #sumRegBar { background: #e67700; }
             .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
+            .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
+            .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: #f8f9fa; }
+            .diver-row .ico { font-size: 22px; line-height: 1.2; } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
+            .diver-val { font-size: 16px; font-weight: 600; word-break: break-word; } .dan-valid { font-size: 13px; font-weight: 600; margin-top: 2px; }
+            .diver-row.dan-ok { background: #ebfbee; border-left: 4px solid #2b8a3e; } .dan-ok .dan-valid { color: #2b8a3e; }
+            .diver-row.dan-soon { background: #fff4e6; border-left: 4px solid #e67700; } .dan-soon .dan-valid, .dan-soon .diver-val { color: #d9480f; }
+            .diver-row.dan-expired { background: #fff5f5; border-left: 4px solid #c92a2a; } .dan-expired .dan-valid, .dan-expired .diver-val { color: #c92a2a; }
+            .regbadge.expired { background: #c92a2a; } .regbadge.soon { background: #e67700; }
             .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed #ced4da; flex-wrap: wrap; }
             .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: #1864ab; font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
             .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; }
@@ -436,6 +444,13 @@
 
         <div id="summaryView" style="display:none">
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
+            <div id="sumDiver" class="card sum" style="display:none">
+                <div id="sumName" class="diver-name"></div>
+                <div class="diver-row"><span class="ico" aria-hidden="true">&#127891;</span>
+                    <div><div class="lbl">Latest certification</div><div id="sumCert" class="diver-val"></div><div id="sumCertSub" class="muted"></div></div></div>
+                <div id="sumDanRow" class="diver-row dan-none"><span class="ico" aria-hidden="true">&#128737;</span>
+                    <div><div class="lbl">DAN member</div><div id="sumDan" class="diver-val"></div><div id="sumDanValid" class="dan-valid"></div></div></div>
+            </div>
             <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
                 <div class="sum-label">Regulator service</div>
                 <div class="sum-big"><span id="sumRegCount">0</span> dives</div>
@@ -827,6 +842,8 @@
                             </div>
                         </div>
                     </div>
+                    <label class="label" for="fullName" style="margin-top:12px">Your name <span class="muted" style="font-weight:400">(shown on the Summary)</span></label>
+                    <div class="row" style="margin:0 0 4px"><input id="fullName" class="fld" maxlength="80" autocomplete="name" placeholder="e.g. Togar Hugo" style="margin:0" /><button id="nameSave" class="btn-set" type="button">Save</button></div>
                     <div id="profMsg" class="msg" role="status"></div>
                 </div>
             </details>
@@ -903,6 +920,8 @@
                         <input id="certLabel" class="fld" maxlength="80" placeholder="e.g. PADI Advanced Open Water" autocomplete="off" />
                         <label class="label" for="certNumber">Certificate / diver number (optional)</label>
                         <input id="certNumber" class="fld" maxlength="40" autocomplete="off" />
+                        <label class="label" for="certDate">Date certified (optional)</label>
+                        <input id="certDate" class="fld" type="date" />
                         <div class="row wrap" style="margin:0 0 6px">
                             <label class="btn-set filebtn" tabindex="0">Choose file<input id="certFile" type="file" accept="application/pdf,image/*" hidden /></label>
                             <span id="certFileName" class="muted"></span>
@@ -910,6 +929,39 @@
                         <button id="certAdd" class="btn-set" type="button">Upload</button>
                     </div>
                     <div id="certMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="dan">
+                <summary>DAN insurance <span id="danBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Your DAN membership and a copy of your insurance card or policy, so both are at hand when you register for a dive.</p>
+                    <div class="subcard" style="margin-top:0">
+                        <label class="label" for="danNumber">DAN member number</label>
+                        <input id="danNumber" class="fld" maxlength="30" autocomplete="off" placeholder="e.g. 4412 3399" />
+                        <label class="label" for="danPlan">Membership / plan (optional)</label>
+                        <input id="danPlan" class="fld" maxlength="60" list="danPlans" autocomplete="off" placeholder="e.g. DAN Master" />
+                        <datalist id="danPlans"><option value="DAN Basic"><option value="DAN Preferred"><option value="DAN Master"><option value="DAN Master Plus"><option value="DAN Professional"><option value="DAN Europe Diver"><option value="DAN Asia-Pacific"></datalist>
+                        <label class="label" for="danValid">Valid until</label>
+                        <input id="danValid" class="fld" type="date" />
+                        <div class="row wrap" style="margin:0"><button id="danSave" class="btn-set" type="button">Save DAN details</button><button id="danClear" class="btn-set" type="button" style="background:#6c757d">Remove</button></div>
+                        <div id="danState" class="msg" role="status"></div>
+                    </div>
+                    <h4 style="margin:16px 0 8px;font-size:14px">Insurance documents</h4>
+                    <div id="danList"></div>
+                    <div class="subcard" style="margin-top:10px">
+                        <h4>Upload your DAN card or policy</h4>
+                        <label class="label" for="danLabel">Name</label>
+                        <input id="danLabel" class="fld" maxlength="80" placeholder="e.g. DAN insurance card" autocomplete="off" />
+                        <label class="label" for="danDocNumber">Policy number (optional)</label>
+                        <input id="danDocNumber" class="fld" maxlength="40" autocomplete="off" />
+                        <div class="row wrap" style="margin:0 0 6px">
+                            <label class="btn-set filebtn" tabindex="0">Choose file<input id="danFile" type="file" accept="application/pdf,image/*" hidden /></label>
+                            <span id="danFileName" class="muted"></span>
+                        </div>
+                        <button id="danAdd" class="btn-set" type="button">Upload</button>
+                    </div>
+                    <div id="danMsg" class="msg" role="status"></div>
                 </div>
             </details>
 

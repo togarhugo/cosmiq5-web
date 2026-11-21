@@ -225,6 +225,23 @@ const Dives = (() => {
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}`;
   }
+  /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */
+  function renderDiverCard() {
+    const card = $("sumDiver"); if (!card) return;
+    const d = typeof AccountArea !== "undefined" ? AccountArea.diver() : null; if (!d) { card.style.display = "none"; return; }
+    const day = (k) => { const [y, m, dd] = k.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); };
+    card.style.display = "";
+    $("sumName").textContent = d.name || "Your name"; $("sumName").style.color = d.name ? "" : "#868e96";
+    const c = d.latestCert;
+    $("sumCert").textContent = c ? c.label : "None added yet";
+    $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in Account \u203a Dive certifications";
+    const dan = d.dan || {}, st = U.danStatus(dan.validUntil, new Date()), row = $("sumDanRow");
+    row.className = "diver-row dan-" + (dan.number ? (st.state === "none" ? "none" : st.state) : "none");
+    if (!dan.number) { $("sumDan").textContent = "Not added yet"; $("sumDanValid").textContent = "Add it in Account \u203a DAN insurance"; $("sumDanValid").style.fontWeight = "400"; return; }
+    $("sumDan").textContent = ["#" + dan.number, dan.plan].filter(Boolean).join(" \u00b7 "); $("sumDanValid").style.fontWeight = "";
+    $("sumDanValid").textContent = st.state === "none" ? "No validity date set"
+      : st.state === "expired" ? `Expired ${day(dan.validUntil)} \u00b7 ${st.days === -1 ? "yesterday" : -st.days + " days ago"}` : `Valid until ${day(dan.validUntil)} \u00b7 ${U.danText(st.days)}`;
+  }
   /** Regulator service card: green below 70 dives, orange from 70, red from 90. */
   function renderRegulatorCard(recs) {
     const card = $("sumReg"); if (!card) return;
@@ -336,7 +353,7 @@ const Dives = (() => {
     const list = $("diveList"); if (!list) return;
     const recs = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
-    renderSummary(recs); renderRegulatorCard(recs); updateBanner(recs); wireList(list);
+    renderSummary(recs); renderDiverCard(); renderRegulatorCard(recs); updateBanner(recs); wireList(list);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];

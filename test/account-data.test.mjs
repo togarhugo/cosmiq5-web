@@ -11,13 +11,13 @@ async function two() { const env = makeEnv(); return { env, me: (await googleSes
 
 test("everything in the account area needs a signed-in user", async () => {
   const env = makeEnv();
-  for (const [m, p] of [["GET", "/api/profile"], ["PUT", "/api/profile/avatar"], ["DELETE", "/api/profile/avatar"], ["GET", "/api/regulator"], ["PUT", "/api/regulator"], ["GET", "/api/certs"], ["POST", "/api/certs"], ["GET", "/api/certs/0123456789abcdef"], ["DELETE", "/api/certs/0123456789abcdef"]])
+  for (const [m, p] of [["GET", "/api/profile"], ["PUT", "/api/profile/avatar"], ["PUT", "/api/profile/name"], ["PUT", "/api/profile/dan"], ["DELETE", "/api/profile/dan"], ["DELETE", "/api/profile/avatar"], ["GET", "/api/regulator"], ["PUT", "/api/regulator"], ["GET", "/api/certs"], ["POST", "/api/certs"], ["GET", "/api/certs/0123456789abcdef"], ["DELETE", "/api/certs/0123456789abcdef"]])
     assert.equal((await call(env, p, { method: m, body: m === "GET" ? undefined : "{}" })).status, 401, m + " " + p);
 });
 
 test("profile picture: only small JPEGs; replace, read back, remove; private per user", async () => {
   const { env, me, other } = await two(); const url = "data:image/jpeg;base64,";
-  assert.deepEqual(await (await send(env, me, "GET", "/api/profile")).json(), { avatar: null });
+  assert.deepEqual(await (await send(env, me, "GET", "/api/profile")).json(), { avatar: null, fullName: "", dan: { number: "", plan: "", validUntil: "" } });
   const good = url + b64(pad(JPEG, 3000));
   assert.equal((await send(env, me, "PUT", "/api/profile/avatar", { dataUrl: good })).status, 200);
   assert.equal((await (await send(env, me, "GET", "/api/profile")).json()).avatar, good);
@@ -29,7 +29,7 @@ test("profile picture: only small JPEGs; replace, read back, remove; private per
     assert.equal((await send(env, me, "PUT", "/api/profile/avatar", { dataUrl })).status, 400, name);
   assert.equal((await send(env, me, "PUT", "/api/profile/avatar", {})).status, 400);
   assert.equal((await send(env, me, "DELETE", "/api/profile/avatar")).status, 200);
-  assert.deepEqual(await (await send(env, me, "GET", "/api/profile")).json(), { avatar: null });
+  assert.equal((await (await send(env, me, "GET", "/api/profile")).json()).avatar, null);
   assert.equal((await send(env, me, "PUT", "/api/profile/avatar", { dataUrl: good }, { origin: "https://evil.example" })).status, 403, "cross-origin");
 });
 
@@ -84,4 +84,52 @@ test("at most 12 files per user", async () => {
   for (let i = 0; i < 12; i++) assert.equal((await up(me, i)).status, 200);
   const r = await up(me, 13); assert.equal(r.status, 409); assert.match((await r.json()).error, /up to 12/);
   assert.equal((await up(other, 1)).status, 200, "the limit is per user");
+});
+
+test("your name: stored cleaned, limited, private, and never disturbs the picture or DAN details", async () => {
+  const { env, me, other } = await two(); const get = async (c) => (await send(env, c, "GET", "/api/profile")).json();
+  const avatar = "data:image/jpeg;base64," + b64(pad(JPEG, 500)); await send(env, me, "PUT", "/api/profile/avatar", { dataUrl: avatar });
+  await send(env, me, "PUT", "/api/profile/dan", { number: "12345678", plan: "Master", validUntil: "2027-03-31" });
+  assert.equal((await send(env, me, "PUT", "/api/profile/name", { fullName: "  Togar \n  Hugo " })).status, 200);
+  const p = await get(me); assert.equal(p.fullName, "Togar Hugo"); assert.equal(p.avatar, avatar, "picture untouched"); assert.equal(p.dan.number, "12345678", "DAN untouched");
+  assert.equal((await get(other)).fullName, "", "private");
+  assert.equal((await send(env, me, "PUT", "/api/profile/name", { fullName: "" })).status, 200); assert.equal((await get(me)).fullName, "", "an explicit empty string clears it");
+  for (const [name, body] of [["too long", { fullName: "x".repeat(81) }], ["not a string", { fullName: 5 }], ["missing", {}]]) assert.equal((await send(env, me, "PUT", "/api/profile/name", body)).status, 400, name);
+  assert.equal((await send(env, me, "PUT", "/api/profile/name", { fullName: "x" }, { origin: "https://evil.example" })).status, 403);
+});
+
+test("DAN details: validated, private, independent of the name and the picture, clearable", async () => {
+  const { env, me, other } = await two(); const get = async (c) => (await send(env, c, "GET", "/api/profile")).json();
+  await send(env, me, "PUT", "/api/profile/name", { fullName: "Togar" });
+  const dan = { number: "  4412 3399-A ", plan: " DAN   Master ", validUntil: "2027-03-31" };
+  assert.equal((await send(env, me, "PUT", "/api/profile/dan", dan)).status, 200);
+  let p = await get(me); assert.deepEqual(p.dan, { number: "4412 3399-A", plan: "DAN Master", validUntil: "2027-03-31" }); assert.equal(p.fullName, "Togar", "name untouched");
+  assert.deepEqual((await get(other)).dan, { number: "", plan: "", validUntil: "" }, "private");
+  assert.equal((await send(env, me, "PUT", "/api/profile/dan", { number: "777" })).status, 200, "plan and validity are optional");
+  p = await get(me); assert.deepEqual(p.dan, { number: "777", plan: "", validUntil: "" });
+  for (const [name, change] of [["no number", { number: "  " }], ["number with markup", { number: "<script>1</script>" }], ["number too long", { number: "9".repeat(31) }], ["plan too long", { plan: "x".repeat(61) }],
+    ["day-first date", { validUntil: "31/12/2026" }], ["month 13", { validUntil: "2026-13-01" }], ["Feb 30", { validUntil: "2026-02-30" }], ["too old", { validUntil: "1980-01-01" }], ["too far", { validUntil: "2101-01-01" }],
+    ["datetime", { validUntil: "2026-12-31T00:00:00" }], ["date as number", { validUntil: 20261231 }], ["number as number", { number: 123 }]])
+    assert.equal((await send(env, me, "PUT", "/api/profile/dan", { number: "777", ...change })).status, 400, name);
+  assert.equal((await send(env, me, "PUT", "/api/profile/dan", { number: "777", validUntil: "2028-02-29" })).status, 200, "a real leap day is fine");
+  assert.equal((await send(env, other, "DELETE", "/api/profile/dan")).status, 200); assert.equal((await get(me)).dan.number, "777", "another user's delete does not touch mine");
+  assert.equal((await send(env, me, "DELETE", "/api/profile/dan")).status, 200); assert.deepEqual((await get(me)).dan, { number: "", plan: "", validUntil: "" }); assert.equal((await get(me)).fullName, "Togar");
+  assert.equal((await send(env, me, "PUT", "/api/profile/dan", { number: "1" }, { origin: "https://evil.example" })).status, 403);
+});
+
+test("files have a kind (certification or DAN document) and a date certified; the file limit is per kind", async () => {
+  const { env, me, other } = await two();
+  const up = (over = {}, cookie = me) => send(env, cookie, "POST", "/api/certs", { label: "Doc", filename: "a.pdf", mime: "application/pdf", data: b64(pad(PDF, 200)), ...over });
+  const a = await (await up({ label: "PADI Rescue Diver", number: "R-1", certifiedOn: "2024-05-17" })).json();
+  const b = await (await up({ label: "DAN insurance card", kind: "dan" })).json();
+  const c = await (await up({ label: "No date" })).json();
+  const list = (await (await send(env, me, "GET", "/api/certs")).json()).certs, by = (id) => list.find((x) => x.id === id);
+  assert.deepEqual([by(a.id).kind, by(a.id).certifiedOn], ["cert", "2024-05-17"]); assert.deepEqual([by(b.id).kind, by(b.id).certifiedOn], ["dan", ""]); assert.deepEqual([by(c.id).kind, by(c.id).certifiedOn], ["cert", ""], "defaults");
+  const one = (await (await send(env, me, "GET", "/api/certs/" + a.id)).json()).cert; assert.equal(one.kind, "cert"); assert.equal(one.certifiedOn, "2024-05-17");
+  for (const [name, over] of [["unknown kind", { kind: "passport" }], ["kind not a string", { kind: 5 }], ["bad date", { certifiedOn: "17-05-2024" }], ["impossible date", { certifiedOn: "2024-02-31" }], ["date as number", { certifiedOn: 2024 }]])
+    assert.equal((await up(over)).status, 400, name);
+  for (let i = 0; i < 10; i++) assert.equal((await up({ label: "C" + i })).status, 200);                  // 2 + 10 = 12 certifications already
+  assert.equal((await up({ label: "one too many" })).status, 409, "13th certification refused");
+  assert.equal((await up({ label: "second DAN doc", kind: "dan" })).status, 200, "DAN documents have their own allowance");
+  assert.equal((await up({ label: "x", kind: "dan" }, other)).status, 200, "limits are per user");
 });

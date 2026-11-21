@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS auth_attempts ( -- failed-login counters (per email a
 CREATE TABLE IF NOT EXISTS profiles (
   user_email TEXT PRIMARY KEY,
   avatar     TEXT,                              -- "data:image/jpeg;base64,..." (256x256), NULL = none
+  full_name  TEXT NOT NULL DEFAULT '',          -- shown on the Summary
+  dan_number TEXT NOT NULL DEFAULT '',          -- DAN member number
+  dan_plan   TEXT NOT NULL DEFAULT '',          -- membership / plan name
+  dan_valid_until TEXT NOT NULL DEFAULT '',     -- YYYY-MM-DD, '' = not set
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS regulators (
@@ -58,7 +62,9 @@ CREATE TABLE IF NOT EXISTS certs (
   id         TEXT PRIMARY KEY,
   user_email TEXT NOT NULL,
   label      TEXT NOT NULL,                     -- e.g. "PADI Advanced Open Water"
-  number     TEXT NOT NULL DEFAULT '',          -- certificate / diver number (optional)
+  number     TEXT NOT NULL DEFAULT '',          -- certificate / diver / policy number (optional)
+  kind       TEXT NOT NULL DEFAULT 'cert',      -- 'cert' = dive certification, 'dan' = DAN insurance document
+  certified_on TEXT NOT NULL DEFAULT '',        -- YYYY-MM-DD the certification was earned (optional)
   filename   TEXT NOT NULL,
   mime       TEXT NOT NULL,
   size       INTEGER NOT NULL,                  -- bytes of the original file

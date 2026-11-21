@@ -159,6 +159,30 @@ for (const [profile, EMAIL] of [["Pixel 7", "me@example.com"], ["iPhone 13", "ot
     assert.equal(await page.locator("#regShownCount").innerText(), "0");
     await page.click("#navSummary"); await page.waitForFunction(() => /reg-ok/.test(document.getElementById("sumReg").className));
 
+    // 5b. your name, DAN details, a dated certification and a DAN document on the real server, then the Summary after losing the phone's cache
+    const openSec = async (sec) => { const d = page.locator(`details.acc[data-sec=${sec}]`); if (!(await d.evaluate((e) => e.open))) await d.locator("summary").click(); };
+    const inDays = (n) => { const d = new Date(Date.now() + n * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+    await page.click("#acctBtn"); await openSec("profile");
+    await page.fill("#fullName", "Test Diver"); await page.click("#nameSave"); await toastIs(/Name saved/);
+    await openSec("dan");
+    await page.fill("#danNumber", "4412 3399"); await page.fill("#danPlan", "DAN Master"); await page.fill("#danValid", inDays(40)); await page.click("#danSave"); await toastIs(/DAN details saved/);
+    assert.match(await page.locator("#danBadge").innerText(), /\d+ days left/);
+    await page.setInputFiles("#danFile", { name: "dan.pdf", mimeType: "application/pdf", buffer: PDF }); await page.click("#danAdd"); await toastIs(/Insurance document uploaded/);
+    await page.waitForFunction(() => document.querySelectorAll("#danList .cert").length === 1, null, { timeout: 10000 });
+    await openSec("certs");
+    await page.fill("#certLabel", "PADI Rescue Diver"); await page.fill("#certNumber", "R-99"); await page.fill("#certDate", "2024-05-17");
+    await page.setInputFiles("#certFile", { name: "rescue.pdf", mimeType: "application/pdf", buffer: PDF }); await page.click("#certAdd");
+    await page.waitForFunction(() => /PADI Rescue Diver/.test(document.getElementById("certList").textContent), null, { timeout: 10000 });
+    const kinds = (await page.evaluate(() => fetch("/api/certs").then((r) => r.json()))).certs.map((c) => `${c.kind}:${c.label}:${c.certifiedOn}`).sort();
+    assert.ok(kinds.includes("dan:DAN insurance card:") && kinds.includes("cert:PADI Rescue Diver:2024-05-17"), "server keeps the kind and the date: " + kinds.join(" | "));
+    assert.equal(await page.locator("#danList .cert").count(), 1, "the DAN document is only in the DAN list"); assert.ok(!/DAN insurance card/.test(await page.locator("#certList").textContent()));
+    await page.evaluate(() => localStorage.removeItem("diver")); await page.reload();                     // the phone forgets: everything comes back from the server
+    await page.waitForFunction(() => document.getElementById("sumName").textContent === "Test Diver", null, { timeout: 10000 });
+    assert.equal(await page.locator("#sumCert").innerText(), "PADI Rescue Diver"); assert.match(await page.locator("#sumCertSub").innerText(), /#R-99 . May 17, 2024/);
+    assert.match(await page.locator("#sumDanRow").getAttribute("class"), /dan-soon/); assert.match(await page.locator("#sumDan").innerText(), /#4412 3399 . DAN Master/);
+    assert.match(await page.locator("#sumDanValid").innerText(), /Valid until .* . 4\d days left/);
+    await page.screenshot({ path: `${SHOTS}/summary-diver-${profile.replace(" ", "")}.png`, fullPage: true });
+
     // 6. change the password (Pixel run only: it has to wait for authenticator time steps). Needs the CURRENT password + code;
     //    the authenticator stays the same, then the new password works at the login page and the old one does not.
     if (profile === "Pixel 7") {
