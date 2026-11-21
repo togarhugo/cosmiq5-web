@@ -453,6 +453,7 @@ const Dives = (() => {
       card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) over(false); });
       card.addEventListener("drop", async (e) => { e.preventDefault(); over(false); const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (fs.length) await importFiles(fs, selDevice); });
     }
+    const zone = $("dropZone"); if (zone) zone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("impFile").click(); } });
     const pick = $("impFile");
     if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, selDevice); });
     list.addEventListener("click", async (e) => {

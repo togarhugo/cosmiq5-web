@@ -680,6 +680,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   await page.goto(base);
   try {
     await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.waitForSelector("#dropZone", { state: "visible" }); assert.ok(await page.locator("#dropZone").isVisible(), "a visible drop box"); assert.match(await page.locator("#dropZone").innerText(), /Drop your Shearwater Cloud file here/);
     assert.equal(await page.locator("#impFile").getAttribute("accept"), null, "no file-type filter: macOS greys out files the filter does not know (.db)");
     await page.locator("#importCard").screenshot({ path: process.env.SHOT_IMPORT || "/tmp/shot-import.png" });
     assert.match(await page.locator("#importCard").innerText(), /Export the database|export the database/i); assert.match(await page.locator("#importCard").innerText(), /Shearwater Cloud/);
@@ -700,10 +701,11 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.waitForFunction(() => /1 new dive imported, 1 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
     assert.equal(uploaded.length, 4); assert.equal(await page.locator("details.dive").count(), 4);
     // drag and drop onto the card works like the chooser (the file need not be found in a folder dialog)
-    await page.locator("#importCard").evaluate((card) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(0)], "empty.db")); card.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); window.__dropClass = card.className; });
-    assert.match(await page.evaluate(() => window.__dropClass), /dropping/, "card highlights while a file is dragged over it");
+    await page.locator("#importCard").evaluate((card) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(0)], "empty.db")); card.querySelector("#dropZone").dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); window.__dropClass = card.className; });
+    assert.match(await page.evaluate(() => window.__dropClass), /dropping/, "the box highlights while a file is dragged over it");
+    assert.equal(await page.locator("#dropZone").evaluate((e) => getComputedStyle(e).borderTopStyle), "solid", "visibly changes while hovering");
     const dropBytes = makeDb({ dives: [cloudDive(7)] });
-    await page.locator("#importCard").evaluate(async (card, arr) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(arr)], "dropped.db")); card.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); }, Array.from(dropBytes));
+    await page.locator("#dropZone").evaluate(async (zone, arr) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(arr)], "dropped.db")); zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); }, Array.from(dropBytes));
     await page.waitForFunction(() => /1 new dive imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
     assert.equal(uploaded.length, 5); assert.ok(!(await page.locator("#importCard").getAttribute("class")).includes("dropping"), "highlight cleared after the drop");
     // not a Shearwater file: a plain message
