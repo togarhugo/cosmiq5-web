@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.11.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.11.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -151,7 +151,9 @@ Every dive location you type (for example *Tulamben*) is a **place**. A place ge
 
 **The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*.
 
-**Putting a place on the map**
+**Entering a location opens the map.** When you save a location in the dive log that is **not on the map yet** (after a sync, for a date, for a month, or for one dive), the map search opens for it straight away, with the name already searched. Tap the right result (or tap the map), then **Save pin**. Several new places are done one after another; **Skip this one** / **Skip all** leave them for later. A location that is already on the map never asks again. If you would rather do it later, untick **Open the map when I enter a new location** at the bottom of the map screen: the orange buttons and the bar in the dive log remain.
+
+**Putting a place on the map yourself**
 1. Orange buttons under the map (and a bar in the **Dive log**) show places that are *not on the map yet*. Tap one.
 2. The place name is searched automatically. Tap the right result: the pin drops there and the map zooms in. If nothing is found, or it is the wrong spot, **tap the map** to drop the pin, and **drag** it to fine-tune. Search again with another spelling or a nearby town if you like.
 3. **Save pin.** The next place waits in line; **Skip this one** leaves it for later.
