@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.12.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.12.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
