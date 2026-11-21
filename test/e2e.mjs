@@ -952,7 +952,7 @@ if (process.env.REAL_DB) {
     ({ ctx, page, errs } = await mkPage({ colorScheme: "light" })); d = await look(page); assert.equal(d.theme, "light"); assert.equal(d.checked, "false"); assert.equal(d.page, "rgb(248, 249, 250)"); assert.equal(d.card, "rgb(255, 255, 255)"); assert.equal(d.meta, "#007bff"); assert.ok(d.nameRatio > 7);
     // 2. the switch: at the top of the page, a real switch, light on the left and dark on the right
     const sw = page.locator("header .theme-switch"); assert.equal(await sw.getAttribute("role"), "switch"); assert.equal(await sw.getAttribute("aria-label"), "Dark mode");
-    const box = await sw.boundingBox(), hb = await page.locator("header h1").boundingBox(); assert.ok(box.y < 60 && box.x < hb.x, "at the top left, level with the title: " + JSON.stringify(box));
+    const box = await sw.boundingBox(), hb = await page.locator("header h1").boundingBox(); assert.ok(box.x + box.width / 2 < 150 && Math.abs(box.y + box.height / 2 - (hb.y + hb.height / 2)) < 30, "at the top left, level with the title: " + JSON.stringify([box, hb])); assert.equal(Math.round(box.height), 32, "a compact switch, not a tall button");
     assert.ok(box.width >= 56 && box.height >= 28, "big enough to tap"); const lightKnob = d.knobX; assert.ok(lightKnob < 8, "light: the knob is on the left (" + lightKnob + ")");
     assert.ok((await page.locator(".theme-switch .ts-sun").boundingBox()).x < (await page.locator(".theme-switch .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
     await sw.click(); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);

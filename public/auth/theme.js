@@ -17,7 +17,7 @@
   function set(t) { try { localStorage.setItem(KEY, t); } catch (e) {} apply(t); try { document.dispatchEvent(new CustomEvent("themechange", { detail: t })); } catch (e) {} }
   window.Theme = { get: function () { return root.getAttribute("data-theme"); }, set: set, toggle: function () { set(window.Theme.get() === "dark" ? "light" : "dark"); } };
 
-  var CSS = ".theme-switch{position:relative;display:inline-block;width:62px;height:32px;padding:0;border:0;border-radius:16px;cursor:pointer;background:#f1c40f;box-shadow:inset 0 1px 3px rgba(0,0,0,.25);transition:background .25s;-webkit-tap-highlight-color:transparent;vertical-align:middle}" +
+  var CSS = ".theme-switch{position:relative;display:inline-block;width:62px;height:32px;min-height:32px;min-width:0;padding:0;border:0;border-radius:16px;cursor:pointer;background:#f1c40f;box-shadow:inset 0 1px 3px rgba(0,0,0,.25);transition:background .25s;-webkit-tap-highlight-color:transparent;vertical-align:middle}" +
     ".theme-switch[aria-checked=true]{background:#3b4a63}" +
     ".theme-switch svg{position:absolute;top:7px;width:18px;height:18px;pointer-events:none}" +
     ".theme-switch .ts-sun{left:7px;color:#7a5b00}.theme-switch .ts-moon{right:7px;color:#cbd5e1}" +
