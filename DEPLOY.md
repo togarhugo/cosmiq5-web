@@ -42,11 +42,11 @@ npx wrangler d1 execute cosmiq --remote --file=schema.sql
 2. Zero Trust > Settings > Authentication > Login methods > add **Google** with that client ID/secret.
 3. Edit `wrangler.toml`: set `TEAM_DOMAIN` (`<your-team>.cloudflareaccess.com`). Deploy once, then store your allowed Google email as a secret (not committed):
    ```bash
-   npx wrangler deploy
+   npm run deploy
    npx wrangler secret put ALLOWED_EMAILS   # type your Google email when prompted
    ```
 4. Zero Trust > Access > Applications > *Add self-hosted* for `cosmiq.thmlab.org`; policy **Allow** > Emails > your Google email.
-   Copy the application's **Audience (AUD) tag** into `POLICY_AUD` in `wrangler.toml`, then `npx wrangler deploy` again.
+   Copy the application's **Audience (AUD) tag** into `POLICY_AUD` in `wrangler.toml`, then `npm run deploy` again.
 5. Also protect the `workers.dev` URL: Workers > cosmiq-manager > Settings > Domains & Routes > disable `workers.dev` (the Worker also rejects requests without a valid Access token).
 
 Until `TEAM_DOMAIN` / `POLICY_AUD` are set, the API refuses every request (fails closed).
