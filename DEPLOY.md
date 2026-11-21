@@ -21,10 +21,12 @@ phone/laptop browser --BLE--> dive computer
 The first page is a login page with two choices:
 
 1. **Continue with Google** - Google OAuth (authorization code + PKCE) inside the Worker, like the other thmlab apps.
-2. **Email + password + authenticator code** - the password is stretched in the browser (PBKDF2-SHA256, 600,000
-   iterations) so the server never sees it and verifying a login costs almost no CPU on the free plan. The second factor
-   is a standard 6-digit TOTP (Google Authenticator and compatible apps). The authenticator secret is stored AES-GCM
-   encrypted with `DATA_KEY`; the password verifier is an HMAC keyed with a pepper derived from `DATA_KEY`.
+2. **Email + password**, followed by a **second page with six boxes for the authenticator code** (Google Authenticator and
+   compatible TOTP apps). The password is stretched in the browser (PBKDF2-SHA256, 600,000 iterations) so the server never
+   sees it and verifying a login costs almost no CPU on the free plan. After the password step the server sets a 5-minute
+   signed "password ok" cookie that is only good for the code page; the password alone never signs anyone in. The
+   authenticator secret is stored AES-GCM encrypted with `DATA_KEY`; the password verifier is an HMAC keyed with a pepper
+   derived from `DATA_KEY`.
 
 Both give the same 30-day HttpOnly session cookie, and only emails in `ALLOWED_EMAILS` can sign in either way.
 Pages redirect to the login page; the API returns 401. If any required setting is missing the Worker answers 503
@@ -69,6 +71,15 @@ has a newer one than the loaded page; the offline cache is keyed by version so p
 ## First connect
 Open the site, sign in with Google, tap **Connect**. The clock is set to your phone's time, then new dives
 download and upload. Tap **Download raw backup** after the first sync.
+
+## Dive sync notes
+- Each dive is saved on the phone the moment it arrives (and uploaded at the end), so a dropped connection or **Cancel**
+  loses at most the dive in flight; running the sync again continues with what is missing.
+- Progress shows on every tab. After a sync that saved dives the app switches to the **Dive log** tab.
+- **Copy / Save diagnostics** (Dive log tab) exports the app version, device traffic and stored dive headers: attach it when
+  reporting a problem. Each dive's **Technical details** shows the raw 36-byte header with undecoded bytes highlighted.
+- The dive computer's log has no location (GPS) field that we know of; if the highlighted bytes ever turn out to hold one,
+  it can be decoded from the diagnostics.
 
 ## Develop / test
 ```bash

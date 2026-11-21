@@ -1,9 +1,11 @@
 // Email + password + authenticator (TOTP) sign-in.
 //  - The browser stretches the password (PBKDF2, see public/auth/kdf.js); the server never sees it
 //    and only stores HMAC(pepper, derivedKey), so verifying a login costs almost no CPU (free plan).
-//  - Login is ONE request (email + key + 6-digit code); every check runs, then a single generic error.
+//  - Login is two steps: (1) email + password -> a short-lived signed "password ok" cookie, then
+//    (2) the 6-digit authenticator code on its own page -> the session. Failures in both steps count
+//    towards the same lockout.
 //  - Accounts can only be created from an already signed-in session (no open sign-up).
-import { allowedEmails, issueSession } from "./auth.js";
+import { allowedEmails, issueMfaChallenge, issueSession, pendingMfaEmail } from "./auth.js";
 import { base32Decode, base32Encode, otpauthUri, verifyTotp } from "./totp.js";
 
 const enc = new TextEncoder();
@@ -11,7 +13,8 @@ const now = () => Math.floor(Date.now() / 1000);
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, "0")).join("");
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 export const kdfIter = (env) => Number(env.KDF_ITER) || 600000;
-const GENERIC = "Invalid email, password or code.";
+const GENERIC = "Invalid email or password.";
+const LOCKED = "Too many failed attempts. Try again in 15 minutes.";
 const MAX_FAILS_EMAIL = 5, MAX_FAILS_IP = 20, LOCK_SECONDS = 900;
 
 // ---- keyed helpers --------------------------------------------------------------------------
@@ -63,6 +66,7 @@ const validSalt = (s) => typeof s === "string" && /^[0-9a-f]{32}$/.test(s);
 // ---- public endpoints: /auth/prelogin, /auth/password ----------------------------------------
 export async function handlePasswordAuth(request, url, env) {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+  if (url.pathname === "/auth/mfa") return handleMfa(request, env);
   const b = await body(request);
   if (!b || !validEmail(b.email)) return json({ error: "bad request" }, 400);
   const email = b.email.trim().toLowerCase();
@@ -72,19 +76,31 @@ export async function handlePasswordAuth(request, url, env) {
     return json({ salt: u ? u.salt : await fakeSalt(env, email), iter: u ? u.kdf_iter : kdfIter(env) });
   }
 
-  // /auth/password
-  if (!validKey(b.key) || !/^\d{6}$/.test(String(b.code))) return json({ error: GENERIC }, 401);
+  // /auth/password (step 1)
+  if (!validKey(b.key)) return json({ error: GENERIC }, 401);
   const keys = await attemptKeys(request, email);
-  if (await isLocked(env, keys)) return json({ error: "Too many failed attempts. Try again in 15 minutes." }, 429);
-
+  if (await isLocked(env, keys)) return json({ error: LOCKED }, 429);
   const allowed = allowedEmails(env).includes(email);
-  const u = allowed ? await env.DB.prepare("SELECT pw_hash, totp_secret_enc, totp_last_step FROM users WHERE email = ?").bind(email).first() : null;
-  const expected = u ? u.pw_hash : await mac(env, "dummy|" + email);
-  const pwOk = safeEqual(await hashPw(env, email, b.key), expected);
+  const u = allowed ? await env.DB.prepare("SELECT pw_hash FROM users WHERE email = ?").bind(email).first() : null;
+  const pwOk = safeEqual(await hashPw(env, email, b.key), u ? u.pw_hash : await mac(env, "dummy|" + email));
+  if (!(u && pwOk)) { await recordFailure(env, keys); return json({ error: GENERIC }, 401); }
+  const h = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
+  h.append("set-cookie", await issueMfaChallenge(env, email));
+  return new Response(JSON.stringify({ next: "/auth/mfa" }), { headers: h });
+}
+
+// ---- public endpoint: POST /auth/mfa (step 2) ---------------------------------------------------
+export async function handleMfa(request, env) {
+  const b = await body(request);
+  const email = await pendingMfaEmail(request, env);
+  if (!email) return json({ error: "Your sign-in expired. Please start again.", restart: true }, 401);
+  if (!b || !/^\d{6}$/.test(String(b.code))) return json({ error: "Enter all 6 digits." }, 400);
+  const keys = await attemptKeys(request, email);
+  if (await isLocked(env, keys)) return json({ error: LOCKED }, 429);
+  const u = await env.DB.prepare("SELECT totp_secret_enc, totp_last_step FROM users WHERE email = ?").bind(email).first();
   let step = null;
   if (u) { try { step = await verifyTotp(await decryptSecret(env, u.totp_secret_enc), b.code, u.totp_last_step); } catch { step = null; } }
-  if (!(u && pwOk && step !== null)) { await recordFailure(env, keys); return json({ error: GENERIC }, 401); }
-
+  if (step === null) { await recordFailure(env, keys); return json({ error: "That code is not valid. Check your authenticator app and try again." }, 401); }
   await env.DB.prepare("UPDATE users SET totp_last_step = ? WHERE email = ?").bind(step, email).run();
   await clearFailures(env, keys);
   const cookies = await issueSession(env, { email, name: "", amr: "pwd+totp" });

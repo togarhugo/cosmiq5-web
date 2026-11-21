@@ -38,7 +38,7 @@ export default {
       const origin = request.headers.get("origin");
       if (origin && origin !== url.origin) return json({ error: "cross-origin request refused" }, 403);
     }
-    if (request.method === "POST" && (url.pathname === "/auth/prelogin" || url.pathname === "/auth/password"))
+    if (request.method === "POST" && (url.pathname === "/auth/prelogin" || url.pathname === "/auth/password" || url.pathname === "/auth/mfa"))
       return handlePasswordAuth(request, url, env);
     const auth = await handleAuth(request, url, env, serveAsset);
     if (auth) return auth;

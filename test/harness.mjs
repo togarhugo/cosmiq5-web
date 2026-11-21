@@ -57,8 +57,17 @@ export async function enroll(env, cookie, password = "correct horse battery", em
   const res = await post(env, "/api/account/password", { salt, iter, key, code }, authed(cookie));
   return { res, secret: start.secret, key, salt, uri: start.uri };
 }
-export async function login(env, email, password, code, extraHeaders = {}) {
+/** Step 1: email + password. Returns the raw response (200 sets the dc_mfa challenge cookie). */
+export async function loginStep1(env, email, password, extraHeaders = {}) {
   const pre = await (await post(env, "/auth/prelogin", { email })).json();
   const key = await kdf.deriveKey(password, pre.salt, pre.iter, email);
-  return post(env, "/auth/password", { email, key, code }, extraHeaders);
+  return post(env, "/auth/password", { email, key }, extraHeaders);
+}
+export const mfaCookie = (step1) => "dc_mfa=" + cookieOf(step1, "dc_mfa");
+/** Step 2: the 6-digit code, sent with the challenge cookie from step 1. */
+export const submitCode = (env, step1, code, extraHeaders = {}) => post(env, "/auth/mfa", { code }, { cookie: mfaCookie(step1), ...extraHeaders });
+/** Both steps; resolves to the step-1 response if it failed, else the step-2 response (200 = signed in). */
+export async function login(env, email, password, code, extraHeaders = {}) {
+  const s1 = await loginStep1(env, email, password, extraHeaders);
+  return s1.ok ? submitCode(env, s1, code, extraHeaders) : s1;
 }

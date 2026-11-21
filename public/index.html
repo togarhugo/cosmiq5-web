@@ -325,6 +325,12 @@
             .opt input { width: 22px; height: 22px; min-height: 0; }
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: #6c757d; min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
+            #bannerBar { height: 100%; width: 0; background: var(--green); transition: width .2s; }
+            #syncBanner { border: 1px solid #b2dfdb; }
+            details.tech { margin-top: 10px; } details.tech summary { cursor: pointer; font-size: 13px; color: #495057; min-height: 36px; display: flex; align-items: center; }
+            table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+            table.hdr td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+            table.hdr tr.unk td { background: #fff8e1; }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
             #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
         </style>
@@ -348,6 +354,12 @@
 
         <div id="btBanner" class="banner"></div>
         <div id="clockStatus" class="muted" style="text-align:center;margin-bottom:10px"></div>
+        <div id="syncBanner" class="card" style="display:none">
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Syncing dive log</div>
+            <div id="bannerText" class="muted">Starting&hellip;</div>
+            <div class="bar"><div id="bannerBar"></div></div>
+            <button id="cancelSync" class="btn-set" type="button" style="background:#6c757d;margin-top:6px">Cancel</button>
+        </div>
 
         <div class="nav">
             <button id="navDevice" class="active" onclick="showView('device')">Device settings</button>
@@ -359,11 +371,11 @@
         <div id="notConnected" class="card muted">Connect to your dive computer to view or change its settings.</div>
         <div id="app" style="display: none; margin-top: 20px">
             <div class="tabs">
-                <button class="tab active" onclick=\"tab('gen', this)\">General</button>
-                <button class="tab" onclick=\"tab('env', this)\">Environment</button>
-                <button class="tab" onclick=\"tab('scuba', this)\">Scuba</button>
-                <button class="tab" onclick=\"tab('free', this)\">Freedive</button>
-                <button class="tab" onclick=\"tab('hunter', this)\">Diagnostics</button>
+                <button class="tab active" onclick="tab('gen', this)">General</button>
+                <button class="tab" onclick="tab('env', this)">Environment</button>
+                <button class="tab" onclick="tab('scuba', this)">Scuba</button>
+                <button class="tab" onclick="tab('free', this)">Freedive</button>
+                <button class="tab" onclick="tab('hunter', this)">Diagnostics</button>
             </div>
 
             <div id="gen" class="section active">
@@ -694,6 +706,12 @@
                 <label class="opt"><input type="checkbox" id="optClock" /> Set dive computer clock to this phone's time on every connect</label>
                 <label class="opt"><input type="checkbox" id="optDives" /> Download new dives on every connect</label>
                 <div class="muted"><span id="cloudState"></span></div>
+                <div id="lastSync" class="muted" style="margin-top:6px"></div>
+                <div class="row" style="margin:10px 0 0">
+                    <button id="diagCopy" class="btn-set" type="button" style="background:#6c757d">Copy diagnostics</button>
+                    <button id="diagSave" class="btn-set" type="button" style="background:#6c757d">Save diagnostics</button>
+                </div>
+                <div id="diagMsg" class="muted"></div>
             </div>
             <div id="diveList"></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
@@ -791,9 +809,11 @@
                     .querySelectorAll(".tab")
                     .forEach((e) => e.classList.remove("active"));
                 document.getElementById(id).classList.add("active");
-                if (btn) btn.classList.add("active");
+                if (btn) { btn.classList.add("active"); try { btn.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (e) {} }
             }
+            let currentView = "device";
             function showView(v) {
+                currentView = v;
                 for (const [name, nav] of [["device", "navDevice"], ["log", "navLog"], ["account", "navAccount"]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
                     document.getElementById(nav).classList.toggle("active", v === name);
@@ -813,8 +833,11 @@
                 document.getElementById(id).innerText = val;
             }
 
+            window.__diag = [];
+            function diag(line) { const d = window.__diag; d.push(new Date().toISOString().slice(11, 23) + " " + line); if (d.length > 6000) d.shift(); }
             function log(m, type = "") {
                 console.log(m);
+                diag(String(m).replace(/<[^>]*>/g, ""));
                 const el = document.getElementById("log");
                 let span = `<span class="${type}">${m}</span>`;
                 el.innerHTML += "\n" + span;
@@ -870,7 +893,10 @@
                     if (opt("optClock", true)) {
                         try { await setSystemTime(); } catch (e) { log("Clock sync failed: " + e, "log-err"); }
                     }
-                    if (opt("optDives", true)) await Dives.syncFromDevice(diveIO);
+                    if (opt("optDives", true)) {
+                        const r = await Dives.syncFromDevice(diveIO);
+                        if (r && r.saved > 0 && currentView === "device") showView("log");   // show the result instead of leaving you on settings
+                    }
                 } catch (e) {
                     log("Error: " + e, "log-err");
                 }
@@ -892,7 +918,7 @@
             }
 
             // RX: BLE notifications are <=20 bytes; reassemble into newline-terminated lines.
-            let lineBuf = "", lineQ = [], lineWaiter = null, inTransfer = false;
+            let lineBuf = "", lineQ = [], lineWaiter = null, inTransfer = false, cancelFlag = false;
             function handleRX(event) {
                 lineBuf += new TextDecoder("utf-8").decode(event.target.value);
                 if (lineBuf.length > 400 && lineBuf.indexOf("\n") < 0) lineBuf = ""; // junk guard
@@ -901,6 +927,7 @@
                     const line = lineBuf.slice(0, i + 1);
                     lineBuf = lineBuf.slice(i + 1);
                     if (inTransfer) {
+                        diag("RX " + line.trim());
                         if (lineWaiter) lineWaiter(line); else lineQ.push(line);
                     } else handleLine(line);
                 }
@@ -909,18 +936,22 @@
                 if (lineQ.length) return Promise.resolve(lineQ.shift());
                 return new Promise((res, rej) => {
                     const t = setTimeout(() => { lineWaiter = null; rej(new Error("Timed out waiting for the dive computer")); }, ms);
-                    lineWaiter = (l) => { clearTimeout(t); lineWaiter = null; l === null ? rej(new Error("Disconnected")) : res(l); };
+                    lineWaiter = (l) => { clearTimeout(t); lineWaiter = null; l === null ? rej(new Error(cancelFlag ? "Cancelled by you" : "Disconnected")) : res(l); };
                 });
             }
             // Transport used by CosmiqDive.readDives (read-only commands)
             const diveIO = {
                 async send(cmd, data) {
-                    if (!inTransfer) { inTransfer = true; lineQ = []; lineBuf = ""; }
-                    await txChar.writeValue(new TextEncoder().encode(CosmiqDive.buildCommand(cmd, data)));
+                    if (!inTransfer) { inTransfer = true; lineQ = []; lineBuf = ""; cancelFlag = false; }
+                    if (cancelFlag) throw new Error("Cancelled by you");
+                    const line = CosmiqDive.buildCommand(cmd, data);
+                    diag("TX " + line.trim());
+                    await txChar.writeValue(new TextEncoder().encode(line));
                 },
                 async recv(cmd, n) {
                     const out = []; let strays = 0;
                     while (out.length < n) {
+                        if (cancelFlag) throw new Error("Cancelled by you");
                         const line = await nextLine(4000);
                         let fr;
                         try { fr = CosmiqDive.parseFrame(line); } catch (e) { fr = { bad: e.message }; }
@@ -1487,6 +1518,10 @@
                     })
                     .catch(() => {});
                 if (!navigator.bluetooth) showBtHelp();
+                document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });
+                const dmsg = (t) => { document.getElementById("diagMsg").textContent = t; };
+                document.getElementById("diagCopy").addEventListener("click", async () => dmsg(await Dives.copyDiagnostics()));
+                document.getElementById("diagSave").addEventListener("click", () => { Dives.downloadDiagnostics(); dmsg("Saved."); });
                 for (const [id, def] of [["optClock", true], ["optDives", true]]) {
                     const el = document.getElementById(id);
                     el.checked = opt(id, def);

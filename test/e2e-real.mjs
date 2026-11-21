@@ -19,15 +19,18 @@ for (const [profile, EMAIL] of [["Pixel 7", "me@example.com"], ["iPhone 13", "ot
   const page = await ctx.newPage(); const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   try {
-    // 1. Signed out: the FIRST page is the login page with both choices
+    // 1. Signed out: the FIRST page is the login page with exactly two choices (Google, email + password)
     await page.goto(BASE + "/");
     assert.equal(new URL(page.url()).pathname, "/auth/login", "signed-out visitors land on the login page");
     assert.ok(await page.getByRole("link", { name: /Continue with Google/ }).isVisible());
-    for (const id of ["#email", "#password", "#code"]) assert.ok(await page.locator(id).isVisible(), id);
+    for (const id of ["#email", "#password"]) assert.ok(await page.locator(id).isVisible(), id);
+    assert.equal(await page.locator("input").count(), 2, "only email + password inputs on the first screen");
+    assert.equal(await page.locator("#code").count(), 0, "no code field on the first screen");
     assert.match(await page.locator(".ver").innerText(), /^v\d+\.\d+\.\d+$/);
     assert.equal(await page.locator('a.google').getAttribute("href"), "/auth/google");
     await page.screenshot({ path: `${SHOTS}/login-${profile.replace(" ", "")}.png`, fullPage: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll on login");
+    assert.equal((await page.goto(BASE + "/auth/mfa")).url().endsWith("/auth/login"), true, "the code page is closed without the password step");
 
     // 2. A Google-signed-in session (minted here, since Google itself can't be driven in a test)
     const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -60,19 +63,44 @@ for (const [profile, EMAIL] of [["Pixel 7", "me@example.com"], ["iPhone 13", "ot
     console.log(`  ${profile}: PBKDF2(600k)+enroll took ${Date.now() - t0} ms in this browser`);
     assert.match(await page.locator("#accPwState").innerText(), /on/);
 
-    // 4. Sign out, then sign in with email + password + authenticator code
+    // 4. Sign out, then: email + password  ->  separate page with six digit boxes  ->  app
     await page.click("#signOut");
     await page.waitForSelector("text=You have been signed out");
     await page.goto(BASE + "/auth/login");
-    await page.fill("#email", EMAIL); await page.fill("#password", "wrong password here");
-    await page.fill("#code", await totpNow(secret, 1)); await page.click("#go");
-    await page.waitForFunction(() => /Invalid email, password or code/.test(document.getElementById("err").textContent));
-    assert.equal(new URL(page.url()).pathname, "/auth/login", "failed login stays on the login page");
-    await page.fill("#password", PASSWORD); await page.fill("#code", await totpNow(secret, 1));
+    await page.fill("#email", EMAIL); await page.fill("#password", "wrong password here"); await page.click("#go");
+    await page.waitForFunction(() => /Invalid email or password/.test(document.getElementById("err").textContent));
+    assert.equal(new URL(page.url()).pathname, "/auth/login", "a wrong password stays on the login page");
+    await page.fill("#password", PASSWORD);
     const t1 = Date.now(); await page.click("#go");
+    await page.waitForURL(BASE + "/auth/mfa", { timeout: 30000 });
+    console.log(`  ${profile}: password step (PBKDF2 + request) took ${Date.now() - t1} ms`);
+    const boxes = page.locator("#boxes input"); assert.equal(await boxes.count(), 6, "six individual digit boxes");
+    assert.ok(await boxes.nth(0).evaluate((el) => document.activeElement === el), "first box focused");
+    await page.screenshot({ path: `${SHOTS}/mfa-${profile.replace(" ", "")}.png`, fullPage: true });
+    const vals = async () => (await boxes.evaluateAll((els) => els.map((e) => e.value))).join(",");
+    // typing advances box by box; Backspace on an empty box steps back and clears
+    await page.keyboard.type("123"); assert.equal(await vals(), "1,2,3,,,");
+    await page.keyboard.press("Backspace"); assert.equal(await vals(), "1,2,,,,");
+    await page.keyboard.press("Backspace"); await page.keyboard.press("Backspace"); assert.equal(await vals(), ",,,,,");
+    // a wrong code auto-submits when the 6th digit is typed, shows an error and clears the boxes
+    const wrong = (await totpNow(secret, 1)) === "000000" ? "111111" : "000000";
+    await page.keyboard.type(wrong);
+    await page.waitForFunction(() => /not valid/.test(document.getElementById("err").textContent));
+    assert.equal(await vals(), ",,,,,", "boxes cleared after a wrong code");
+    assert.equal(new URL(page.url()).pathname, "/auth/mfa");
+    // pasting a whole code fills every box and submits
+    await boxes.nth(0).focus();
+    const good = await totpNow(secret, 1);
+    await page.evaluate((c) => { const dt = new DataTransfer(); dt.setData("text", c); document.querySelector("#boxes input").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); }, good.slice(0, 3) + " " + good.slice(3));
     await page.waitForURL(BASE + "/", { timeout: 30000 });
-    console.log(`  ${profile}: login (PBKDF2 + request) took ${Date.now() - t1} ms`);
     await page.waitForFunction((e) => document.getElementById("who").textContent.includes(e), EMAIL);
+    // every device-settings tab must respond to a tap (regression: broken onclick attributes)
+    await page.click("#navDevice");
+    await page.evaluate(() => { document.getElementById("app").style.display = "block"; document.getElementById("notConnected").style.display = "none"; });
+    for (const [label, id] of [["Environment", "env"], ["Scuba", "scuba"], ["Freedive", "free"], ["Diagnostics", "hunter"], ["General", "gen"]]) {
+      await page.locator(".tab", { hasText: label }).tap();
+      assert.ok(await page.evaluate((i) => document.getElementById(i).classList.contains("active") && getComputedStyle(document.getElementById(i)).display !== "none", id), `${label} tab opens`);
+    }
     await page.click("#navAccount");
     await page.waitForFunction(() => /via email \+ authenticator/.test(document.getElementById("accVia").textContent));
     await page.screenshot({ path: `${SHOTS}/account-${profile.replace(" ", "")}.png`, fullPage: true });

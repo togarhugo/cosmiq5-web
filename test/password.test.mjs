@@ -2,7 +2,8 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { base32Decode, hotp, otpauthUri, stepOf, verifyTotp } from "../src/totp.js";
-import { authed, call, cookieOf, enroll, googleSession, kdf, login, makeEnv, post, totpNow } from "./harness.mjs";
+import { authed, call, cookieOf, enroll, googleSession, kdf, login, loginStep1, makeEnv, mfaCookie, post, submitCode, totpNow } from "./harness.mjs";
+import { sign } from "../src/auth.js";
 
 const PW = "correct horse battery";
 const withTime = async (offsetMs, fn) => { const real = Date.now; Date.now = () => real() + offsetMs; try { return await fn(); } finally { Date.now = real; } };
@@ -43,23 +44,86 @@ test("enroll -> sign in with email + password + code -> session works everywhere
   assert.equal((await at(2, async () => login(env, "ME@example.com", PW, await totpNow(secret)))).status, 200, "email is case-insensitive");
 });
 
-test("all failure modes give the same generic 401 and never set a cookie", async () => {
-  const { env, secret } = await enrolled();
-  const code = await totpNow(secret, 1), badCode = code === "000000" ? "000001" : "000000";
-  const cases = [["wrong password", () => login(env, "me@example.com", "wrong wrong wrong", code)],
-    ["wrong code", () => login(env, "me@example.com", PW, badCode)],
-    ["unknown email", () => login(env, "ghost@example.com", PW, code)],
-    ["allowed but never enrolled", () => login(env, "other@example.com", PW, code)],
-    ["bad key format", () => post(env, "/auth/password", { email: "me@example.com", key: "xyz", code })],
-    ["bad code format", () => post(env, "/auth/password", { email: "me@example.com", key: "a".repeat(64), code: "12" })]];
+test("password step: every failure gives the same generic 401 and no challenge/session cookie", async () => {
+  const { env } = await enrolled();
+  const cases = [["wrong password", () => loginStep1(env, "me@example.com", "wrong wrong wrong")],
+    ["unknown email", () => loginStep1(env, "ghost@example.com", PW)],
+    ["allowed but never enrolled", () => loginStep1(env, "other@example.com", PW)],
+    ["bad key format", () => post(env, "/auth/password", { email: "me@example.com", key: "xyz" })]];
   const bodies = new Set();
   for (const [name, fn] of cases) {
-    const r = await fn(); assert.equal(r.status, 401, name); assert.ok(!cookieOf(r, "dc_session"), name + ": cookie");
+    const r = await fn(); assert.equal(r.status, 401, name);
+    assert.ok(!cookieOf(r, "dc_session") && !cookieOf(r, "dc_mfa"), name + ": no cookies");
     bodies.add((await r.json()).error);
   }
   assert.equal(bodies.size, 1, "identical error text for every failure: " + [...bodies].join(" | "));
   assert.equal((await post(env, "/auth/password", { nope: 1 })).status, 400);
   assert.equal((await post(env, "/auth/password", "x")).status, 400);
+});
+
+test("two-step flow: the password alone never signs you in", async () => {
+  const { env, secret } = await enrolled();
+  const s1 = await loginStep1(env, "me@example.com", PW);
+  assert.equal(s1.status, 200); assert.deepEqual(await s1.json(), { next: "/auth/mfa" });
+  assert.ok(!cookieOf(s1, "dc_session"), "no session after the password step");
+  const sc = s1.headers.getSetCookie().find((c) => c.startsWith("dc_mfa="));
+  assert.match(sc, /HttpOnly/); assert.match(sc, /Secure/); assert.match(sc, /Path=\/auth/); assert.match(sc, /Max-Age=300/);
+  assert.equal((await call(env, "/api/me", { headers: { cookie: mfaCookie(s1) } })).status, 401, "challenge cookie is not a session");
+  assert.equal((await call(env, "/api/dives", { headers: { cookie: mfaCookie(s1) } })).status, 401);
+  // the code page: only reachable with the challenge cookie
+  const noCookie = await call(env, "/auth/mfa", { headers: { accept: "text/html" } });
+  assert.equal(noCookie.status, 302); assert.equal(noCookie.headers.get("location"), "/auth/login");
+  const page = await call(env, "/auth/mfa", { headers: { cookie: mfaCookie(s1), accept: "text/html" } });
+  assert.equal(page.status, 200); const t = await page.text();
+  assert.equal((t.match(/<input /g) || []).length, 6, "six separate digit boxes"); assert.equal((t.match(/one-time-code/g) || []).length, 1);
+  assert.match(page.headers.get("content-security-policy"), /script-src 'self'/); assert.doesNotMatch(t, /<script>[^<]/);
+  // finish
+  const done = await at(1, async () => submitCode(env, s1, await totpNow(secret)));
+  assert.equal(done.status, 200); assert.ok(cookieOf(done, "dc_session"));
+  assert.match(done.headers.getSetCookie().find((c) => c.startsWith("dc_mfa=")), /Max-Age=0/, "challenge cookie cleared");
+  const cookie = "dc_session=" + cookieOf(done, "dc_session");
+  assert.equal((await call(env, "/auth/mfa", { headers: { cookie } })).status, 302, "signed in: the code page sends you to the app");
+  assert.equal((await call(env, "/api/me", { headers: { cookie } })).status, 200);
+});
+
+test("code step: refuses a missing, forged, expired or wrong-type challenge, wrong and malformed codes", async () => {
+  const { env, secret } = await enrolled();
+  const s1 = await loginStep1(env, "me@example.com", PW); const good = await at(1, () => totpNow(secret));
+  const code = (cookie, c = good) => post(env, "/auth/mfa", { code: c }, cookie ? { cookie } : {});
+  let r = await code(null); assert.equal(r.status, 401); assert.equal((await r.json()).restart, true);
+  assert.equal((await code(mfaCookie(s1).slice(0, -3) + "AAA")).status, 401, "tampered");
+  assert.equal((await code("dc_mfa=" + (await sign({ typ: "mfa", email: "me@example.com", exp: 9e9 }, "y".repeat(48))))).status, 401, "signed with another key");
+  assert.equal((await code("dc_mfa=" + (await sign({ typ: "mfa", email: "me@example.com", exp: 1 }, env.SESSION_SECRET)))).status, 401, "expired");
+  assert.equal((await code("dc_mfa=" + (await sign({ typ: "mfa", email: "x@evil.com", exp: 9e9 }, env.SESSION_SECRET)))).status, 401, "email not on the allow-list");
+  const { cookie: sessionCookie } = await googleSession(env);
+  assert.equal((await code("dc_mfa=" + sessionCookie.slice("dc_session=".length))).status, 401, "a session token is not a challenge");
+  r = await submitCode(env, s1, "000000"); assert.equal(r.status, 401); assert.match((await r.json()).error, /not valid/); assert.ok(!cookieOf(r, "dc_session"));
+  assert.equal((await submitCode(env, s1, "12345")).status, 400, "too short"); assert.equal((await submitCode(env, s1, "abcdef")).status, 400, "not digits");
+  assert.equal((await at(1, async () => submitCode(env, s1, good))).status, 200, "the right code still works afterwards");
+  // challenge lifetime: valid at 4.5 minutes, dead at 5.5 minutes (each uses a later authenticator step than the last)
+  const s2 = await loginStep1(env, "me@example.com", PW);
+  assert.equal((await at(9, async () => submitCode(env, s2, await totpNow(secret)))).status, 200, "still valid after 4.5 minutes");
+  const s3 = await loginStep1(env, "me@example.com", PW);
+  assert.equal((await at(11, async () => submitCode(env, s3, await totpNow(secret)))).status, 401, "expired after 5.5 minutes");
+});
+
+test("a challenge for a user removed from ALLOWED_EMAILS is refused", async () => {
+  const { env, secret } = await enrolled();
+  const s1 = await loginStep1(env, "me@example.com", PW);
+  const delisted = { ...env, ALLOWED_EMAILS: "other@example.com" };
+  const r = await at(1, async () => submitCode(delisted, s1, await totpNow(secret)));
+  assert.equal(r.status, 401); assert.ok(!cookieOf(r, "dc_session"));
+});
+
+test("lockout counts password AND code failures together", async () => {
+  const { env, secret } = await enrolled();
+  const s1 = await loginStep1(env, "me@example.com", PW);               // a good password step
+  for (let i = 0; i < 3; i++) await submitCode(env, s1, "000000");     // 3 wrong codes
+  for (let i = 0; i < 2; i++) await loginStep1(env, "me@example.com", "wrong wrong wrong");   // + 2 wrong passwords = 5
+  const r = await at(1, async () => submitCode(env, s1, await totpNow(secret)));
+  assert.equal(r.status, 429, "the correct code is refused while locked"); assert.ok(!cookieOf(r, "dc_session"));
+  assert.equal((await loginStep1(env, "me@example.com", PW)).status, 429, "and so is the right password");
+  assert.equal(await withTime(16 * 60_000, async () => (await login(env, "me@example.com", PW, await totpNow(secret))).status), 200, "unlocked after 15 minutes");
 });
 
 test("prelogin looks the same for known, unknown and not-allowed emails (no enumeration)", async () => {
@@ -177,7 +241,8 @@ test("code guessing on account changes is rate limited too", async () => {
 
 test("cross-origin POST to the login endpoints is refused", async () => {
   const env = makeEnv();
-  assert.equal((await post(env, "/auth/password", { email: "me@example.com", key: "a".repeat(64), code: "123456" }, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await post(env, "/auth/password", { email: "me@example.com", key: "a".repeat(64) }, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await post(env, "/auth/mfa", { code: "123456" }, { origin: "https://evil.example" })).status, 403);
   assert.equal((await post(env, "/auth/prelogin", { email: "me@example.com" }, { origin: "https://evil.example" })).status, 403);
 });
 
@@ -190,9 +255,9 @@ test("removing someone from ALLOWED_EMAILS also disables their email + password 
   assert.notEqual(fake.salt, real.salt, "de-listed account looks like an unknown one (prelogin layer)");
   // Second layer: even an attacker who kept the REAL salt and key cannot get in through /auth/password.
   const key = await kdf.deriveKey(PW, real.salt, real.iter, "me@example.com");
-  const r = await at(2, async () => post(delisted, "/auth/password", { email: "me@example.com", key, code: await totpNow(secret) }));
-  assert.equal(r.status, 401); assert.ok(!cookieOf(r, "dc_session"));
-  const ok = await at(2, async () => post(env, "/auth/password", { email: "me@example.com", key, code: await totpNow(secret) }));
+  const r = await post(delisted, "/auth/password", { email: "me@example.com", key });
+  assert.equal(r.status, 401); assert.ok(!cookieOf(r, "dc_mfa"));
+  const ok = await post(env, "/auth/password", { email: "me@example.com", key });
   assert.equal(ok.status, 200, "control: same request with the user still allowed succeeds");
 });
 

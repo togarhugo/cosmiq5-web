@@ -7,6 +7,7 @@ const { chromium, devices } = req("playwright");
 import assert from "node:assert/strict";
 
 const root = path.resolve("public");
+import { readFileSync } from "node:fs";
 const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
@@ -37,6 +38,7 @@ const fakeBle = () => {
     else if ([0x5f, 0x5b, 0x5c, 0x5d, 0x60].includes(cmd)) chunks(frame(cmd, [0, 0, 5, 20, 1, 14]));
     else if (cmd === 0x40) chunks(frame(0x40, [dives.length]));
     else if (cmd === 0x41) { chunks(frame(0x41, [36])); for (let i = 0; i < 36; i += 6) chunks(frame(0x42, dives[n - 1].h.slice(i, i + 6))); }
+    else if (cmd === 0x43 && n === 2 && window.__stall) { /* device goes silent */ }
     else if (cmd === 0x43) { const p = dives[n - 1].p; chunks(frame(0x43, [p.length >> 8, p.length & 255])); for (let i = 0; i < p.length; i += 6) chunks(frame(0x44, p.slice(i, i + 6))); }
     setTimeout(flush, 0);
   };
@@ -76,10 +78,23 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.ok(tx.indexOf(setTime[0]) < tx.findIndex((t) => t.startsWith("#43")), "clock set before dive download");
       assert.ok(tx.every((t) => !/^#(2[1-9a-f]|3)/i.test(t) || t.startsWith("#20")), "no writes other than clock");
       assert.match(await page.locator("#clockStatus").innerText(), /clock set/i);
-      await page.click("#navLog");
+      // the result is shown automatically (no hunting for the tab) and the count is in the nav
+      assert.ok(await page.locator("#logView").isVisible(), "switched to the Dive log after a sync that saved dives");
+      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+      assert.match(await page.locator("#lastSync").innerText(), /Last sync .*Dive sync done: 2 on device, 2 new/);
+      await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });   // progress banner hidden when finished
       assert.equal(await page.locator("details.dive").count(), 2);
       await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
+      // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
+      const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
+      assert.ok((await tech.locator("table.hdr tr").count()) >= 15, "header map rendered");
+      assert.ok((await tech.locator("tr.unk").count()) >= 4, "undecoded byte ranges highlighted");
+      assert.match(await tech.innerText(), /no location \(GPS\) field/);
+      // diagnostics file contains version, device traffic and the stored headers
+      const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#diagSave")]);
+      const diagText = fs.readFileSync(await dl.path(), "utf8");
+      assert.match(diagText, /app version: \d+\.\d+\.\d+/); assert.match(diagText, /TX #40/); assert.match(diagText, /RX \$40/); assert.match(diagText, /header=[0-9a-f]{72}/);
       assert.equal(uploaded.length, 2, "both dives uploaded to cloud API");
       // second connect must not re-download profiles
       await page.evaluate(() => { window.__tx.length = 0; });
@@ -93,6 +108,40 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.deepEqual(errors, [], "page errors");
     console.log("PASS", name);
   } catch (e) { failed++; console.log("FAIL", name, "\n ", e.message); await page.screenshot({ path: "/tmp/fail.png" }); }
+  await ctx.close();
+}
+// ---- scenario: the device stalls on dive 2 -> progress is visible, Cancel keeps dive 1, a re-sync finishes the rest ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [];
+  await page.route("**/api/dives", async (r) => {
+    if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    uploaded.push(...JSON.parse(r.request().postData()).dives); return r.fulfill({ json: { stored: uploaded.length } });
+  });
+  await page.addInitScript(fakeBle); await page.addInitScript(() => { window.__stall = true; });
+  await page.goto(base);
+  try {
+    await page.click("#connectBtn");
+    // progress is visible on the Device tab (banner), with the dive being fetched
+    await page.waitForFunction(() => /Downloading dive 2 of 2/.test(document.getElementById("bannerText").textContent), null, { timeout: 15000 });
+    assert.ok(await page.locator("#syncBanner").isVisible(), "banner visible while syncing, on every tab");
+    assert.ok(await page.locator("#deviceView").isVisible(), "still on the Device tab");
+    assert.match(await page.locator("#navLog").innerText(), /\(1\)/, "dive 1 already counted while dive 2 is still downloading");
+    await page.click("#cancelSync");
+    await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("diveProgress").textContent), null, { timeout: 10000 });
+    assert.match(await page.locator("#diveProgress").innerText(), /1 dive\(s\) were saved/);
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });
+    await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("lastSync")?.textContent || ""));
+    assert.equal(uploaded.length, 1, "the dive that was saved is also uploaded");
+    // the device recovers: a second sync only fetches what is missing
+    await page.evaluate(() => { window.__stall = false; window.__tx.length = 0; });
+    await page.click("#navLog"); await page.click("#diveSyncBtn");
+    await page.waitForFunction(() => /Dive sync done: 2 on device, 1 new, 1 already saved/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    const reqs = (await page.evaluate(() => window.__tx)).filter((t) => t.startsWith("#43"));
+    assert.equal(reqs.length, 1, "only the missing dive's profile was requested");
+    assert.equal(uploaded.length, 2); assert.equal(await page.locator("details.dive").count(), 2);
+    console.log("PASS cancel + resume");
+  } catch (e) { failed++; console.log("FAIL cancel + resume\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cancel.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

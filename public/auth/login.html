@@ -26,7 +26,6 @@
   label { display:block; font-size:13px; font-weight:600; margin:12px 0 6px; }
   input { width:100%; min-height:48px; padding:10px 12px; font-size:16px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
   input:focus { outline:2px solid var(--blue); outline-offset:1px; }
-  #code { letter-spacing:6px; text-align:center; font-variant-numeric:tabular-nums; font-size:20px; }
   .err { color:var(--red); font-size:14px; min-height:20px; margin:12px 0 4px; }
   .hint { color:var(--muted); font-size:12px; margin-top:12px; line-height:1.4; }
 </style>
@@ -46,12 +45,10 @@
       <input id="email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <label for="code">Authenticator code</label>
-      <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
       <div id="err" class="err" role="alert" aria-live="polite"></div>
       <button id="go" class="btn primary" type="submit">Sign in</button>
     </form>
-    <p class="hint">Email sign-in needs the 6-digit code from your authenticator app (e.g. Google Authenticator). Turn it on from the Account tab after signing in with Google once.</p>
+    <p class="hint">After your password you will be asked for the 6-digit code from your authenticator app. To use email sign-in, first turn it on from the Account tab (sign in with Google once).</p>
   </div>
 </main>
 <script src="/auth/kdf.js"></script>

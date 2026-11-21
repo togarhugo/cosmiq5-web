@@ -95,38 +95,45 @@
   }
 
   /**
-   * Download dives through a transport:
-   *   transport.request(cmd, dataBytes, {expect:[[cmd,nBytes]...]})  -- see app code
-   * Kept transport-agnostic so it can be tested against a simulated device.
-   *   io.send(cmdByte, dataArray)          -> sends a command
-   *   io.recv(cmdByte, nBytes)             -> resolves Uint8Array(nBytes) (accumulates frames)
+   * Download dives through a transport (kept transport-agnostic so it can be tested against a simulated device):
+   *   io.send(cmdByte, dataArray)  -> sends a command
+   *   io.recv(cmdByte, nBytes)     -> resolves Uint8Array(nBytes) (accumulates frames)
    * `known` is a Set of fingerprints already stored; their profiles are skipped.
+   * `onDive(rawDive, result)` is awaited after EACH dive's profile arrives, so callers can save it immediately:
+   * a dropped connection then loses at most the dive in flight, and a re-run resumes where it stopped.
+   * Firmware / MAC are informational and best-effort; the dive count and the dives themselves are not.
    */
-  async function readDives(io, known, onProgress) {
+  async function readDives(io, known, onProgress, onDive) {
     const say = (m, p) => onProgress && onProgress(m, p);
-    await io.send(CMD.FW, [0]);       const fw = (await io.recv(CMD.FW, 1))[0];
-    await io.send(CMD.MAC, [0]);      const mac = toHex(await io.recv(CMD.MAC, 6));
+    let fw = null, mac = null;
+    try { await io.send(CMD.FW, [0]); fw = (await io.recv(CMD.FW, 1))[0] & 0x3f; }
+    catch (e) { say("Firmware version not available (" + e.message + "), continuing", 0); }
+    try { await io.send(CMD.MAC, [0]); mac = toHex(await io.recv(CMD.MAC, 6)); }
+    catch (e) { say("Device address not available (" + e.message + "), continuing", 0); }
     await io.send(CMD.COUNT, [0]);    const count = (await io.recv(CMD.COUNT, 1))[0];
     say(`Device reports ${count} dive(s)`, 0);
-    const result = { firmware: fw & 0x3f, mac, count, dives: [], skipped: 0 };
+    const result = { firmware: fw, mac, count, dives: [], skipped: 0 };
     const headers = [];
     for (let i = 1; i <= count; i++) {
       await io.send(CMD.HEADER, [i]);
       const len = (await io.recv(CMD.HEADER, 1))[0];
       if (len !== SZ_HEADER) throw new Error(`unexpected header length ${len} for dive ${i}`);
       headers.push(await io.recv(CMD.HEADER_DATA, SZ_HEADER));
-      say(`Read header ${i}/${count}`, (i / count) * 0.2);
+      say(`Reading dive list ${i}/${count}`, (i / count) * 0.1);
     }
-    for (let i = 1; i <= count; i++) {
-      const header = headers[i - 1];
-      const fp = fingerprint(header);
-      if (known && known.has(fp)) { result.skipped++; continue; }
+    const todo = [];
+    for (let i = 1; i <= count; i++) (known && known.has(fingerprint(headers[i - 1])) ? result.skipped++ : todo.push(i));
+    for (let k = 0; k < todo.length; k++) {
+      const i = todo[k], header = headers[i - 1];
+      say(`Downloading dive ${k + 1} of ${todo.length}`, 0.1 + (k / todo.length) * 0.9);
       await io.send(CMD.PROFILE, [i]);
       const len = u16be(await io.recv(CMD.PROFILE, 2), 0);
       const profile = len ? await io.recv(CMD.PROFILE_DATA, len) : new Uint8Array(0);
-      result.dives.push({ index: i, fingerprint: fp, headerHex: toHex(header), profileHex: toHex(profile) });
-      say(`Read dive ${i}/${count} (${len} bytes)`, 0.2 + (i / count) * 0.8);
+      const rec = { index: i, fingerprint: fingerprint(header), headerHex: toHex(header), profileHex: toHex(profile) };
+      result.dives.push(rec);
+      if (onDive) await onDive(rec, result);
     }
+    say(`Downloaded ${todo.length} new dive(s)`, 1);
     return result;
   }
 

@@ -24,7 +24,7 @@ const dives = [
     p: [...sample(260, 1013 + 1500)] },
 ];
 
-function simulatedDevice(chunk = 20) {
+function simulatedDevice(chunk = 20, opt = {}) {
   const rx = []; let waiters = [];
   const log = [];
   const push = (line) => { for (let i = 0; i < line.length; i += chunk) rx.push(line.slice(i, i + chunk)); };
@@ -37,10 +37,11 @@ function simulatedDevice(chunk = 20) {
       P.parseFrame("$" + line.slice(1)); // our commands must satisfy the same framing rules
       log.push(cmd);
       const n = data[0];
-      if (cmd === 0x58) push(reply(0x58, [0x42]));
+      if (cmd === 0x58) push(reply(0x58, opt.fwBytes ? new Array(opt.fwBytes).fill(0x42) : [0x42]));
       else if (cmd === 0x5a) push(reply(0x5a, [1,2,3,4,5,6]));
       else if (cmd === 0x40) push(reply(0x40, [dives.length]));
       else if (cmd === 0x41) { push(reply(0x41, [36])); const h = dives[n-1].h; for (let i=0;i<36;i+=6) push(reply(0x42, h.slice(i,i+6))); }
+      else if (cmd === 0x43 && opt.dropAtProfile === n) { throw new Error("Disconnected"); }
       else if (cmd === 0x43) { const p = dives[n-1].p; push(reply(0x43, [p.length >> 8, p.length & 255])); for (let i=0;i<p.length;i+=6) push(reply(0x44, p.slice(i,i+6))); }
       else throw new Error("unexpected cmd " + cmd.toString(16));
       pump();
@@ -94,4 +95,28 @@ test("known fingerprints skip profile download", async () => {
 test("works with tiny BLE chunks (5 bytes)", async () => {
   const res = await P.readDives(simulatedDevice(5), new Set());
   assert.equal(res.dives.length, 2);
+});
+
+test("onDive is awaited after EACH dive, before the next profile is requested (save-as-you-go)", async () => {
+  const dev = simulatedDevice(); const events = [];
+  const origSend = dev.send.bind(dev); dev.send = async (c, d) => { if (c === 0x43) events.push("request " + d[0]); return origSend(c, d); };
+  const res = await P.readDives(dev, new Set(), null, async (raw) => { events.push("saved " + raw.index); });
+  assert.deepEqual(events, ["request 1", "saved 1", "request 2", "saved 2"]);
+  assert.equal(res.dives.length, 2);
+});
+
+test("a dropped connection loses only the dive in flight; a re-run resumes with the rest", async () => {
+  const saved = new Map();
+  const onDive = async (raw) => { saved.set(raw.fingerprint, raw); };
+  await assert.rejects(() => P.readDives(simulatedDevice(20, { dropAtProfile: 2 }), new Set(), null, onDive), /Disconnected/);
+  assert.equal(saved.size, 1, "dive 1 was already saved when the link dropped");
+  const res = await P.readDives(simulatedDevice(), new Set(saved.keys()), null, onDive);
+  assert.equal(res.skipped, 1); assert.equal(res.dives.length, 1); assert.equal(saved.size, 2, "re-run downloaded only the missing dive");
+});
+
+test("firmware / MAC are best-effort: an unexpected reply does not abort the dive download", async () => {
+  const msgs = [];
+  const res = await P.readDives(simulatedDevice(20, { fwBytes: 3 }), new Set(), (m) => msgs.push(m));
+  assert.equal(res.dives.length, 2); assert.equal(res.firmware, null);
+  assert.ok(msgs.some((m) => /Firmware version not available/.test(m)));
 });

@@ -39,16 +39,21 @@ test("signed-out: pages go to the login page; API/assets/POST get 401; only logi
   assert.equal((await call(env, "/api/dives", { method: "POST", body: "{}" })).status, 401);
   assert.equal((await call(env, "/auth/login.js")).status, 200);
   assert.equal((await call(env, "/auth/kdf.js")).status, 200);
+  assert.equal((await call(env, "/auth/mfa.js")).status, 200);
+  assert.equal((await call(env, "/auth/mfa.html")).status, 404, "raw template not exposed");
+  assert.equal((await call(env, "/auth/mfa", html)).status, 302, "the code page needs the password step first");
   assert.equal((await call(env, "/auth/login.html")).status, 404, "raw template not exposed");
   assert.equal((await call(env, "/auth/nothing")).status, 404);
 });
 
-test("first page is the login page: Google button, email/password/code form, version, strict CSP", async () => {
+test("first page is the login page: Google button and email + password only, version, strict CSP", async () => {
   const env = makeEnv();
   const r = await call(env, "/auth/login", html); assert.equal(r.status, 200);
   const t = await r.text();
   assert.match(t, /Continue with Google/); assert.match(t, /href="\/auth\/google"/);
-  for (const id of ['id="email"', 'id="password"', 'id="code"']) assert.ok(t.includes(id), id);
+  for (const id of ['id="email"', 'id="password"']) assert.ok(t.includes(id), id);
+  assert.ok(!t.includes('id="code"') && !/authenticator code/i.test(t.split("<p class=\"hint\"")[0]), "no code field on the first screen");
+  assert.equal((t.match(/<input /g) || []).length, 2, "only email + password inputs");
   assert.ok(t.includes("v" + VERSION) && !t.includes("__APP_VERSION__"), "version shown, token replaced");
   assert.match(r.headers.get("content-security-policy"), /script-src 'self'/); assert.match(r.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.doesNotMatch(t, /<script>[^<]/, "no inline scripts (CSP)");
