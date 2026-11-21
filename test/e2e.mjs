@@ -358,7 +358,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   const card = () => page.locator("#sumReg").evaluate((e) => ({ cls: e.className, role: e.getAttribute("role"), border: getComputedStyle(e).borderLeftColor, big: getComputedStyle(e.querySelector(".sum-big")).color, count: e.querySelector("#sumRegCount").textContent, msg: e.querySelector("#sumRegMsg").textContent, bar: e.querySelector("#sumRegBar").style.width }));
   try {
     // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
-    assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1").innerText(), "Dive Manager");
+    assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1 img:visible").getAttribute("alt"), "Dive Manager", "the heading is the logo, named Dive Manager");
     const box = await page.locator("#acctBtn").boundingBox(), vw = page.viewportSize().width;
     assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 3, "Summary, Dive log, Device");
     assert.equal(await page.locator("#verTop, #appFooter, #navAccount").count(), 0, "no version badge in the header/footer, no Account tab");
