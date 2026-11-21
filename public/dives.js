@@ -33,6 +33,21 @@ const Dives = (() => {
       uploaded: !!raw.uploaded, location: raw.location || undefined };
   }
 
+  // Imported dives (another computer's log read from a file) have no raw device bytes: they keep decoded values + depth samples.
+  const isImported = (r) => !!r.device && r.device !== "cosmiq";
+  const IMPORT_BATCH = 8;
+  function fromCloudImport(d) {
+    let x = {}; try { x = JSON.parse(d.extra || "{}"); } catch (e) {}
+    return { fingerprint: d.fingerprint, device: d.device, startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec, maxDepthM: d.maxDepthM,
+      o2Percent: d.o2Percent == null ? null : d.o2Percent, number: x.n == null ? null : x.n, minTempC: x.t == null ? null : x.t, intervalSec: x.iv || 10,
+      samples: Array.isArray(x.s) ? x.s : [], headerHex: "", profileHex: "", uploaded: true, location: d.location || undefined };
+  }
+  function toWire(r) {
+    if (!isImported(r)) return r;
+    return { fingerprint: r.fingerprint, device: r.device, startedAt: r.startedAt, mode: r.mode, durationSec: r.durationSec, maxDepthM: r.maxDepthM,
+      o2Percent: r.o2Percent, headerHex: "", profileHex: "", location: r.location || null, extra: JSON.stringify({ n: r.number, t: r.minTempC, iv: r.intervalSec, s: r.samples }) };
+  }
+
   // ---------- cloud ----------
   async function cloudPull() {
     try {
@@ -42,7 +57,7 @@ const Dives = (() => {
       const local = new Map((await all()).map((d) => [d.fingerprint, d]));
       for (const d of dives) {
         const mine = local.get(d.fingerprint);
-        if (!mine) await put({ ...toRecord(d), uploaded: true });
+        if (!mine) await put(d.device && d.device !== "cosmiq" ? fromCloudImport(d) : { ...toRecord(d), uploaded: true });
         else if (!mine.locDirty && (mine.location || "") !== (d.location || "")) await put({ ...mine, location: d.location || undefined });   // edited on another device
       }
       cloudState = "ok";
@@ -54,13 +69,27 @@ const Dives = (() => {
   // ---------- locations (free text per dive; edited per date) ----------
   /** map: fingerprint -> text ("" clears). Saved on this phone first, then sent to the cloud. */
   async function setLocations(map) {
-    const recs = await all(), known = U.knownLocations(recs);
+    const recs = await all(), known = U.knownLocations(recs), entered = [];
     for (const r of recs) if (Object.prototype.hasOwnProperty.call(map, r.fingerprint)) {
       const loc = U.normalizeLocation(map[r.fingerprint], known);
-      await put({ ...r, location: loc || undefined, locDirty: true });
+      await put({ ...r, location: loc || undefined, locDirty: true }); if (loc) entered.push(loc);
     }
     render(); await pushLocations(); render();
+    // a place you picked from the map suggestions is put on the map with that position; any other new place goes to the map search
+    lastPlaced = []; const fresh = [];
+    for (const n of entered) {
+      if (fresh.some((f) => f.toLowerCase() === n.toLowerCase()) || lastPlaced.some((f) => f.toLowerCase() === n.toLowerCase())) continue;
+      const chosen = typeof PlacesUI !== "undefined" ? PlacesUI.takePending(n) : null;
+      if (window.Places.get(n)) continue;
+      if (chosen) { try { await window.Places.save(n, chosen.lat, chosen.lon); lastPlaced.push(n); continue; } catch (e) { say("Could not save the position of \u201c" + n + "\u201d: " + e.message, "warn"); } }
+      fresh.push(n);
+    }
+    if (lastPlaced.length) render();
+    if (fresh.length && typeof PlacesUI !== "undefined") PlacesUI.offer(fresh);
   }
+  let lastPlaced = [];
+  /** "Location saved" + which places were added to the map by this save. */
+  const savedText = (base) => base + (lastPlaced.length ? ` \u00b7 ${lastPlaced.map((n) => "\u201c" + n + "\u201d").join(", ")} added to the map` : "");
   async function pushLocations() {
     const dirty = (await all()).filter((r) => r.locDirty && r.uploaded);                // a dive not yet in the cloud is uploaded (with its place) first
     if (!dirty.length) return 0;
@@ -80,10 +109,10 @@ const Dives = (() => {
     const pending = (await all()).filter((d) => !d.uploaded);
     let stored = 0;
     try {
-      for (let i = 0; i < pending.length; i += 20) {
-        const batch = pending.slice(i, i + 20);
+      for (let i = 0; i < pending.length; i += IMPORT_BATCH) {
+        const batch = pending.slice(i, i + IMPORT_BATCH);
         const r = await fetch("/api/dives", { method: "POST", credentials: "same-origin", redirect: "error",
-          headers: { "content-type": "application/json" }, body: JSON.stringify({ dives: batch }) });
+          headers: { "content-type": "application/json" }, body: JSON.stringify({ dives: batch.map(toWire) }) });
         if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
         for (const d of batch) await put({ ...d, uploaded: true });
         stored += batch.length;
@@ -124,6 +153,85 @@ const Dives = (() => {
     return { saved };
   }
 
+  // ---------- import a log exported from another dive computer's app ----------
+  /** A decoded dive (from a file or from Bluetooth) -> the record stored on the phone and in the cloud. */
+  const importedRecord = (d, deviceId) => ({
+    fingerprint: window.DiveImport.fingerprint(deviceId + "|" + d.startedAt.slice(0, 16)), device: deviceId, startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec,
+    maxDepthM: d.maxDepthM, o2Percent: d.o2Percent == null ? null : d.o2Percent, number: d.number == null ? null : d.number, minTempC: d.minTempC, intervalSec: d.intervalSec,
+    samples: window.DiveImport.thin(d.samples), headerHex: "", profileHex: "", uploaded: false });
+  /** Files: a Shearwater Cloud database (.db) or its ZIP, or a UDDF export (XML). The kind is recognised from the content, not the name. */
+  async function importFiles(files, deviceId) {
+    const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : "#2b8a3e"; } };
+    if (busy) { say2("Wait for the running sync to finish first.", true); return; }
+    busy = true; say2("Reading\u2026");
+    const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0; const problems = [];
+    try {
+      for (const f of files) {
+        if (f.size > 400_000_000) { problems.push(`${f.name}: too large (${Math.round(f.size / 1e6)} MB, limit 400 MB)`); continue; }
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer()), kind = window.ShearwaterCloud.sniff(bytes);
+          let dives, note = "";
+          if (kind === "text") { const res = window.DiveImport.parseUddf(new TextDecoder().decode(bytes), deviceId); dives = res.dives; skipped += res.skipped; note = res.info; }
+          else {
+            const res = await window.ShearwaterCloud.readExport(bytes, (d, t) => say2(`Reading dive ${d} of ${t}\u2026`));
+            dives = res.dives; skipped += res.skipped.deleted + res.skipped.format; note = `${res.total} dive${res.total === 1 ? "" : "s"} in the database`;
+            for (const m of res.problems.slice(0, 3)) problems.push(`${f.name}: ${m}`); if (res.problems.length > 3) problems.push(`and ${res.problems.length - 3} more dives could not be read`);
+          }
+          found += dives.length;
+          if (!dives.length) problems.push(`${f.name}: no dives found (${note})`);
+          for (const d of dives) {
+            const rec = importedRecord(d, deviceId);
+            if (seen.has(rec.fingerprint)) { already++; continue; }
+            seen.add(rec.fingerprint); await put(rec); fresh.push(rec);
+          }
+        } catch (e) { problems.push(`${f.name}: ${e.message}`); }
+        render();
+      }
+      const up = fresh.length ? await cloudPush() : 0;
+      const parts = [`${fresh.length} new dive${fresh.length === 1 ? "" : "s"} imported`];
+      if (already) parts.push(`${already} already there`); if (skipped) parts.push(`${skipped} skipped (deleted or incomplete)`);
+      if (fresh.length) parts.push(cloudState === "ok" ? `${up} uploaded` : "saved on this phone, cloud unavailable");
+      say2(parts.join(", ") + "." + (problems.length ? " " + problems.join(" ") : ""), !fresh.length && !!problems.length);
+      if (fresh.length) say(`${fresh.length} dive${fresh.length === 1 ? "" : "s"} imported`);
+    } finally { busy = false; render(); }
+    if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} imported dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    return { imported: fresh.length, already, skipped, found };
+  }
+
+  // ---------- Shearwater Peregrine over Bluetooth (beta) ----------
+  let pgCancel = false;
+  async function syncPeregrine() {
+    const out = $("pgMsg"), bar = $("pgBar"), btn = $("pgBtn"), cancel = $("pgCancel");
+    const say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "#c92a2a" : ""; } };
+    if (busy) { say2("Wait for the running sync to finish first.", true); return; }
+    busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0";
+    const fp = (startedAt) => window.DiveImport.fingerprint("peregrine|" + startedAt.slice(0, 16));
+    const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0;
+    const trace = (l) => { if (typeof diag === "function") diag("PG " + l); };
+    try {
+      say2("Choose your Peregrine in the list\u2026"); conn = await window.Shearwater.connect(trace);
+      say2("Connected to " + conn.name + ".");
+      const res = await window.Shearwater.readDives(conn.io, {
+        known: (startedAt) => seen.has(fp(startedAt)), cancelled: () => pgCancel,
+        onProgress: (m, f) => { say2(m); bar.style.width = Math.round(f * 100) + "%"; },
+        onProblem: (m) => { problems++; log("Peregrine: could not read dive " + m, "log-err"); },
+        onDive: async (d) => {
+          const rec = importedRecord(d, "peregrine");
+          await put(rec); seen.add(rec.fingerprint); fresh.push(rec); render();                      // saved the moment it arrives
+        } });
+      const up = fresh.length ? await cloudPush() : 0;
+      const msg = `Peregrine: ${res.total} on the dive computer, ${fresh.length} new` + (problems ? `, ${problems} could not be read (see diagnostics)` : "") +
+        (fresh.length ? (cloudState === "ok" ? `, ${up} uploaded` : ", saved on this phone, cloud unavailable") : "");
+      say2(msg, !!problems && !fresh.length); bar.style.width = "100%"; log(msg, "log-info"); saveLast({ ok: !problems, msg });
+    } catch (e) {
+      const m = e && e.name === "NotFoundError" ? "No dive computer was chosen." : e && e.message ? e.message : String(e);
+      say2(m + (fresh.length ? ` ${fresh.length} dive(s) were saved before it stopped: run it again to continue.` : ""), !(e && e.name === "NotFoundError"));
+      log("Peregrine sync stopped: " + m, "log-err"); if (fresh.length) await cloudPush();
+    } finally { if (conn) conn.close(); busy = false; btn.disabled = false; cancel.style.display = "none"; render(); }
+    if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} new Peregrine dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    return { saved: fresh.length };
+  }
+
   // ---------- UI ----------
   const $ = (id) => document.getElementById(id);
   const fmtDur = (s) => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 120 ? `${Math.round(s / 60)} min` : `${s} s`;
@@ -136,24 +244,32 @@ const Dives = (() => {
   function showBanner(on) { const el = $("syncBanner"); if (el) el.style.display = on ? "block" : "none"; }
   function setBusy(b) { const el = $("diveSyncBtn"); if (el) el.disabled = b; }
 
-  /** Depth profile. `missing` = samples the device no longer had: the axis keeps the full dive length and the gap is shown. */
+  /** Depth profile with a grid: horizontal lines at round depths, vertical lines at round minutes.
+   *  `missing` = samples the device no longer had: the axis keeps the full dive length and the gap is shown. */
   function chart(d, missing = 0) {
     const s = d.samples; if (s.length < 2) return "<p class='muted'>No profile samples.</p>";
-    const W = 320, H = 150, pl = 34, pr = 8, pt = 8, pb = 20;
-    const lastT = s[s.length - 1].t, maxT = lastT + missing * d.sampleIntervalSec, maxD = Math.max(1, ...s.map((x) => x.depthM));
+    const W = 340, H = 190, pl = 40, pr = 10, pt = 10, pb = 24;
+    const lastT = s[s.length - 1].t, maxT = lastT + missing * d.sampleIntervalSec, deepest = Math.max(1, ...s.map((x) => x.depthM));
+    const ax = U.niceAxis(deepest, 5), maxD = ax.max, tk = U.timeTicks(maxT);
     const X = (t) => pl + (t / maxT) * (W - pl - pr), Y = (m) => pt + (Math.max(0, m) / maxD) * (H - pt - pb);
     const pts = [[0, 0], ...s.map((x) => [x.t, x.depthM])].map(([t, m]) => `${X(t).toFixed(1)},${Y(m).toFixed(1)}`).join(" ");
+    let grid = "";
+    for (let m = 0; m <= maxD + 1e-9; m += ax.step)
+      grid += `<line x1="${pl}" y1="${Y(m).toFixed(1)}" x2="${W - pr}" y2="${Y(m).toFixed(1)}" stroke="${m === 0 ? "#adb5bd" : "#dee2e6"}" stroke-width="${m === 0 ? 1 : 0.8}"/>` +
+        `<text x="${pl - 5}" y="${(Y(m) + 3).toFixed(1)}" font-size="10" fill="#6c757d" text-anchor="end">${m}${m === 0 ? " m" : ""}</text>`;
+    for (const t of tk.ticks)
+      grid += `<line x1="${X(t).toFixed(1)}" y1="${pt}" x2="${X(t).toFixed(1)}" y2="${H - pb}" stroke="#e9ecef" stroke-width="0.8"/>` +
+        `<text x="${X(t).toFixed(1)}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="middle">${Math.round(t / 60)}</text>`;
     const gap = missing ? `<rect x="${X(lastT).toFixed(1)}" y="${pt}" width="${(X(maxT) - X(lastT)).toFixed(1)}" height="${H - pt - pb}" fill="#adb5bd" opacity=".25"/>
       <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">not</text>
       <text x="${((X(lastT) + X(maxT)) / 2).toFixed(1)}" y="${(pt + (H - pt - pb) / 2 + 10).toFixed(1)}" font-size="8" fill="#6c757d" text-anchor="middle">recovered</text>` : "";
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Depth profile">
-      <line x1="${pl}" y1="${pt}" x2="${W - pr}" y2="${pt}" stroke="#ced4da"/>${gap}
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Depth profile, gridlines every ${ax.step} m and ${Math.round(tk.step / 60)} min">
+      ${grid}${gap}
+      <line x1="${pl}" y1="${pt}" x2="${pl}" y2="${H - pb}" stroke="#adb5bd"/>
       <polygon fill="rgba(0,123,255,.15)" points="${pts} ${X(lastT).toFixed(1)},${Y(0).toFixed(1)}"/>
       <polyline fill="none" stroke="#007bff" stroke-width="2" stroke-linejoin="round" points="${pts}"/>
-      <text x="2" y="${pt + 9}" font-size="10" fill="#6c757d">0 m</text>
-      <text x="2" y="${H - pb}" font-size="10" fill="#6c757d">${maxD.toFixed(0)} m</text>
-      <text x="${pl}" y="${H - 4}" font-size="10" fill="#6c757d">0</text>
-      <text x="${W - pr}" y="${H - 4}" font-size="10" fill="#6c757d" text-anchor="end">${fmtDur(maxT)}</text></svg>`;
+      <text x="${pl}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="middle">0</text>
+      <text x="${W - pr}" y="${H - 8}" font-size="10" fill="#6c757d" text-anchor="end">${fmtDur(maxT)}</text></svg>`;
   }
 
   // Layout of the 36-byte dive header. Fields come from libdivecomputer's Cosmiq parser plus our own decoding of a real
@@ -187,7 +303,27 @@ const Dives = (() => {
   const fmtGap = (min) => (min < 90 ? `${Math.max(0, Math.round(min))} min` : min < 2880 ? `${Math.floor(min / 60)} h ${Math.round(min % 60)} min` : `${Math.floor(min / 1440)} d ${Math.round((min % 1440) / 60)} h`);
   const asMs = (iso) => { const [d, t] = iso.split("T"); const [y, mo, da] = d.split("-").map(Number), [h, mi] = t.split(":").map(Number); return Date.UTC(y, mo - 1, da, h, mi); };
 
-  function detail(rec, res, gapBefore) {
+  const numBox = (n) => `<span class="dive-num">${esc(n)}</span>`;
+  const deviceName = (id) => (U.DEVICES.find((x) => x.id === id) || { name: id }).name;
+  /** Detail of an imported dive: values and samples come from the file, there are no raw device bytes to show. */
+  function detailImported(rec, num, gapBefore) {
+    const sm = (rec.samples || []).map(([t, depthM, tempC]) => ({ t, depthM, tempC })), depths = sm.map((x) => x.depthM).filter((m) => m > 0.3);
+    const avg = depths.length ? (depths.reduce((a, b) => a + b, 0) / depths.length).toFixed(1) + " m" : "\u2013";
+    return `${locEditor(rec)}${chart({ samples: sm, sampleIntervalSec: rec.intervalSec || 10 })}<div class="stats">
+      <div><b>${rec.maxDepthM.toFixed(1)} m</b><span>max depth</span></div>
+      <div><b>${fmtDur(rec.durationSec)}</b><span>duration</span></div>
+      <div><b>${rec.minTempC != null ? rec.minTempC.toFixed(1) + " \u00b0C" : "\u2013"}</b><span>min temp</span></div>
+      <div><b>${rec.o2Percent != null ? rec.o2Percent + "%" : "\u2013"}</b><span>O\u2082</span></div></div>
+      <div class="stats">
+      <div><b class="numtile">${esc(num)}</b><span>dive number</span></div>
+      <div><b>${avg}</b><span>avg depth</span></div>
+      <div><b>${gapBefore == null ? "\u2013" : fmtGap(gapBefore)}</b><span>since last dive</span></div>
+      <div><b>${rec.intervalSec || 10} s</b><span>sample every</span></div></div>
+      <p class="muted">Imported from a file exported from the ${esc(deviceName(rec.device))} app: ${sm.length} depth sample${sm.length === 1 ? "" : "s"}. The numbers are the ones in that file.</p>`;
+  }
+
+  function detail(rec, res, gapBefore, num) {
+    if (isImported(rec)) return detailImported(rec, num, gapBefore);
     const d = P.parseDive(P.fromHex(rec.headerHex), P.fromHex(res.profileHex));
     const usable = res.status === "ok" || res.status === "truncated";
     const depths = d.samples.map((x) => x.depthM).filter((m) => m > 0.3);
@@ -199,7 +335,7 @@ const Dives = (() => {
       <div><b>${d.minTempC.toFixed(1)} \u00b0C</b><span>min temp</span></div>
       <div><b>${d.o2Percent != null ? d.o2Percent + "%" : "\u2013"}</b><span>O\u2082</span></div></div>
       <div class="stats">
-      <div><b>#${d.number}</b><span>dive number</span></div>
+      <div><b class="numtile">${d.number}</b><span>dive number</span></div>
       <div><b>${usable ? avg : "\u2013"}</b><span>avg depth</span></div>
       <div><b>${gapBefore == null ? "\u2013" : fmtGap(gapBefore)}</b><span>since last dive</span></div>
       <div><b>${d.atmosphericMbar}</b><span>surface mbar</span></div></div>
@@ -223,7 +359,7 @@ const Dives = (() => {
     $("sumLastDate").textContent = fmtDayLong(sm.last.date);
     $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
     $("sumHours").textContent = U.hoursText(sm.totalSec);
-    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}`;
+    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on both computers, counted once (Cosmiq+ used)` : "");
   }
   /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */
   function renderDiverCard() {
@@ -288,7 +424,7 @@ const Dives = (() => {
         if (v) { a.fps.forEach((fp) => { map[fp] = v; }); n += a.fps.length; }
       });
       el.style.display = "none";
-      if (n) { await setLocations(map); say(`Location saved for ${n} dive${n === 1 ? "" : "s"}`); } else updateBanner(await all());
+      if (n) { await setLocations(map); say(savedText(`Location saved for ${n} dive${n === 1 ? "" : "s"}`)); } else updateBanner(await all());
     };
     const first = el.querySelector("input:not([value=''])") || el.querySelector("input"); if (first && !first.value) first.focus({ preventScroll: true });
   }
@@ -302,9 +438,39 @@ const Dives = (() => {
     $("locBannerBtn").onclick = () => openPrompt(missing, "Add dive locations", "Just the area, for example Banda, Komodo or Tulamben.");
   }
 
+  // ---------- one dive log per dive computer ----------
+  const DEV_KEY = "logDevice";
+  let selDevice = (() => { try { return localStorage.getItem(DEV_KEY); } catch (e) { return null; } })();
+  /** Draws the computer selector, shows the matching sync / import card, and returns the computer being shown. */
+  let curDevice = "cosmiq";                                                                           // the log being shown (picked by you, or your newest dive's computer)
+  function renderDeviceTabs(recs) {
+    const ids = U.DEVICES.map((x) => x.id);
+    const shown = ids.includes(selDevice) ? selDevice : recs.length ? U.deviceOf(recs[0]) : "cosmiq";    // until you pick one: the computer of your newest dive (not remembered, so it follows the data as it arrives)
+    const box = $("devTabs");
+    if (box) box.innerHTML = U.DEVICES.map((x) => { const n = recs.filter((r) => U.deviceOf(r) === x.id).length;
+      return `<button type="button" role="tab" aria-selected="${x.id === shown}" class="${x.id === shown ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
+    const sync = $("syncCard"), imp = $("importCard");
+    if (sync) sync.style.display = shown === "cosmiq" ? "" : "none";
+    if (imp) { imp.style.display = shown === "cosmiq" ? "none" : ""; }
+    curDevice = shown; return shown;
+  }
+  function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
+
   let renderPending = false, wired = false;
   function wireList(list) {
     if (wired) return; wired = true;
+    $("devTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-dev]"); if (b) pickDevice(b.dataset.dev); });
+    $("pgBtn").addEventListener("click", syncPeregrine); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
+    const card = $("importCard");                                                                  // drop a file from Finder / Spotlight / Files onto the card
+    if (card) {
+      const over = (on) => card.classList.toggle("dropping", on);
+      card.addEventListener("dragenter", (e) => { e.preventDefault(); over(true); }); card.addEventListener("dragover", (e) => { e.preventDefault(); over(true); });
+      card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) over(false); });
+      card.addEventListener("drop", async (e) => { e.preventDefault(); over(false); const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (fs.length) await importFiles(fs, curDevice); });
+    }
+    const zone = $("dropZone"); if (zone) zone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("impFile").click(); } });
+    const pick = $("impFile");
+    if (pick) pick.addEventListener("change", async (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) await importFiles(fs, curDevice); });
     list.addEventListener("click", async (e) => {
       const head = e.target.closest(".dh-loc");
       if (head) {                                                                // swap the chip for an editor
@@ -329,16 +495,16 @@ const Dives = (() => {
         if (!v) { say("Type a place first", "warn"); return; }
         const targets = U.bulkTargets((await all()).filter((r) => U.monthKey(r) === msave.dataset.month), replace);
         if (!targets.length) { say("Every dive this month already has a place. Tick \u201cReplace\u201d to change them.", "warn"); return; }
-        await setLocations(Object.fromEntries(targets.map((fp) => [fp, v]))); say(`Location saved for ${targets.length} dive${targets.length === 1 ? "" : "s"}`); return;
+        await setLocations(Object.fromEntries(targets.map((fp) => [fp, v]))); say(savedText(`Location saved for ${targets.length} dive${targets.length === 1 ? "" : "s"}`)); return;
       }
       if (e.target.closest(".dh-cancel")) { renderPending = false; render(); return; }
       const dsave = e.target.closest(".dh-save");
       if (dsave) {
         const date = dsave.dataset.date, v = dsave.parentElement.querySelector("input").value, rs = (await all()).filter((r) => U.dateKey(r) === date);
-        await setLocations(Object.fromEntries(rs.map((r) => [r.fingerprint, v]))); say(U.normalizeLocation(v) ? "Location saved" : "Location cleared"); return;
+        await setLocations(Object.fromEntries(rs.map((r) => [r.fingerprint, v]))); say(U.normalizeLocation(v) ? savedText("Location saved") : "Location cleared"); return;
       }
       const vsave = e.target.closest(".dive-loc-save");
-      if (vsave) { await setLocations({ [vsave.dataset.fp]: vsave.parentElement.querySelector("input").value }); say("Location saved"); }
+      if (vsave) { await setLocations({ [vsave.dataset.fp]: vsave.parentElement.querySelector("input").value }); say(savedText("Location saved")); }
     });
     list.addEventListener("keydown", (e) => {
       if (e.target.tagName !== "INPUT") return;
@@ -351,18 +517,21 @@ const Dives = (() => {
 
   async function render() {
     const list = $("diveList"); if (!list) return;
-    const recs = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-    $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
-    renderSummary(recs); renderDiverCard(); renderRegulatorCard(recs); updateBanner(recs); wireList(list);
+    const everything = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    $("diveCount").textContent = everything.length ? `(${everything.length})` : "";
+    renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(everything); wireList(list);
+    if (typeof PlacesUI !== "undefined") PlacesUI.render(everything);                  // map pins + places still to put on the map
+    const dups = U.duplicateMap(everything);                                            // dives both computers recorded: only the Cosmiq+ one is counted
+    const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "#c92a2a" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
-    if (!recs.length) { list.innerHTML = "<p class='muted'>No dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>"; return; }
+    if (!recs.length) { list.innerHTML = dev === "cosmiq" ? "<p class='muted'>No Cosmiq+ dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>" : `<p class='muted'>No ${esc(deviceName(dev))} dives yet. Export your log from its app as UDDF and choose the file above.</p>`; return; }
     const ae = document.activeElement;                                              // never rebuild the list under someone who is typing
     if (ae && ae.tagName === "INPUT" && (list.contains(ae) || ($("locPrompt") && $("locPrompt").contains(ae)))) { renderPending = true; return; }
 
-    const resolved = P.reconcileProfiles(recs);                                      // which profile really belongs to which dive
+    const resolved = dev === "cosmiq" ? P.reconcileProfiles(recs) : Object.fromEntries(recs.map((r) => [r.fingerprint, { status: "ok" }]));   // which profile really belongs to which dive (imports are complete)
     const asc = recs.slice().reverse(), gapBefore = new Map();
     asc.forEach((r, i) => { if (i) gapBefore.set(r.fingerprint, (asMs(r.startedAt) - (asMs(asc[i - 1].startedAt) + asc[i - 1].durationSec * 1000)) / 60000); });
 
@@ -376,15 +545,15 @@ const Dives = (() => {
     const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
     const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
     const rowHtml = (r) => {
-      const st = resolved[r.fingerprint].status, num = P.parseDive(P.fromHex(r.headerHex), new Uint8Array(0)).number;
+      const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
-        <span class="dive-num">#${num}</span><span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
-        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}
+        ${numBox(num)}<span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
+        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${dups.has(r.fingerprint) ? '<span class="badge also" title="Recorded by both computers: the Cosmiq+ dive is the one counted in the Summary">also on Cosmiq+</span>' : ""}
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };
-    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"} \u00b7 ${full} with full depth profile` +
-      `${partial ? ` \u00b7 ${partial} partial` : ""}${summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : ""}</p>`;
+    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${dev === "cosmiq" ? ` \u00b7 ${full} with full depth profile` +
+      `${partial ? ` \u00b7 ${partial} partial` : ""}${summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : ""}` : ""}</p>`;
     for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
@@ -404,7 +573,7 @@ const Dives = (() => {
     list.querySelectorAll("details.dive").forEach((el) => el.addEventListener("toggle", async () => {
       if (!el.open || el.dataset.done) return;
       const rec = recs.find((r) => r.fingerprint === el.dataset.fp);
-      try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null); el.dataset.done = 1; }
+      try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null, numbers.get(rec.fingerprint)); el.dataset.done = 1; }
       catch (e) { el.querySelector(".dive-body").textContent = "Cannot parse this dive: " + e.message; }
     }));
     list.querySelectorAll("details.dive").forEach((el) => { if (openDives.has(el.dataset.fp)) el.open = true; });     // keep what you had open
@@ -413,7 +582,8 @@ const Dives = (() => {
   async function exportBackup() {
     const recs = await all();
     const blob = new Blob([JSON.stringify({ app: "cosmiq-manager", exportedAt: new Date().toISOString(),
-      dives: recs.map(({ fingerprint, deviceMac, headerHex, profileHex }) => ({ fingerprint, deviceMac, headerHex, profileHex })) }, null, 1)], { type: "application/json" });
+      dives: recs.map((r) => isImported(r) ? { fingerprint: r.fingerprint, device: r.device, startedAt: r.startedAt, mode: r.mode, durationSec: r.durationSec, maxDepthM: r.maxDepthM, o2Percent: r.o2Percent, number: r.number, minTempC: r.minTempC, intervalSec: r.intervalSec, samples: r.samples, location: r.location }
+        : { fingerprint: r.fingerprint, deviceMac: r.deviceMac, headerHex: r.headerHex, profileHex: r.profileHex, location: r.location }) }, null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `cosmiq-dives-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
@@ -423,7 +593,7 @@ const Dives = (() => {
     const hdr = [`Dive Manager diagnostics`, `app version: ${self.APP_VERSION || "?"}`, `time: ${new Date().toString()}`,
       `user agent: ${navigator.userAgent}`, `web bluetooth: ${!!navigator.bluetooth}`, `secure context: ${window.isSecureContext}`,
       `last sync: ${JSON.stringify(last)}`, `dives stored on this phone: ${recs.length}`, `cloud: ${cloudState}`, ""];
-    const dv = recs.slice(0, 60).map((r) => `dive ${r.startedAt} ${r.mode} ${r.durationSec}s ${r.maxDepthM}m header=${r.headerHex} profileBytes=${r.profileHex.length / 2}`);
+    const dv = recs.slice(0, 60).map((r) => isImported(r) ? `dive ${r.startedAt} ${r.mode} ${r.durationSec}s ${r.maxDepthM}m device=${r.device} samples=${(r.samples || []).length}` : `dive ${r.startedAt} ${r.mode} ${r.durationSec}s ${r.maxDepthM}m header=${r.headerHex} profileBytes=${r.profileHex.length / 2}`);
     return hdr.concat(["--- stored dives (headers) ---"], dv, ["", `--- activity log (last ${lines.length} lines) ---`], lines).join("\n");
   }
   async function copyDiagnostics() {
@@ -436,5 +606,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { syncFromDevice, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { syncFromDevice, syncPeregrine, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();

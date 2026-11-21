@@ -42,7 +42,7 @@ test("summarize: last dive date, total dive time, dive count, location of the la
   const s = U.summarize(r, new Date(2026, 10, 21, 15, 0));
   assert.equal(s.count, 3); assert.equal(s.totalSec, 4500 + 3600 + 7260);
   assert.deepEqual(s.last, { date: "2026-10-17", startedAt: "2026-10-17T08:26:00", location: "Komodo", daysAgo: 35 });
-  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null });
+  assert.deepEqual(U.summarize([], new Date()), { count: 0, totalSec: 0, last: null, duplicates: 0 }); assert.equal(s.duplicates, 0);
   assert.equal(U.summarize([dive("2026-11-21T09:00:00", 60)], new Date(2026, 10, 21, 23, 59)).last.daysAgo, 0, "same calendar day = today");
 });
 
@@ -115,4 +115,95 @@ test("danStatus: ok / soon (within 60 days, including today) / expired; wording"
   assert.equal(U.danStatus("2026-12-25", today, 30).state, "ok", "the threshold can be changed"); assert.equal(U.danStatus("2026-12-25", today, 40).state, "soon");
   assert.deepEqual([null, -1, -51, 0, 1, 45, 130, 400].map(U.danText), ["", "expired yesterday", "expired 51 days ago", "expires today", "1 day left", "45 days left", "4 months left", "13 months left"]);
   assert.equal(U.daysUntil("2027-02-28", new Date(2026, 1, 28)), 365); assert.equal(U.daysUntil("2024-03-01", new Date(2024, 1, 28)), 2, "leap year");
+});
+
+test("latestCert: a certification you pinned always wins; a stale or non-certification pin is ignored", () => {
+  const certs = [{ id: "a", kind: "cert", label: "Advance", certifiedOn: "2020-01-01", createdAt: "2026-01-01" }, { id: "b", kind: "cert", label: "Dive Master", certifiedOn: "2024-06-01", createdAt: "2025-01-01" },
+    { id: "d", kind: "dan", label: "DAN card", certifiedOn: "2026-01-01", createdAt: "2026-02-01" }];
+  assert.equal(U.latestCert(certs).id, "b", "by date when nothing is pinned");
+  assert.equal(U.latestCert(certs, "a").id, "a", "pinned beats the newer date");
+  assert.equal(U.latestCert(certs, "d").id, "b", "an insurance file cannot be pinned as a certification");
+  assert.equal(U.latestCert(certs, "gone").id, "b", "pin of a deleted file falls back to the dates");
+  // the user's real case: no dates at all, so upload order decided it
+  const undated = [{ id: "1", label: "Dive Master", createdAt: "2026-05-01 10:00:00" }, { id: "2", label: "Advance Adventurer", createdAt: "2026-05-01 10:05:00" }];
+  assert.equal(U.latestCert(undated).id, "2", "without dates the last upload wins (the bug)"); assert.equal(U.latestCert(undated, "1").id, "1", "...unless you choose");
+});
+
+test("uniqueDives: a dive recorded by two computers counts once; separate dives and same-computer dives never merge", () => {
+  const d = (startedAt, durationSec, device, fp) => ({ fingerprint: fp || device + startedAt, startedAt, durationSec, ...(device ? { device } : {}) });
+  const cosmiq = d("2026-05-02T09:30:00", 2700), peregrine = d("2026-05-02T09:34:00", 2640, "peregrine");
+  assert.equal(U.uniqueDives([cosmiq, peregrine]).length, 1, "overlap = same dive");
+  assert.equal(U.uniqueDives([peregrine, cosmiq]).length, 1, "order does not matter");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T11:00:00", 2400, "peregrine")]).length, 2, "a later dive is a different dive");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T09:40:00", 600, undefined, "c2")]).length, 2, "same computer never merges");
+  assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T10:15:00", 2400, "peregrine")]).length, 2, "starting exactly when the other ended is a new dive");
+  assert.equal(U.uniqueDives([]).length, 0);
+  // totals and the regulator use it
+  assert.equal(U.summarize([cosmiq, peregrine]).count, 1); assert.equal(U.summarize([cosmiq, peregrine]).totalSec, 2700);
+  assert.equal(U.regulatorCount({ baseline: 10, since: "" }, [cosmiq, peregrine]), 11);
+  assert.equal(U.regulatorCount({ baseline: 0, since: "" }, [cosmiq, peregrine, d("2026-05-03T09:00:00", 3000, "peregrine")]), 2);
+});
+
+test("diveNumbers: the computer's own number, else the place in that computer's log; numbered per computer", () => {
+  const recs = [{ fingerprint: "a", startedAt: "2026-05-03T09:00:00", device: "peregrine" }, { fingerprint: "b", startedAt: "2026-05-01T09:00:00", device: "peregrine" },
+    { fingerprint: "c", startedAt: "2026-05-02T09:00:00", device: "peregrine", number: 41 }, { fingerprint: "x", startedAt: "2026-05-02T09:00:00", number: 106 }];
+  const n = U.diveNumbers(recs);
+  assert.equal(n.get("b"), 1); assert.equal(n.get("a"), 3); assert.equal(n.get("c"), 41, "own number wins"); assert.equal(n.get("x"), 106);
+});
+
+test("chart axes: round gridlines that always cover the data", () => {
+  for (const [max, step, top] of [[7, 2, 8], [3.4, 1, 4], [28.4, 10, 30], [18, 5, 20], [40, 10, 40], [41, 10, 50], [12, 5, 15], [0.5, 0.1, 0.5], [1, 0.2, 1], [100, 20, 100]]) {
+    const a = U.niceAxis(max, 5); assert.ok(a.max >= max - 1e-9, `covers ${max}`); assert.ok(Math.abs(a.step - step) < 1e-9 && Math.abs(a.max - top) < 1e-9, `${max}: ${JSON.stringify(a)}`);
+    assert.ok(Math.round(a.max / a.step) <= 5, "at most 5 gridlines");
+  }
+  assert.deepEqual(U.timeTicks(23 * 60), { step: 300, ticks: [300, 600, 900, 1200] });
+  assert.deepEqual(U.timeTicks(45 * 60).ticks, [600, 1200, 1800, 2400]); assert.ok(U.timeTicks(30).ticks.length <= 6);
+  assert.ok(U.timeTicks(3 * 3600).ticks.every((t) => t < 3 * 3600)); assert.ok(U.timeTicks(86400).ticks.length <= 12);
+});
+
+test("two dive computers: the Cosmiq+ dive is the one kept, in every situation seen in a real log", () => {
+  const d = (startedAt, durationSec, depth, device) => ({ fingerprint: (device || "cosmiq") + startedAt, startedAt, durationSec, maxDepthM: depth, ...(device ? { device } : {}) });
+  const cosmiq = (a, b, c) => d(a, b, c), pere = (a, b, c) => d(a, b, c, "peregrine");
+  const keptOf = (recs) => U.uniqueDives(recs).map((r) => r.fingerprint);
+  // the Peregrine started first: still the Cosmiq record is used (it used to be the earlier one)
+  assert.deepEqual(keptOf([pere("2026-05-02T09:28:00", 2760, 28.4), cosmiq("2026-05-02T09:30:00", 2700, 28.5)]), ["cosmiq2026-05-02T09:30:00"]);
+  assert.deepEqual(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:28:00", 2760, 28.4)]), ["cosmiq2026-05-02T09:30:00"], "order of the list does not matter");
+  // clocks 12 minutes apart (September 2024 in the real log): they still overlap
+  assert.equal(keptOf([cosmiq("2024-09-07T12:00:00", 3600, 21.76), pere("2024-09-07T12:12:00", 3600, 22)]).length, 1);
+  // clocks exactly one hour apart (5 May 2022 in the real log): no overlap on the clock, but the same dive
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 2903, 13.5)]).length, 1, "one hour apart, same length and depth");
+  assert.equal(keptOf([cosmiq("2022-05-05T14:58:00", 3360, 20.77), pere("2022-05-05T13:58:00", 3120, 20.1)]).length, 1);
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 1200, 13.5)]).length, 2, "an hour apart but a very different length: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:03:00", 3100, 30)]).length, 2, "an hour apart but a very different depth: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:25:00", 1800, 14.5)]).length, 2, "not a whole number of hours apart and no overlap: a different dive");
+  assert.equal(keptOf([cosmiq("2022-05-05T11:03:00", 3180, 14.54), pere("2022-05-05T10:40:00", 3180, 14.5)]).length, 1, "overlapping on the clock = the same dive");
+  // separate dives: a later one, and a Peregrine-only dive
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T13:30:00", 2700, 28.5)]).length, 2, "hours later, same numbers: a different dive");
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T13:30:00", 2700, 28.5)]).length, 2, "4 h apart is not a clock offset we trust");
+  // a Cosmiq dive that already has its own Peregrine twin is not matched again by a look-alike an hour away
+  assert.equal(keptOf([cosmiq("2026-05-02T11:00:00", 3000, 20), pere("2026-05-02T11:01:00", 3000, 20), pere("2026-05-02T10:00:00", 3000, 20)]).length, 2, "the look-alike stays a separate dive");
+  const all = [cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:31:00", 2640, 28.4), pere("2026-05-03T07:00:00", 3000, 20, "peregrine"), cosmiq("2026-05-04T07:00:00", 3000, 20)];
+  const m = U.duplicateMap(all); assert.deepEqual([...m.entries()], [["peregrine2026-05-02T09:31:00", "cosmiq2026-05-02T09:30:00"]], "only the Peregrine copy is marked, and it points at the Cosmiq dive");
+  assert.equal(U.uniqueDives(all).length, 3); const sm = U.summarize(all, new Date(2026, 10, 21)); assert.equal(sm.count, 3); assert.equal(sm.duplicates, 1); assert.equal(sm.totalSec, 2700 + 3000 + 3000, "the Cosmiq length is used, not the Peregrine's");
+  // short surface blips on the Peregrine during a Cosmiq dive are not extra dives
+  assert.equal(keptOf([cosmiq("2022-06-09T08:16:00", 3900, 16.89), pere("2022-06-09T08:20:00", 20, 2.4)]).length, 1);
+  // same computer never merges with itself, and unknown computers are left alone
+  assert.equal(keptOf([pere("2026-05-02T09:30:00", 2700, 28), pere("2026-05-02T09:40:00", 600, 5)]).length, 2);
+  assert.equal(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), { fingerprint: "x", startedAt: "2026-05-02T09:31:00", durationSec: 2600, maxDepthM: 28, device: "other" }]).length, 2);
+  assert.equal(U.regulatorCount({ baseline: 0, since: "" }, all), 3, "the regulator counts a dive worn on both wrists once");
+});
+
+test("Places.suggest: parses Photon results, drops junk and duplicates, needs 3 letters, newest request wins", async () => {
+  const P = createRequire(import.meta.url)("../public/places.js"); const calls = [];
+  const feat = (name, lon, lat, props = {}) => ({ geometry: { coordinates: [lon, lat] }, properties: { name, state: "North Sulawesi", country: "Indonesia", ...props } });
+  globalThis.fetch = async (url, opts) => { calls.push({ url, opts }); return { ok: true, status: 200, json: async () => ({ features: [feat("Bunaken", 124.84, 1.55, { district: "Bunaken" }), feat("Bunaken", 124.78, 1.6), feat("Bunaken National Park", 124.76, 1.67, { city: "Manado" }), feat("", 1, 1), feat("Nowhere", 500, 1), feat("Bad", "x", 1), { properties: { name: "NoGeometry" } }, feat("Bunaken", 124.8401, 1.5501)] }) }; };
+  assert.deepEqual(await P.suggest("bu"), [], "fewer than 3 letters: no request"); assert.equal(calls.length, 0);
+  const r = await P.suggest("  bunak "); assert.equal(calls.length, 1); assert.match(calls[0].url, /photon\.komoot\.io\/api\/\?limit=8&lang=en&q=bunak$/); assert.equal(calls[0].opts.referrerPolicy, "origin");
+  assert.deepEqual(r.map((x) => x.name), ["Bunaken", "Bunaken", "Bunaken National Park"], "empty names, impossible coordinates and a near-identical repeat are dropped; two different Bunakens stay");
+  assert.deepEqual(r[0], { name: "Bunaken", region: "North Sulawesi, Indonesia", lat: 1.55, lon: 124.84 }, "region leaves out the name itself"); assert.equal(r[2].region, "Manado, North Sulawesi, Indonesia");
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({}) }); await assert.rejects(P.suggest("bunaken"), /busy/);
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) }); assert.deepEqual(await P.suggest("bunaken"), []);
+  let aborted = 0; globalThis.fetch = (url, o) => new Promise((res, rej) => { o.signal.addEventListener("abort", () => { aborted++; rej(Object.assign(new Error("aborted"), { name: "AbortError" })); }); setTimeout(() => res({ ok: true, json: async () => ({ features: [] }) }), 20); });
+  const first = P.suggest("bunak1"), second = P.suggest("bunak2"); await assert.rejects(first, /aborted/); await second; assert.equal(aborted, 1, "a newer request cancels the older one");
+  delete globalThis.fetch;
 });

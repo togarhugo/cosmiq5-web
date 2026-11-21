@@ -5,14 +5,16 @@ const req = createRequire(import.meta.url);
 const P = req("../public/dive-protocol.js");
 const { chromium, devices } = req("playwright");
 import assert from "node:assert/strict";
+import { peregrine, pnfDive } from "./peregrine-sim.mjs";
+import { makeDb, dive as cloudDive, zip as makeZip } from "./cloud-fixture.mjs";
 
 const root = path.resolve("public");
 import { readFileSync } from "node:fs";
-const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url.split("?")[0] === "/" ? "index.html" : req.url.split("?")[0]);
   if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream" }); fs.createReadStream(f).pipe(res);
+  res.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream", "referrer-policy": "no-referrer" }); fs.createReadStream(f).pipe(res);   // like the Worker: the app sends no referrer unless a request asks for one
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
 
@@ -79,6 +81,8 @@ const fakeBle = () => {
 };
 
 const browser = await chromium.launch();
+// The map opens by itself after a new location is saved (a user setting, on by default). Older scenarios are about other things and do not mock the map: switch it off for them.
+{ const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); } catch (e) {} }); return c; }; }
 let failed = 0;
 for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKit UA, fake BLE)", "iPhone 13"]]) {
   const ctx = await browser.newContext({ ...devices[devName], serviceWorkers: "block" });
@@ -118,7 +122,8 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.equal(await page.locator("details.year").count(), 1);
       assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*2 dives[\s\S]*max \d+\.\d m/);
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
-      assert.match(await page.locator("details.dive").first().innerText(), /#2/); assert.match(await page.locator("details.dive").last().innerText(), /#1/);
+      assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
+      assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
       assert.match(await page.locator("#diveList > p").first().innerText(), /2 dives . 2 with full depth profile/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
@@ -190,11 +195,11 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     assert.equal(await page.locator("details.dive").count(), 3);
     assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
-    const row = (n) => page.locator("details.dive", { hasText: `#${n}` });
+    const row = (n) => page.locator("details.dive", { has: page.locator(".dive-num", { hasText: new RegExp("^" + n + "$") }) });
     assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
     assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
     await row(3).locator("summary").click(); await page.waitForSelector("details.dive[open] svg polyline");
-    assert.match(await row(3).innerText(), /#3[\s\S]*dive number/);
+    assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
     assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
@@ -442,6 +447,12 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     validColor: getComputedStyle(document.getElementById("sumDanValid")).color, rowBorder: getComputedStyle(document.getElementById("sumDanRow")).borderLeftColor }));
   const setDan = async (n, plan, valid) => { await page.fill("#danNumber", n); await page.fill("#danPlan", plan); await page.fill("#danValid", valid); await page.click("#danSave"); await toastIs(/DAN details saved/); };
   try {
+    // icons: a dive flag for the certification, the DAN logo for the membership (no emoji)
+    assert.equal(await page.locator("#sumDiver .diver-row svg.flag").count(), 1, "dive flag on the certification row");
+    assert.equal(await page.locator("#sumDiver .diver-row .ico", { hasText: /\S/ }).count(), 0, "no emoji or text icons left");
+    assert.ok(await page.locator("#sumDanRow img.dan-logo").evaluate((i) => i.complete && i.naturalWidth > 50), "the DAN logo loads");
+    assert.equal(await page.locator("#sumDiver .diver-row svg.flag polygon").getAttribute("fill"), "#fff");
+    await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png" });
     // 1. nothing entered yet: placeholders and hints; your Google name is the fallback for the name
     await until(async () => (await diver()).name === "Google Name", "the Google name as a fallback");
     let d = await diver(); assert.equal(d.cert, "None added yet"); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.match(d.certSub, /Add one in Account/);
@@ -456,7 +467,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await setDan("4412 3399", "DAN Master", "2026-03-31");
     assert.deepEqual(calls.at(-1), ["dan", { number: "4412 3399", plan: "DAN Master", validUntil: "2026-03-31" }]);
     assert.match(await page.locator("#danState").innerText(), /Valid until .*2026 . 12 months left/); assert.equal(await page.locator("#danBadge").innerText(), "Valid");
-    await page.click("#navSummary"); d = await diver();
+    await page.click("#navSummary"); d = await diver(); await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER_DAN || "/tmp/shot-diver-dan.png" });
     assert.match(d.danCls, /dan-ok/); assert.equal(d.dan, "#4412 3399 \u00b7 DAN Master"); assert.match(d.valid, /Valid until .*2026 . 12 months left/); assert.equal(d.rowBorder, "rgb(43, 138, 62)"); assert.equal(d.validColor, "rgb(43, 138, 62)");
     await page.click("#acctBtn"); await setDan("4412 3399", "DAN Master", "2025-04-30"); await page.click("#navSummary"); d = await diver();
     assert.match(d.danCls, /dan-soon/); assert.match(d.valid, /Valid until .*2025 . 44 days left/); assert.equal(d.rowBorder, "rgb(230, 119, 0)"); assert.equal(d.validColor, "rgb(217, 72, 15)");
@@ -488,6 +499,434 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png", fullPage: true });
     console.log("PASS diver card + DAN");
   } catch (e) { failed++; console.log("FAIL diver card + DAN\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-diver.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: choose which certification is your latest (the Summary was showing the wrong one) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  let pinned = ""; const calls = [];
+  const files = [["0000000000000001", "PADI Dive Master", "2026-05-01 10:00:00"], ["0000000000000002", "SSI Advance Adventurer", "2026-05-01 10:05:00"], ["0000000000000003", "PADI EFR", "2026-05-01 10:02:00"]]
+    .map(([id, label, createdAt]) => ({ id, label, number: "", kind: "cert", certifiedOn: "", filename: label + ".jpg", mime: "image/jpeg", size: 100, createdAt }));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: pinned, dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/profile/latest-cert", (r) => { const b = JSON.parse(r.request().postData()); calls.push(b.id); pinned = b.id; return r.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: files } }));
+  await page.goto(base);
+  try {
+    const cert = () => page.locator("#sumCert").innerText();
+    await page.waitForFunction(() => document.getElementById("sumCert").textContent !== "None added yet", null, { timeout: 8000 });
+    assert.equal(await cert(), "SSI Advance Adventurer", "without dates the last upload is picked (the wrong result the user saw)");
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click();
+    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked latest"); assert.match(await page.locator("#certList .cert.latest").innerText(), /Advance Adventurer/);
+    assert.equal(await page.locator("#certList .cert-latest").count(), 2, "the other two offer 'Set as my latest certification'");
+    assert.equal(await page.locator("#certAuto").isVisible(), false, "no 'use newest' button while automatic");
+    await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".cert-latest").click();
+    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    assert.deepEqual(calls, ["0000000000000001"]); assert.equal(await page.locator("#certList .latest-tag").count(), 1);
+    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/);
+    await page.click("#navSummary"); assert.equal(await cert(), "PADI Dive Master", "the Summary now shows the one you chose");
+    await page.reload(); await page.waitForFunction(() => /Dive Master/.test(document.getElementById("sumCert").textContent), null, { timeout: 8000 });
+    assert.equal(await cert(), "PADI Dive Master", "still the one you chose after a reload (saved in your account)");
+    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click(); await page.click("#certAuto");
+    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    assert.deepEqual(calls, ["0000000000000001", ""], "back to automatic");
+    console.log("PASS latest certification");
+  } catch (e) { failed++; console.log("FAIL latest certification\n ", e.message.split("\n").slice(0, 6).join(" | ")); await page.screenshot({ path: "/tmp/fail-latest.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: second dive computer (Shearwater Peregrine): import a UDDF file, separate log, grid chart, boxed numbers ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errors2 = []; page.on("pageerror", (e) => errors2.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: { name: "Tecline", type: "R4", baseline: 0, since: "" } } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.addInitScript(fakeBle); await page.addInitScript(() => { window.__wrap = false; });
+  await page.goto(base);
+  const wp = (t, d, k) => `<waypoint><divetime>${t}</divetime><depth>${d}</depth><temperature>${k}</temperature></waypoint>`;
+  const dive = (when, num, maxd, dur) => `<dive id="d${num}"><informationbeforedive><datetime>${when}</datetime><divenumber>${num}</divenumber></informationbeforedive><tankdata><link ref="ean32"/></tankdata><samples>${[wp(0, 0, 302.15), wp(60, maxd / 2, 301.65), wp(120, maxd, 301.15), wp(180, maxd / 2, 301.65), wp(240, 0, 302.15)].join("")}</samples><informationafterdive><greatestdepth>${maxd}</greatestdepth><diveduration>${dur}</diveduration><lowesttemperature>301.15</lowesttemperature></informationafterdive></dive>`;
+  const uddf = (dives) => Buffer.from(`<?xml version="1.0"?><uddf version="3.2.0" xmlns="http://www.streit.cc/uddf/3.2/"><gasdefinitions><mix id="ean32"><o2>0.32</o2></mix></gasdefinitions><profiledata><repetitiongroup>${dives}</repetitiongroup></profiledata></uddf>`);
+  try {
+    // two Cosmiq dives first (14 and 15 March 2025), then the Peregrine file with one dive that overlaps Cosmiq dive 1 (same dive worn on both wrists) and two new ones
+    await page.click("#connectBtn"); await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
+    await page.click("#locLater").catch(() => {});
+    assert.ok(await page.locator("#devTabs").isVisible(), "computer selector in the dive log");
+    assert.equal(await page.locator("#devTabs button").count(), 2); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
+    assert.ok(await page.locator("#syncCard").isVisible() && !(await page.locator("#importCard").isVisible()), "Cosmiq shows the sync card");
+    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#importCard", { state: "visible" });
+    assert.ok(await page.locator("#importCard").isVisible() && !(await page.locator("#syncCard").isVisible()), "Peregrine shows the import card, not the Bluetooth sync");
+    assert.match(await page.locator("#diveList").innerText(), /No Shearwater Peregrine dives yet/);
+    const bad = { name: "log.uddf", mimeType: "application/xml", buffer: Buffer.from("<html><body>hello</body></html>") };
+    await page.setInputFiles("#impFile", bad); await page.waitForFunction(() => /not a UDDF/.test(document.getElementById("impMsg").textContent), null, { timeout: 5000 });
+    assert.equal(uploaded.filter((d) => d.device === "peregrine").length, 0, "nothing uploaded from a bad file"); assert.equal(await page.locator("details.dive").count(), 0);
+    const good = { name: "shearwater.uddf", mimeType: "application/xml", buffer: uddf(dive("2025-03-14T09:33:10", 41, 28.4, 2520) + dive("2025-03-16T10:00:00", 42, 18.2, 2400) + dive("2025-03-16T14:00:00", 43, 12.5, 3000)) };
+    await page.setInputFiles("#impFile", good);
+    await page.waitForFunction(() => /3 new dives imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.match(await page.locator("#impMsg").innerText(), /3 uploaded/);
+    assert.equal(uploaded.length, 5, "2 Cosmiq + 3 Peregrine"); const u = uploaded.find((d) => d.startedAt === "2025-03-16T10:00:00");
+    assert.equal(u.device, "peregrine"); assert.equal(u.headerHex, ""); assert.equal(u.maxDepthM, 18.2); assert.equal(u.o2Percent, 32); const x = JSON.parse(u.extra); assert.equal(x.n, 42); assert.equal(x.s.length, 5); assert.deepEqual(x.s[2], [120, 18.2, 28]);
+    // separate logs: Peregrine tab lists only its 3 dives, the Cosmiq tab still only its 2
+    assert.equal(await page.locator("details.dive").count(), 3); assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/);
+    assert.match(await page.locator("#diveList > p").first().innerText(), /^3 dives$/);
+    await page.locator("#devTabs button", { hasText: "Cosmiq" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 2, null, { timeout: 5000 });
+    assert.match(await page.locator("#navLog").innerText(), /Dive log \(5\)/, "the nav counts every dive");
+    // the choice is remembered
+    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 3, null, { timeout: 5000 });
+    // dive numbers: bold, boxed, no '#'
+    const num = page.locator("details.dive .dive-num").first();
+    assert.equal(await num.innerText(), "43"); const st = await num.evaluate((e) => { const c = getComputedStyle(e); return { w: c.fontWeight, br: c.borderTopWidth, bg: c.backgroundColor, rad: c.borderTopLeftRadius }; });
+    assert.ok(+st.w >= 700, "bold"); assert.equal(st.br, "1px"); assert.notEqual(st.bg, "rgba(0, 0, 0, 0)"); assert.notEqual(st.rad, "0px");
+    // a dive with the grid: horizontal depth lines labelled in metres, vertical time lines in minutes
+    await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator("summary").click();
+    const svg = page.locator("details.dive[open] svg.chart"); await svg.waitFor();
+    const lines = await svg.locator("line").count(); assert.ok(lines >= 6, "grid lines drawn: " + lines);
+    const labels = await svg.locator("text").evaluateAll((els) => els.map((e) => e.textContent)); assert.ok(labels.includes("0 m") && labels.includes("10") && labels.includes("30"), "depth labels: " + labels.join(","));
+    await page.screenshot({ path: process.env.SHOT_PEREGRINE || "/tmp/shot-peregrine.png", fullPage: true });
+    assert.match(await svg.getAttribute("aria-label"), /gridlines every 10 m/);
+    assert.match(await page.locator("details.dive[open]").innerText(), /28\.4 m[\s\S]*42 min[\s\S]*28\.0 .C[\s\S]*32%/);
+    assert.match(await page.locator("details.dive[open]").innerText(), /Imported from a file/);
+    // the same file again adds nothing; the same dive on both wrists counts once in the Summary and the regulator
+    await page.setInputFiles("#impFile", good); await page.waitForFunction(() => /0 new dives imported, 3 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.equal(uploaded.length, 5, "no duplicate upload");
+    await page.click("#navSummary");
+    assert.match(await page.locator("#sumCount").innerText(), /across 4 dives . 1 recorded on both computers, counted once \(Cosmiq\+ used\)/, "5 logged, one recorded by both computers = 4, and the Summary says so");
+    assert.equal(await page.locator("#sumRegCount").innerText(), "3", "regulator: 4 dives minus the freedive; the dive on both wrists counted once");
+    // location prompt covers imported dives, and saving it reaches them
+    await page.click("#navLog"); await page.waitForSelector("#locPrompt input", { state: "visible" });
+    assert.equal(await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator(".badge.also").count(), 1, "the Peregrine copy of the dive Cosmiq also recorded is marked");
+    assert.equal(await page.locator("details.dive .badge.also").count(), 1, "and only that one");
+    assert.match(await page.locator("#locPrompt h3").innerText(), /Where did you dive/); assert.match(await page.locator("#locPrompt").innerText(), /imported dives?/);
+    const locCalls = []; await page.unroute("**/api/dives/location"); await page.route("**/api/dives/location", (r) => { locCalls.push(...JSON.parse(r.request().postData()).items); return r.fulfill({ json: { updated: 1 } }); });
+    const firstIn = page.locator("#locPrompt .locask input").first(); await firstIn.fill("Banda"); await page.click("#locSave");
+    await page.waitForFunction(() => /Location saved for/.test(document.getElementById("toast").textContent), null, { timeout: 5000 });
+    assert.ok(locCalls.length >= 1 && locCalls.every((i) => i.location === "Banda"), "the place of imported dives is sent to the cloud: " + JSON.stringify(locCalls));
+    // reload: imported dives come back from the cloud (device + extra) and the selected computer is remembered
+    const stored = uploaded.filter((d) => d.device === "peregrine");
+    await page.unroute("**/api/dives"); await page.route("**/api/dives", (r) => r.request().method() === "GET" ? r.fulfill({ json: { dives: stored.map((d) => ({ ...d, deviceMac: null, location: null })) } }) : r.fulfill({ json: { stored: 0 } }));
+    await page.evaluate(() => indexedDB.deleteDatabase("cosmiq")); await page.reload();
+    await page.waitForFunction(() => /Dive log \(3\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
+    await page.click("#navLog"); assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/, "remembered the computer");
+    await page.locator("details.dive", { has: page.locator(".dive-num", { hasText: /^41$/ }) }).locator("summary").click(); await page.locator("details.dive[open] svg.chart").waitFor();
+    assert.deepEqual(errors2, [], "page errors");
+    console.log("PASS second dive computer");
+  } catch (e) { failed++; console.log("FAIL second dive computer\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-peregrine.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: Shearwater Peregrine over (fake) Web Bluetooth: connect, download only new dives, errors are explained ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  const T = (d, h) => Date.UTC(2026, 4, d, h, 30) / 1000, mk = (ticks, d10, n) => ({ ticks, blob: pnfDive({ ticks, maxDepth10: d10, duration: 2400 + n * 60, samples: [[0, 50, 28], [0, d10 / 2, 28], [0, d10, 27], [0, 30, 27]] }) });
+  const sim = peregrine({ dives: [mk(T(2, 9), 285, 1), mk(T(2, 14), 190, 2), mk(T(3, 9), 240, 3)] });
+  await page.exposeFunction("__pgWrite", async (arr) => { await sim.io.write(Uint8Array.from(arr)); return sim.drain().map((a) => Array.from(a)); });
+  await page.addInitScript(() => {
+    window.__pgMode = "ok";
+    const dev = { name: "Peregrine", addEventListener() {}, gatt: { connect: async () => server, disconnect() { window.__pgDisconnected = true; } } };
+    let onChange = null;
+    const ch = { properties: { notify: true, writeWithoutResponse: true }, addEventListener(t, f) { if (t === "characteristicvaluechanged") onChange = f; }, async startNotifications() {},
+      async writeValueWithoutResponse(v) { if (v.byteLength > 20) throw new Error("write longer than 20 bytes"); const notes = await window.__pgWrite(Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)));
+        setTimeout(() => notes.forEach((n) => onChange({ target: { value: new DataView(Uint8Array.from(n).buffer) } })), 0); } };
+    const server = { getPrimaryService: async (u) => { if (window.__pgMode === "wrong") throw new Error("no service"); if (u !== "fe25c237-0ece-443c-b0aa-e02033e7029d") throw new Error("bad uuid"); return { getCharacteristics: async () => [{ properties: { read: true }, uuid: "x" }, ch] }; } };
+    Object.defineProperty(navigator, "bluetooth", { configurable: true, value: { requestDevice: async (o) => {
+      if (window.__pgMode === "cancel") throw Object.assign(new Error("User cancelled"), { name: "NotFoundError" });
+      if (!o.optionalServices || !o.optionalServices.includes("fe25c237-0ece-443c-b0aa-e02033e7029d")) throw new Error("service not requested"); window.__pgAsked = o; return dev; } } });
+  });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth menu/);
+    // a device that is not a Shearwater, and a cancelled chooser: clear messages, nothing saved
+    await page.evaluate(() => { window.__pgMode = "wrong"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /not a Shearwater dive computer/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => window.__pgDisconnected), true, "disconnected again after the wrong device");
+    await page.evaluate(() => { window.__pgMode = "cancel"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /No dive computer was chosen/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    assert.equal(await page.locator("#pgMsg").evaluate((e) => getComputedStyle(e).color !== "rgb(201, 42, 42)"), true, "cancelling is not shown as an error");
+    // the real thing
+    await page.evaluate(() => { window.__pgMode = "ok"; }); await page.click("#pgBtn");
+    await page.waitForFunction(() => /Peregrine: 3 on the dive computer, 3 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
+    assert.match(await page.locator("#pgMsg").innerText(), /3 uploaded/);
+    assert.equal(uploaded.length, 3); assert.deepEqual(uploaded.map((d) => d.startedAt).sort(), ["2026-05-02T09:30:00", "2026-05-02T14:30:00", "2026-05-03T09:30:00"]);
+    const u = uploaded.find((d) => d.startedAt === "2026-05-02T09:30:00"); assert.equal(u.device, "peregrine"); assert.equal(u.maxDepthM, 28.5); assert.equal(u.durationSec, 2460); assert.equal(u.o2Percent, 32); assert.equal(u.headerHex, "");
+    const x = JSON.parse(u.extra); assert.equal(x.s.length, 4); assert.equal(x.iv, 10); assert.deepEqual(x.s[2], [30, 28.5, 27]);
+    assert.equal(await page.evaluate(() => window.__pgDisconnected), true); assert.equal(await page.locator("#pgBtn").isDisabled(), false);
+    assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 4, "1 manifest + 3 dives were requested"); assert.equal(sim.log.at(-1), "shutdown");
+    assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/); assert.equal(await page.locator("details.dive").count(), 3);
+    await page.waitForSelector("#locPrompt input", { state: "visible" }); assert.match(await page.locator("#locPrompt").innerText(), /3 new Peregrine dives/);
+    await page.locator("details.dive").first().locator("summary").click(); await page.waitForSelector("details.dive[open] svg.chart");
+    // second run: nothing new, no dive is downloaded again
+    sim.log.length = 0; await page.click("#pgBtn");
+    await page.waitForFunction(() => /Peregrine: 3 on the dive computer, 0 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
+    assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 1, "only the manifest is read"); assert.equal(uploaded.length, 3);
+    assert.deepEqual(errs, [], "page errors");
+    console.log("PASS peregrine bluetooth");
+  } catch (e) { failed++; console.log("FAIL peregrine bluetooth\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-pg.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: import the Peregrine's dives from a Shearwater Cloud database (.db) or its ZIP ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
+    const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.waitForSelector("#dropZone", { state: "visible" }); assert.ok(await page.locator("#dropZone").isVisible(), "a visible drop box"); assert.match(await page.locator("#dropZone").innerText(), /Drop your Shearwater Cloud file here/);
+    assert.equal(await page.locator("#impFile").getAttribute("accept"), null, "no file-type filter: macOS greys out files the filter does not know (.db)");
+    await page.locator("#importCard").screenshot({ path: process.env.SHOT_IMPORT || "/tmp/shot-import.png" });
+    assert.match(await page.locator("#importCard").innerText(), /Export the database|export the database/i); assert.match(await page.locator("#importCard").innerText(), /Shearwater Cloud/);
+    const dbBytes = makeDb({ dives: [cloudDive(0), cloudDive(1), cloudDive(2, { deleted: true }), cloudDive(3, { format: "sw-clouddb" }), cloudDive(4, { blob: Buffer.from("this is not a dive, only text that is long enough") }), cloudDive(5)] });
+    await page.setInputFiles("#impFile", { name: "dive_data.db", mimeType: "application/octet-stream", buffer: Buffer.from(dbBytes) });
+    await page.waitForFunction(() => /3 new dives imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    const msg = await page.locator("#impMsg").innerText(); assert.match(msg, /2 skipped/); assert.match(msg, /3 uploaded/); assert.match(msg, /could not be read|implausible|unexpected/i, "the broken dive is reported: " + msg);
+    assert.equal(uploaded.length, 3); assert.ok(uploaded.every((d) => d.device === "peregrine" && d.headerHex === "" && JSON.parse(d.extra).s.length > 50));
+    assert.deepEqual(await page.locator("details.dive .dive-num").allInnerTexts(), ["105", "101", "100"], "logbook numbers from the Shearwater Cloud database, newest first");
+    await page.waitForSelector("#locPrompt input", { state: "visible" });
+    await page.locator("details.dive").last().locator("summary").click(); const svg = page.locator("details.dive[open] svg.chart"); await svg.waitFor();
+    assert.ok((await svg.locator("line").count()) >= 6); assert.match(await page.locator("details.dive[open]").innerText(), /28\.5 m[\s\S]*20 min[\s\S]*32%/);
+    // the same database again adds nothing; a ZIP (the account export) with one more dive adds just that one
+    await page.setInputFiles("#impFile", { name: "again.db", mimeType: "application/octet-stream", buffer: Buffer.from(dbBytes) });
+    await page.waitForFunction(() => /0 new dives imported, 3 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    const zipBytes = makeZip([["SyncReport.txt", Buffer.from("ok"), 8], ["dive_data.db", Buffer.from(makeDb({ dives: [cloudDive(0), cloudDive(6)] })), 8]]);
+    await page.setInputFiles("#impFile", { name: "account.zip", mimeType: "application/zip", buffer: Buffer.from(zipBytes) });
+    await page.waitForFunction(() => /1 new dive imported, 1 already there/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    assert.equal(uploaded.length, 4); assert.equal(await page.locator("details.dive").count(), 4);
+    // drag and drop onto the card works like the chooser (the file need not be found in a folder dialog)
+    await page.locator("#importCard").evaluate((card) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(0)], "empty.db")); card.querySelector("#dropZone").dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true })); window.__dropClass = card.className; });
+    assert.match(await page.evaluate(() => window.__dropClass), /dropping/, "the box highlights while a file is dragged over it");
+    assert.equal(await page.locator("#dropZone").evaluate((e) => getComputedStyle(e).borderTopStyle), "solid", "visibly changes while hovering");
+    const dropBytes = makeDb({ dives: [cloudDive(7)] });
+    await page.locator("#dropZone").evaluate(async (zone, arr) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(arr)], "dropped.db")); zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true })); }, Array.from(dropBytes));
+    await page.waitForFunction(() => /1 new dive imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 20000 });
+    assert.equal(uploaded.length, 5); assert.ok(!(await page.locator("#importCard").getAttribute("class")).includes("dropping"), "highlight cleared after the drop");
+    // not a Shearwater file: a plain message
+    await page.setInputFiles("#impFile", { name: "notes.db", mimeType: "application/octet-stream", buffer: Buffer.from("PK\u0003\u0004 nope".padEnd(100, " ")) });
+    await page.waitForFunction(() => /damaged|no database|neither/i.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 });
+    assert.equal(uploaded.length, 5); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS shearwater cloud database");
+  } catch (e) { failed++; console.log("FAIL shearwater cloud database\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cloud.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- optional: a real Shearwater Cloud export (REAL_DB=/path/to/file.db node test/e2e.mjs); skipped when not set ----
+if (process.env.REAL_DB) {
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  for (const [u, j] of [["me", { email: "you@example.com", name: "Me", version: "0.0.0" }], ["regulator", { regulator: null }], ["profile", { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } }], ["certs", { certs: [] }]]) await page.route("**/api/" + u, (r) => r.fulfill({ json: j }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } }); const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.setInputFiles("#impFile", process.env.REAL_DB);
+    await page.waitForFunction(() => /dives? imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 120000 });
+    console.log("  real file:", await page.locator("#impMsg").innerText());
+    const nums = await page.locator("details.dive .dive-num").allInnerTexts(); console.log("  newest numbers:", nums.slice(0, 5).join(","), "oldest:", nums.slice(-3).join(","), "total", nums.length);
+    await page.locator("details.dive").first().locator("summary").click(); await page.locator("details.dive[open] svg.chart").waitFor(); await page.screenshot({ path: process.env.SHOT_REAL || "/tmp/shot-real.png", fullPage: true });
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS real shearwater export");
+  } catch (e) { failed++; console.log("FAIL real shearwater export\n ", e.message.split("\n").slice(0, 8).join(" | ")); await page.screenshot({ path: "/tmp/fail-real.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: dive places on a map (Summary map with pins, place search, tap / drag, queue of places to put on the map) ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], calls = [], referers = []; page.on("pageerror", (e) => errs.push(e.message));
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  let nominatimMode = "ok";
+  await page.route("**/tile.openstreetmap.org/**", (r) => { referers.push(["tile", r.request().headers().referer]); return r.fulfill({ body: PNG1, contentType: "image/png" }); });
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); calls.push(q); referers.push(["search", r.request().headers().referer]);
+    if (nominatimMode === "busy") return r.fulfill({ status: 429, body: "slow down" });
+    const rows = { Tulamben: [{ name: "Tulamben", display_name: "Tulamben, Kubu, Karangasem, Bali, Indonesia", lat: "-8.2948774", lon: "115.5941905", boundingbox: ["-8.33", "-8.25", "115.55", "115.62"] }, { name: "Tulamben Wreck", display_name: "USAT Liberty Wreck, Tulamben, Bali", lat: "-8.2744", lon: "115.5922" }], Banda: [] }[q] || [];
+    return r.fulfill({ json: rows, headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places.splice(i, 1); return r.fulfill({ json: { deleted: i >= 0 ? 1 : 0 } }); }
+    return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, loc, n) => ({ fingerprint: (0xabc000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: loc, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", "Tulamben", 1), mk("2025-03-14T13:00:00", "tulamben", 2), mk("2025-03-15T09:00:00", "Tulamben", 3), mk("2024-07-02T09:00:00", "Komodo", 4), mk("2023-05-02T09:00:00", "Banda", 5), mk("2023-05-03T09:00:00", "", 6)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const sumMsg = () => page.locator("#mapMsg").innerText();
+    await page.waitForFunction(() => /3 places/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
+    assert.ok(await page.locator("#mapCard").isVisible()); assert.match(await sumMsg(), /3 places . 0 on the map . 3 still to place/, "Tulamben and tulamben are one place; the dive without a place is not counted");
+    await page.locator("#sumMap .leaflet-container, #sumMap.leaflet-container").first().waitFor();
+    assert.equal(await page.locator("#sumMap .leaflet-marker-icon").count(), 0, "no pins yet");
+    assert.deepEqual(await page.locator("#mapUnplaced .chip").allInnerTexts().then((a) => a.map((x) => x.replace(/[^\w ]/g, "").trim().replace(/\s+/g, " "))), ["Tulamben 3", "Banda 1", "Komodo 1"], "most dives first");
+    assert.match(await page.locator("#sumMap .leaflet-control-attribution").innerText(), /OpenStreetMap/, "attribution shown");
+    // 1. search -> pick a result -> save
+    await page.locator("#mapUnplaced .chip").first().click(); await page.waitForSelector("#placePicker", { state: "visible" });
+    assert.match(await page.locator("#ppTitle").innerText(), /Where is .Tulamben.\? \(2 more after this\)/); assert.equal(await page.inputValue("#ppQuery"), "Tulamben");
+    await page.waitForSelector("#ppResults .res"); assert.deepEqual(calls, ["Tulamben"], "one search request, started by opening the picker"); assert.equal(await page.locator("#ppResults .res").count(), 2);
+    assert.equal(await page.locator("#ppSave").isDisabled(), true, "nothing is saved until you choose");
+    await page.locator("#ppResults .res").first().click(); assert.match(await page.locator("#ppCoords").innerText(), /-8\.2949, 115\.5942/); assert.equal(await page.locator("#ppSave").isDisabled(), false);
+    await page.click("#ppSave"); await page.waitForFunction(() => /Banda/.test(document.getElementById("ppTitle").textContent));
+    assert.deepEqual(places, [{ name: "Tulamben", lat: -8.2948774, lon: 115.5941905 }], "saved under the name you use, with the position from the search");
+    // 2. nothing found -> tap on the map instead, drag-free
+    await page.waitForFunction(() => /Nothing found/.test(document.getElementById("ppResults").textContent), null, { timeout: 8000 }); assert.equal(await page.locator("#ppSave").isDisabled(), true);
+    await page.locator("#ppMap").click({ position: { x: 150, y: 120 } }); assert.equal(await page.locator("#ppMap .leaflet-marker-icon").count(), 1, "pin dropped where you tapped"); assert.equal(await page.locator("#ppSave").isDisabled(), false);
+    const first = await page.locator("#ppCoords").innerText(); await page.locator("#ppMap").click({ position: { x: 60, y: 200 } }); assert.notEqual(await page.locator("#ppCoords").innerText(), first, "tapping again moves the pin");
+    await page.click("#ppSave"); await page.waitForFunction(() => /Komodo/.test(document.getElementById("ppTitle").textContent)); assert.equal(places.length, 2);
+    assert.equal(await page.locator("#ppSkip").innerText(), "Cancel", "the last place: Skip is a Cancel");
+    // 3. Komodo: a failing search is explained, and the picker can simply be closed (nothing saved)
+    nominatimMode = "busy"; await page.fill("#ppQuery", "Komodo island"); await page.click("#ppGo");
+    await page.waitForFunction(() => /busy/.test(document.getElementById("ppResults").textContent), null, { timeout: 8000 });
+    await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" }); assert.equal(places.length, 2);
+    // 4. the Summary now shows pins, a popup with the dive count, and what is still to place
+    await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.match(await sumMsg(), /2 on the map . 1 still to place/); assert.equal(await page.locator("#mapUnplaced .chip").count(), 1);
+    await page.locator("#sumMap .leaflet-marker-icon").first().click(); await page.waitForSelector("#sumMap .pin-pop");
+    assert.match(await page.locator("#sumMap .pin-pop").innerText(), /Tulamben[\s\S]*3 dives[\s\S]*Mar 2025/); assert.equal(await page.locator("#sumMap .pin-pop .btn-set").innerText(), "Move pin");
+    assert.match((await page.locator("#sumMap .leaflet-marker-icon svg text").first().textContent()), /3|1/, "the number of dives is on the pin");
+    // 5. the dive log says what is missing, and the app tells OpenStreetMap who is asking
+    await page.click("#navLog"); await page.waitForSelector("#placeBanner", { state: "visible" }); assert.match(await page.locator("#placeBannerText").innerText(), /1 place is not on the map yet/);
+    const origin = new URL(base).origin + "/"; assert.ok(referers.length > 3 && referers.every(([, ref]) => ref === origin), "tiles and search send the app's origin as referrer: " + JSON.stringify(referers.slice(0, 3)));
+    // 6. remove a pin from the list
+    await page.click("#navSummary"); await page.locator("#mapCard details summary").click(); await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
+    await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 1, null, { timeout: 8000 }); assert.equal(places.length, 1);
+    // 7. a reload brings the pins back from the account
+    await page.reload(); await page.waitForFunction(() => /1 on the map/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
+    await page.screenshot({ path: process.env.SHOT_MAP || "/tmp/shot-map.png", fullPage: true });
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS places on a map");
+  } catch (e) { failed++; console.log("FAIL places on a map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-map.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: entering a location in the dive log goes straight to the map search ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], searches = []; page.on("pageerror", (e) => errs.push(e.message));
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await ctx.addInitScript(() => { try { localStorage.removeItem("mapAsk"); } catch (e) {} });          // the default: on
+  await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); searches.push(q);
+    const hit = (n, lat, lon) => [{ name: n, display_name: n + ", Indonesia", lat: String(lat), lon: String(lon) }];
+    return r.fulfill({ json: { Tulamben: hit("Tulamben", -8.29, 115.59), Komodo: hit("Komodo", -8.55, 119.49), Wakatobi: hit("Wakatobi", -5.3, 123.6) }[q] || [], headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") return r.fulfill({ json: { deleted: 0 } }); return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, n) => ({ fingerprint: (0xdef000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: null, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2), mk("2025-03-16T09:00:00", 3), mk("2025-03-17T09:00:00", 4)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const picker = () => page.locator("#placePicker"); const titleIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("ppTitle").textContent), re.source, { timeout: 8000 });
+    await page.waitForFunction(() => /Dive log \(4\)/.test(document.getElementById("navLog").textContent)); await page.click("#navLog");
+    // 1. add locations for two dates in the question: after Save the map search opens for each new place, one after the other
+    await page.locator("#locBannerBtn").click(); await page.waitForSelector("#locPrompt .locask input", { state: "visible" });
+    const ins = page.locator("#locPrompt .locask input"); await ins.nth(0).fill("Tulamben"); await ins.nth(1).fill("Komodo"); await ins.nth(2).fill("tulamben");
+    await page.click("#locSave"); await page.waitForSelector("#placePicker", { state: "visible" });
+    await titleIs(/Where is .Tulamben.\? \(1 more after this\)/); assert.match(await page.locator("#ppHint").innerText(), /You just entered this location/); assert.equal(await page.inputValue("#ppQuery"), "Tulamben");
+    await page.waitForSelector("#ppResults .res"); assert.deepEqual(searches, ["Tulamben"], "the new place was searched, once (the spelling variant is the same place)");
+    await page.locator("#ppResults .res").first().click(); await page.click("#ppSave"); await titleIs(/Where is .Komodo.\?/);
+    assert.deepEqual(places.map((p) => p.name), ["Tulamben"]); assert.equal(await page.locator("#ppSkipAll").isVisible(), false, "no 'Skip all' on the last one");
+    await page.waitForSelector("#ppResults .res"); await page.locator("#ppResults .res").first().click(); await page.click("#ppSave"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    assert.deepEqual(places.map((p) => p.name), ["Tulamben", "Komodo"]);
+    // 2. a place that is already on the map does not open the map again (edit one dive's location)
+    await page.locator("details.dive").first().locator("summary").click(); const one = page.locator("details.dive[open] .dive-loc");
+    await one.fill("Tulamben"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForFunction(() => /Location saved/.test(document.getElementById("toast").textContent));
+    await page.waitForTimeout(500); assert.ok(!(await picker().isVisible()), "Tulamben is already on the map"); assert.equal(searches.length, 2, "no extra search");
+    // 3. a new place in the per-date editor opens the map; 'Skip all' / the switch: it can be turned off
+    await one.fill("Wakatobi"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForSelector("#placePicker", { state: "visible" }); await titleIs(/Where is .Wakatobi.\?/);
+    assert.equal(await page.locator("#ppAuto").isChecked(), true, "on by default"); await page.locator("#ppAuto").uncheck(); await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    assert.equal(await page.evaluate(() => localStorage.getItem("mapAsk")), "0"); assert.equal(places.length, 2, "skipped: not saved");
+    await one.fill("Raja Ampat"); await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForFunction(() => /Location saved/.test(document.getElementById("toast").textContent));
+    await page.waitForTimeout(500); assert.ok(!(await picker().isVisible()), "switched off: the map stays closed"); assert.equal(searches.length, 3, "and no search is made");
+    // 4. what was skipped is still offered: the bar in the dive log and the orange buttons under the Summary map
+    await page.waitForFunction(() => /1 place is not on the map yet/.test(document.getElementById("placeBannerText").textContent), null, { timeout: 5000 });
+    await page.click("#navSummary"); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.equal(await page.locator("#mapUnplaced .chip").count(), 1, "Wakatobi was replaced by Raja Ampat on that dive, so Raja Ampat is the only place left");
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS location entry opens the map");
+  } catch (e) { failed++; console.log("FAIL location entry opens the map\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-entry.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: the location box suggests places from the map while you type, and the chosen position is used on the Summary ----
+{
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage();
+  const errs = [], places = [], photon = [], nominatim = []; page.on("pageerror", (e) => errs.push(e.message));
+  await ctx.addInitScript(() => { try { localStorage.removeItem("mapAsk"); localStorage.removeItem("mapSuggest"); } catch (e) {} });
+  const PNG1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await page.route("**/tile.openstreetmap.org/**", (r) => r.fulfill({ body: PNG1, contentType: "image/png" }));
+  const feat = (name, lon, lat, extra = {}) => ({ type: "Feature", geometry: { type: "Point", coordinates: [lon, lat] }, properties: { name, state: "North Sulawesi", country: "Indonesia", ...extra } });
+  const DB = { bunak: [feat("Bunaken", 124.84, 1.55), feat("Bunaken National Park", 124.76, 1.67, { city: "Manado" }), feat("Bunakeng", 125.46, 2.69)], siladen: [feat("Siladen", 124.8, 1.62)] };
+  await page.route("**/photon.komoot.io/api/**", (r) => { const q = new URL(r.request().url()).searchParams.get("q"); photon.push(q); const key = Object.keys(DB).find((k) => q.toLowerCase().startsWith(k));
+    return r.fulfill({ json: { type: "FeatureCollection", features: key ? DB[key] : [] }, headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/nominatim.openstreetmap.org/search*", (r) => { nominatim.push(new URL(r.request().url()).searchParams.get("q")); return r.fulfill({ json: [], headers: { "access-control-allow-origin": "*" } }); });
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  const k = (n) => (n || "").toLowerCase();
+  await page.route("**/api/places", (r) => { const m = r.request().method(), b = r.request().postData() ? JSON.parse(r.request().postData()) : null;
+    if (m === "PUT") { const i = places.findIndex((p) => k(p.name) === k(b.name)); if (i >= 0) places[i] = b; else places.push(b); return r.fulfill({ json: { ok: true } }); }
+    if (m === "DELETE") return r.fulfill({ json: { deleted: 0 } }); return r.fulfill({ json: { places: places.slice() } }); });
+  const mk = (when, n) => ({ fingerprint: (0x123000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: null, deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2), mk("2025-03-16T09:00:00", 3), mk("2025-03-17T09:00:00", 4)] } }) : r.fulfill({ json: { stored: 0 } })));
+  await page.goto(base);
+  try {
+    const box = page.locator("#locSuggest"); const toastHas = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
+    await page.waitForFunction(() => /Dive log \(4\)/.test(document.getElementById("navLog").textContent)); await page.click("#navLog");
+    await page.locator("#locBannerBtn").click(); await page.waitForSelector("#locPrompt .locask input", { state: "visible" });
+    const ins = page.locator("#locPrompt .locask input");
+    // 1. typing quickly makes ONE lookup (0.5 s after the last key), shown under the box
+    await ins.nth(0).click(); await ins.nth(0).pressSequentially("bunak", { delay: 40 }); await box.locator(".sg").first().waitFor({ state: "visible", timeout: 8000 });
+    assert.deepEqual(photon, ["bunak"], "five key presses, one request"); assert.equal(await box.locator(".sg").count(), 3);
+    assert.match(await box.innerText(), /Bunaken[\s\S]*North Sulawesi, Indonesia[\s\S]*Bunaken National Park[\s\S]*Manado, North Sulawesi, Indonesia[\s\S]*OpenStreetMap/);
+    const ib = await ins.nth(0).boundingBox(), bb = await box.boundingBox(); assert.ok(bb.y >= ib.y + ib.height - 1 && Math.abs(bb.x - ib.x) < 6, "the list sits right under the box: " + JSON.stringify([ib, bb]));
+    // 2. keyboard: Down + Enter picks; the text becomes the place name and the box turns green
+    await page.keyboard.press("ArrowDown"); assert.ok(await box.locator(".sg.hi").count() === 1); await page.keyboard.press("Enter");
+    assert.equal(await ins.nth(0).inputValue(), "Bunaken"); assert.ok(await ins.nth(0).evaluate((e) => e.classList.contains("onmap")), "marked as found on the map"); assert.ok(!(await box.isVisible()), "list closed");
+    assert.match(await ins.nth(0).getAttribute("title"), /Bunaken, North Sulawesi, Indonesia/); assert.equal(photon.length, 1, "picking does not search again"); assert.ok(await page.locator("#locPrompt").isVisible(), "Enter did not save the whole form");
+    // 3. click a suggestion; text with no match shows no list; two letters make no request
+    await ins.nth(1).click(); await ins.nth(1).pressSequentially("Siladen", { delay: 30 }); await box.locator(".sg").first().waitFor({ state: "visible" }); await box.locator(".sg").first().click(); assert.equal(await ins.nth(1).inputValue(), "Siladen");
+    await ins.nth(2).click(); await ins.nth(2).pressSequentially("Raja Ampat", { delay: 20 }); await page.waitForTimeout(900); assert.ok(!(await box.isVisible()), "nothing found: no empty list");
+    const before = photon.length; await ins.nth(3).click(); await ins.nth(3).pressSequentially("xy", { delay: 20 }); await page.waitForTimeout(800); assert.equal(photon.length, before, "two letters: no request"); await ins.nth(3).fill("");
+    // 4. Save: Bunaken and Siladen go to the map with the chosen positions, no extra step; only Raja Ampat (typed, not picked) goes to the map search
+    await page.click("#locSave"); await page.waitForSelector("#placePicker", { state: "visible" });
+    assert.deepEqual(places.map((p) => [p.name, p.lat, p.lon]), [["Bunaken", 1.55, 124.84], ["Siladen", 1.62, 124.8]], "saved with the positions from the suggestions");
+    await page.waitForFunction(() => /Where is .Raja Ampat.\?/.test(document.getElementById("ppTitle").textContent)); assert.deepEqual(nominatim, ["Raja Ampat"], "the one place that was not picked uses the map search");
+    await toastHas(/“Bunaken”, “Siladen” added to the map/); await page.click("#ppSkip"); await page.waitForSelector("#placePicker", { state: "hidden" });
+    await page.click("#navSummary"); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2, null, { timeout: 8000 });
+    assert.match(await page.locator("#mapMsg").innerText(), /3 places . 2 on the map . 1 still to place/);
+    // 5. the single-dive box works the same; editing the text after picking drops the chosen position
+    await page.click("#navLog"); await page.locator("details.dive").first().locator("summary").click(); const one = page.locator("details.dive[open] .dive-loc");
+    await one.click(); await one.pressSequentially("bunak", { delay: 30 }); await box.locator(".sg").first().waitFor({ state: "visible" }); await box.locator(".sg").first().click(); assert.ok(await one.evaluate((e) => e.classList.contains("onmap")));
+    await one.press("End"); await one.pressSequentially("2", { delay: 20 }); assert.ok(!(await one.evaluate((e) => e.classList.contains("onmap"))), "edited: no longer the chosen place");
+    await page.locator("details.dive[open] .dive-loc-save").click(); await page.waitForSelector("#placePicker", { state: "visible" }); await page.waitForFunction(() => /Where is .Bunaken2.\?/.test(document.getElementById("ppTitle").textContent)); await page.click("#ppSkip");
+    // 6. 'Turn off' stops the lookups
+    await one.fill(""); await one.pressSequentially("siladen", { delay: 20 }); await page.waitForTimeout(100); await box.locator(".sg-off").waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+    if (!(await box.isVisible())) await one.pressSequentially("x", { delay: 20 }); await box.locator(".sg-off").first().click({ timeout: 8000 });
+    assert.equal(await page.evaluate(() => localStorage.getItem("mapSuggest")), "0"); const n = photon.length; await one.fill(""); await one.pressSequentially("bunaken park", { delay: 20 }); await page.waitForTimeout(900);
+    assert.equal(photon.length, n, "switched off: no lookups"); assert.ok(!(await box.isVisible()));
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS map suggestions in the location box");
+  } catch (e) { failed++; console.log("FAIL map suggestions in the location box\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-suggest.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

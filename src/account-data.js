@@ -43,14 +43,25 @@ export async function handleAccountData(request, url, env, email) {
 
   // ---- profile picture -------------------------------------------------------------------------------------------
   if (path === "/api/profile" && m === "GET") {
-    const r = await env.DB.prepare("SELECT avatar, full_name, dan_number, dan_plan, dan_valid_until FROM profiles WHERE user_email = ?").bind(email).first();
-    return json({ avatar: r ? r.avatar : null, fullName: r ? r.full_name : "", dan: { number: r ? r.dan_number : "", plan: r ? r.dan_plan : "", validUntil: r ? r.dan_valid_until : "" } });
+    const r = await env.DB.prepare("SELECT avatar, full_name, dan_number, dan_plan, dan_valid_until, latest_cert_id FROM profiles WHERE user_email = ?").bind(email).first();
+    return json({ avatar: r ? r.avatar : null, fullName: r ? r.full_name : "", latestCertId: r ? r.latest_cert_id : "", dan: { number: r ? r.dan_number : "", plan: r ? r.dan_plan : "", validUntil: r ? r.dan_valid_until : "" } });
   }
   if (path === "/api/profile/name" && m === "PUT") {
     const { b, tooBig } = await body(request);
     const name = b && typeof b.fullName === "string" ? text(b.fullName, 80) : false;
     if (tooBig || name === false) return json({ error: "The name must be 80 characters or fewer." }, tooBig ? 413 : 400);
     await env.DB.prepare("INSERT INTO profiles (user_email, full_name, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET full_name = excluded.full_name, updated_at = excluded.updated_at").bind(email, name).run();
+    return json({ ok: true });
+  }
+  // Pin one certification as "latest" for the Summary ({id: ""} goes back to working it out from the dates).
+  if (path === "/api/profile/latest-cert" && m === "PUT") {
+    const { b, tooBig } = await body(request);
+    if (tooBig || !b || typeof b.id !== "string" || !(b.id === "" || /^[0-9a-f]{16}$/.test(b.id))) return json({ error: "bad request" }, tooBig ? 413 : 400);
+    if (b.id) {
+      const c = await env.DB.prepare("SELECT id FROM certs WHERE user_email = ? AND id = ? AND kind = 'cert'").bind(email, b.id).first();
+      if (!c) return json({ error: "That certification does not exist." }, 404);
+    }
+    await env.DB.prepare("INSERT INTO profiles (user_email, latest_cert_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET latest_cert_id = excluded.latest_cert_id, updated_at = excluded.updated_at").bind(email, b.id).run();
     return json({ ok: true });
   }
   if (path === "/api/profile/dan" && m === "PUT") {
@@ -130,6 +141,7 @@ export async function handleAccountData(request, url, env, email) {
   }
   if (one && m === "DELETE") {
     const r = await env.DB.prepare("DELETE FROM certs WHERE user_email = ? AND id = ?").bind(email, one[1]).run();
+    await env.DB.prepare("UPDATE profiles SET latest_cert_id = '' WHERE user_email = ? AND latest_cert_id = ?").bind(email, one[1]).run();   // a deleted file cannot stay pinned
     return json({ deleted: r.meta.changes || 0 });
   }
   return null;

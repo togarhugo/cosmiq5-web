@@ -113,12 +113,39 @@ download and upload. Tap **Download raw backup** after the first sync.
 Binary data (the picture, certification files) is stored as base64 text and the Worker never decodes it, which keeps requests far below
 the free plan's CPU limit.
 
+- **Second dive computer (Shearwater Peregrine):** dives carry a `device` column (`cosmiq` default, `peregrine`). Imported dives have no raw
+  bytes: `header_hex`/`profile_hex` are empty and their decoded values + depth samples are JSON in `extra` (the Worker stores it as text,
+  never parses it, caps it at 120 KB per dive and 700 KB per request). The file is parsed in the browser (UDDF, `public/dive-import.js`);
+  the fingerprint is a hash of device + start minute so re-importing adds nothing. Totals de-duplicate overlapping dives from two devices.
+- **Peregrine from a Shearwater Cloud database (`public/sqlite-lite.js`, `public/shearwater-cloud.js`):** the export is a SQLite file (or a ZIP with `dive_data.db`).
+  A small read-only SQLite reader (table b-trees, overflow pages, bounds-checked) lists `log_data`; each `data_bytes_1` is a 4-byte little-endian size + gzip
+  (browser `DecompressionStream`, trailing junk tolerated) of the same Petrel Native Format records as over Bluetooth, decoded by `Shearwater.parseDive`;
+  `dive_details.DiveNumber` gives the logbook number; `DeletedLogs` and rows whose `format` is not `sw-pnf` are skipped. Layout taken from third-party readers
+  (divejson-py, divelog, Subsurface issue #4788), tested on databases written by real SQLite, **not yet on a real Shearwater Cloud export**.
+- **Peregrine over Bluetooth (experimental, `public/shearwater.js`):** a port of libdivecomputer's Shearwater protocol (LGPL-2.1+, Jef Driesen):
+  GATT service `fe25c237-0ece-443c-b0aa-e02033e7029d`; the characteristic that can notify and be written is used (found at run time, as Subsurface does);
+  SLIP framing over 20-byte writes with a 2-byte `[frames, index]` header; requests `FF 01 len+1 00 ...`; RDBI `0x22` (serial 0x8010, firmware 0x8011,
+  model 0x8060, log layout 0x8021); manifest at 0xE0000000 (records `A5C4`, dive start time = fingerprint, address at +20); dive upload `0x35/0x36/0x37`
+  with 9-bit run-length + 32-byte XOR compression; Petrel Native Format records (opening 0x10-, samples 0x01, closing 0x20-, final 0xFF). Only the V1
+  protocol (Peregrine, Perdix, Teric, Tern) and the PNF layout are supported, and nothing is written except the end-of-session message libdivecomputer sends.
+  Tested against a simulator (`test/peregrine-sim.mjs`) written from the same source, **not yet against a real Peregrine**.
+- **Latest certification:** `profiles.latest_cert_id` (empty = newest by date); deleting that file clears it.
+
+- **Maps:** `places` table (`k` lower-case name, `name`, `lat`, `lon`; up to 500 per user, API `/api/places` GET/PUT/DELETE in `src/places.js`). Dives are unchanged: the free-text `location`
+  is joined to a position by name. Leaflet 1.9.4 (BSD-2, `public/vendor/leaflet.*`) draws OpenStreetMap tiles (`tile.openstreetmap.org`); place search is Nominatim
+  (`nominatim.openstreetmap.org`), one request per tap, >= 1.1 s apart, never while typing. The app sends `referrer-policy: no-referrer`, so map requests set
+  `referrerPolicy: "origin"` themselves (OSM asks to be identified). Map data (c) OpenStreetMap contributors, ODbL. For heavy use switch to a tile provider with a plan.
+  Suggestions while typing in the location boxes use Photon (`photon.komoot.io/api`, CORS open, public fair-use service; >= 3 letters, 0.5 s debounce, newest request cancels the
+  older one; `localStorage.mapSuggest = "0"` turns it off). A suggestion picked by the user is remembered per name until Save, then `Places.save()` stores its position.
+
 ### Upgrading an existing database
 Run each new migration once, **before** deploying the Worker that needs it (fresh installs already have it via `schema.sql`):
 ```bash
 npx wrangler d1 execute cosmiq --remote --file=migrations/0002_dive_location.sql   # adds dives.location
 npx wrangler d1 execute cosmiq --remote --file=migrations/0003_account_area.sql    # profile picture, regulator, certifications (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql   # name, DAN details, certification kind/date (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_latest_cert.sql   # dives.device/extra, pinned latest certification (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

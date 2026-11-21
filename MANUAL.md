@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.7.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.12.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -62,7 +62,8 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 The Summary opens first and shows, from top to bottom:
 
 1. **You**: your name, your **latest certification**, and your **DAN membership** with how long it is valid.
-   * Latest certification = the one with the **newest date earned**. Certifications without a date only count if none of them has a date, so add the date to each one.
+   * Latest certification = the one you chose with **Set as my latest certification** (Account → Dive certifications). If you never chose one, it is the one with the **newest date earned**; certifications without a date only count if none of them has a date. Tip: add the date to each certification, or just pick the right one yourself.
+   * Total dive time and the dive count include both dive computers; a dive recorded by both at the same time is counted once.
    * DAN is **green** while valid, **orange** when it expires within 60 days, **red** once expired.
 2. **Regulator service**: dives on your regulator since its last reset, with a progress bar. **Green** below 70, **orange from 70**, **red from 90**.
 3. **Last dive**: the date, how long ago, and where.
@@ -90,10 +91,12 @@ Good to know:
 
 ## 5. Dive log
 
-Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number, time, mode (scuba / freedive / gauge), maximum depth and duration.
+At the top, choose the dive computer: **Cosmiq+ Gen 5** or **Shearwater Peregrine**. Each has its **own log**; the app remembers your choice.
+
+Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number (bold, in a small box), time, mode (scuba / freedive / gauge), maximum depth and duration.
 
 Tap a dive to open it:
-* **Depth chart** (when the profile is available).
+* **Depth chart** with a **grid**: horizontal lines at round depths (in metres, down the left) and vertical lines at round minutes (along the bottom), so you can read depth and time off the line.
 * **Max depth, duration, minimum temperature, O₂ %, dive number, average depth, time since your last dive, surface pressure.**
 * **Location** field for that dive.
 * **Technical details**: the raw header bytes, for the curious.
@@ -104,6 +107,22 @@ A badge may appear on a dive:
 | *(none)* | Complete depth profile. |
 | **PARTIAL PROFILE** | The device had already overwritten the last minutes of the profile; the chart shows the gap. All summary numbers are still correct. |
 | **SUMMARY ONLY** | The device overwrote this dive's whole profile (it keeps roughly the last 128). Depth, duration and temperature are intact. |
+
+### Shearwater Peregrine: import from Shearwater Cloud
+The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager reads what Shearwater Cloud exports.
+1. Download your dives from the Peregrine into **Shearwater Cloud**, as you normally do.
+2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
+3. In Dive Manager open **Dive log → Shearwater Peregrine**, then **drag the file into the dashed box** (or tap the box and choose it). Both the `.db` and the `.zip` work, and so does a **UDDF** export.
+4. You see *"3 new dives imported, 0 already there"* and are asked where you dived.
+
+On a computer you can also **drag the file onto the card** instead of using the chooser (handy when you cannot find the folder: drag it straight from a Finder or Spotlight result). The file chooser shows **all** files (it does not filter by type), so a `.db` file is never greyed out. Tested on a real export of 138 dives: every dive decoded, and depth and duration match the numbers Shearwater Cloud itself stores.
+
+Importing again later (a newer export) only adds the dives you do not have yet. Dives you **deleted** in Shearwater Cloud are skipped. The dive numbers are the ones of your Shearwater Cloud logbook. Your files stay on your device: they are read in the browser, and only the dives are saved to your account.
+
+If a message says a file could not be read, it names the reason. If the app cannot read your export at all, send me the message: I built this reader from other people's descriptions of Shearwater's file layout and tested it on files I made myself, not on a real Shearwater Cloud export.
+
+### Shearwater Peregrine: Bluetooth (experimental)
+Under **Bluetooth download (experimental)** the app can also read the Peregrine directly. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released: on the first real try the phone's list did not show the Peregrine. Use the file import above; the Bluetooth route is left in for further testing. It only reads: nothing is written to the Peregrine.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
 
@@ -123,6 +142,30 @@ A location is just **the area**, for example *Banda*, *Komodo*, *Tulamben*. No e
 * Every **dive** has its own Location field.
 
 Your 7–14 dives from a single trip are one tap with *Set place for the month*.
+
+---
+
+## 6b. Maps and places
+
+Every dive location you type (for example *Tulamben*) is a **place**. A place gets a position on the map once, and then all dives with that location are on the map.
+
+**The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*.
+
+**The location box searches the map while you type.** In every box where you enter a dive location (the question after a sync, a date, a month, one dive), type at least three letters: a list of matching places from the map appears right under the box, with the region next to each name (for example *Bunaken · North Sulawesi, Indonesia*). Tap one (or use the arrow keys and Enter): the box takes that name and turns **green**, and when you save, the place is **added to your map with that exact position** and shows on the Summary at once. The message says which places were added. You can still type any name you like: a place you did not pick from the list goes to the map search described below. Edit the text after picking and it counts as a different place again.
+* The lookup waits half a second after your last key, so fast typing makes one request. It needs internet; without it you simply type as before.
+* Not wanted? Tap **Turn off** at the bottom of the list, or untick *Suggest places from the map while I type a location* under **All places** on the Summary.
+* The text you type (3 letters or more) is sent to **Photon** (photon.komoot.io, a free service that searches OpenStreetMap data and is made for suggestions while typing). Nothing else is sent. It is a shared free service: if it is busy the list shows a message and you carry on typing.
+
+**Entering a location opens the map.** When you save a location in the dive log that is **not on the map yet** (after a sync, for a date, for a month, or for one dive), the map search opens for it straight away, with the name already searched. Tap the right result (or tap the map), then **Save pin**. Several new places are done one after another; **Skip this one** / **Skip all** leave them for later. A location that is already on the map never asks again. If you would rather do it later, untick **Open the map when I enter a new location** at the bottom of the map screen: the orange buttons and the bar in the dive log remain.
+
+**Putting a place on the map yourself**
+1. Orange buttons under the map (and a bar in the **Dive log**) show places that are *not on the map yet*. Tap one.
+2. The place name is searched automatically. Tap the right result: the pin drops there and the map zooms in. If nothing is found, or it is the wrong spot, **tap the map** to drop the pin, and **drag** it to fine-tune. Search again with another spelling or a nearby town if you like.
+3. **Save pin.** The next place waits in line; **Skip this one** leaves it for later.
+
+The name you typed stays as it is: the map only adds a position to it. Places with different capitalisation (*Tulamben* / *tulamben*) are one place. If you change a dive's location to a new name, that new place appears in the list to be put on the map.
+
+**Privacy and limits.** The map pictures and the place search come from **OpenStreetMap** (free). When you open a map or tap Search, OpenStreetMap sees the map area you look at, the text you search for, and that the request comes from this app; it never sees your dives, your account or the other places. The map search by button (Nominatim) runs only when you tap it, because their usage rules ask for that; the suggestions while typing come from Photon (see above). Without internet the pins and lists still show, but the map background and the search do not. Positions are saved in your account, up to 500 places.
 
 ---
 
@@ -168,7 +211,7 @@ Keep a scan or photo of each certification card for dive registrations.
 1. Enter a **name** (e.g. *PADI Advanced Open Water*), optionally the **certificate number** and the **date certified**.
 2. **Choose file** (PDF, JPEG, PNG or WebP) → **Upload**. Photos are shrunk automatically; a PDF must be **under 1 MB** (otherwise use a photo).
 3. Each file has **Open/View**, **Save**, **Share** (where your browser supports it) and **Delete** (tap twice).
-Up to 12 files. The newest **date certified** appears on the Summary.
+Up to 12 files. The Summary shows your **latest certification**: tap **Set as my latest certification** on the right one (it gets a green ★ Latest tag). **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic.
 
 ### DAN insurance
 * **DAN member number** (required), **plan** (optional, e.g. *DAN Master*) and **valid until**. Tap **Save DAN details**. A badge next to the section title shows *Valid*, *N days left* or *Expired*.
@@ -196,7 +239,11 @@ Shows the **app version**, whether a newer one is available, **Check for update*
 * **Minimum temperature** comes from the dive header and is the true minimum, which can be a little lower than the lowest value on the chart.
 * **Time since last dive** is counted from the end of the previous dive to the start of this one.
 * **Profile memory is a ring.** The Cosmiq+ keeps depth profiles in a fixed-size memory (about the last 128 dives) and overwrites the oldest. Dive Manager matches every profile to the dive it really belongs to, recovers dives the device itself cannot read under their own number, and marks overwritten ones *summary only*. **Sync after every trip**: each new dive overwrites an old profile on the device.
-* **The dive log has no GPS** or location information; locations are what you type.
+* **Peregrine dives** come from the Shearwater Cloud file (or Bluetooth) you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). From a Shearwater Cloud database the values are decoded from the dive computer's own records (depth, duration, temperature, first gas, depth samples) and the dive number is your Shearwater Cloud logbook number; from UDDF they are what Shearwater Cloud wrote.
+* **Two computers, one dive:** if you wore both and both logged the same dive, the Summary totals, the last dive and the regulator counter count it **once and use the Cosmiq+ record**. Both stay visible in their own log; the Peregrine copy is marked *also on Cosmiq+*, and the Summary says how many were counted once.
+  * The same dive is recognised when the two records **overlap in time** (the computers' clocks are often a few minutes apart) or when the clocks are **exactly one or two hours apart** (time zone or daylight saving) and the dive has the same length and depth. A dive on the Peregrine only is added.
+  * Limits: this is matching by time, length and depth, so two real dives of the same size exactly 1-2 hours apart while one clock is also off by that much could be confused. Very short Peregrine records (under a minute, at the surface) are counted as dives like any other.
+* **The Cosmiq+ dive log has no GPS** or location information; locations are what you type.
 * The device clock has no time zone: dive times are shown exactly as the dive computer recorded them.
 
 ---

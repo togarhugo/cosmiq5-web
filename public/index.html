@@ -11,6 +11,7 @@
         <link rel="apple-touch-icon" href="icon-192.png" />
         <link rel="icon" href="icon-192.png" />
         <title>Dive Manager</title>
+        <link rel="stylesheet" href="vendor/leaflet.css" />
         <style>
             :root {
                 --blue: #007bff;
@@ -371,7 +372,7 @@
             .sum.reg-red { border-left: 5px solid #c92a2a; background: #fff5f5; } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: #c92a2a; } .sum.reg-red #sumRegBar { background: #c92a2a; }
             .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
             .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: #f8f9fa; }
-            .diver-row .ico { font-size: 22px; line-height: 1.2; } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
+            .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #868e96; font-weight: 600; }
             .diver-val { font-size: 16px; font-weight: 600; word-break: break-word; } .dan-valid { font-size: 13px; font-weight: 600; margin-top: 2px; }
             .diver-row.dan-ok { background: #ebfbee; border-left: 4px solid #2b8a3e; } .dan-ok .dan-valid { color: #2b8a3e; }
             .diver-row.dan-soon { background: #fff4e6; border-left: 4px solid #e67700; } .dan-soon .dan-valid, .dan-soon .diver-val { color: #d9480f; }
@@ -392,7 +393,42 @@
             details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid #dee2e6; margin-bottom: 8px; }
             details.year > summary::-webkit-details-marker { display: none; }
             details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
-            .dive-num { font-family: var(--mono); font-size: 12px; color: #6c757d; min-width: 34px; }
+            .dive-num, .numtile { display: inline-block; box-sizing: border-box; min-width: 30px; padding: 2px 7px; border: 1px solid #ced4da; border-radius: 6px; background: #f1f3f5; color: #212529; font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1.3; text-align: center; }
+            .stats b.numtile { display: block; width: max-content; margin: 0 auto 2px; font-size: 14px; }
+            #devTabs { display: flex; gap: 6px; margin-bottom: 12px; }
+            #devTabs button { flex: 1 1 0; min-height: 44px; padding: 6px 8px; border-radius: 10px; background: #e9ecef; color: #495057; font-size: 13px; font-weight: 600; line-height: 1.2; }
+            #devTabs button.active { background: #343a40; color: #fff; } #devTabs button.active .muted { color: #ced4da; }
+            .badge.also { background: #e7f5ff; color: #1864ab; text-transform: none; }
+            .mapbox { height: 270px; border-radius: 12px; overflow: hidden; isolation: isolate; background: #dbe9f3; margin: 8px 0; }
+            .mapbox.tall { height: 300px; flex: 0 0 auto; }
+            .pin-wrap { background: none; border: 0; } .pin-pop { min-width: 120px; } .pin-pop b { display: block; font-size: 14px; } .pin-pop div { color: #495057; margin: 2px 0 6px; } .pin-pop .btn-set { min-height: 36px; padding: 4px 10px; font-size: 13px; }
+            .map-note { position: absolute; left: 8px; right: 8px; bottom: 26px; z-index: 900; background: rgba(255,248,225,.95); border: 1px solid #ffe08a; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #6b5200; }
+            #mapUnplaced { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+            .chip { background: #fff4e6; color: #d9480f; border: 1px solid #ffd8a8; border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; }
+            .place-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee; flex-wrap: wrap; font-size: 14px; }
+            #placeBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+            #placePicker { position: fixed; inset: 0; z-index: 55; background: #fff; overflow-y: auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; max-width: 640px; margin: 0 auto; }
+            #placePicker[hidden] { display: none; }
+            body.pp-open { overflow: hidden; }
+            .pp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; } .pp-head b { font-size: 17px; }
+            .pp-search { display: flex; gap: 6px; } .pp-search input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            #ppResults { max-height: 190px; overflow-y: auto; margin-top: 6px; }
+            .res { display: block; width: 100%; text-align: left; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; min-height: 44px; font-size: 14px; color: #212529; }
+            .res b { display: block; } .res span { display: block; font-size: 12px; }
+            .leaflet-container { font: inherit; }
+            #locSuggest { position: fixed; z-index: 75; background: #fff; border: 1px solid #ced4da; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2); max-height: 280px; overflow-y: auto; box-sizing: border-box; }
+            #locSuggest[hidden] { display: none; }
+            #locSuggest .sg { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #f1f3f5; padding: 9px 12px; min-height: 44px; font-size: 14px; color: #212529; }
+            #locSuggest .sg b { display: block; } #locSuggest .sg .muted { display: block; font-size: 12px; } #locSuggest .sg:hover, #locSuggest .sg.hi { background: #e7f5ff; }
+            #locSuggest .sg-note { padding: 8px 12px; font-size: 12px; color: #c92a2a; }
+            #locSuggest .sg-foot { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; font-size: 11px; color: #868e96; background: #f8f9fa; } #locSuggest .sg-off { background: none; color: #1971c2; font-size: 11px; min-height: 28px; padding: 0 4px; }
+            input.onmap { border-color: #2b8a3e !important; box-shadow: 0 0 0 2px rgba(43,138,62,.18); }
+            .chart { display: block; }
+            #dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 150px; padding: 18px 12px; border: 2px dashed #74c0fc; border-radius: 14px; background: #f3faff; color: #1864ab; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
+            #dropZone b { font-size: 16px; } #dropZone span { font-size: 13px; color: #495057; }
+            #dropZone:hover, #dropZone:focus-visible { background: #e7f5ff; border-color: #339af0; outline: none; }
+            #importCard.dropping #dropZone { background: #d0ebff; border-color: #1c7ed6; border-style: solid; transform: scale(1.01); }
+            .cert.latest { border-color: #2b8a3e; } .latest-tag { font-size: 11px; font-weight: 700; color: #2b8a3e; background: #ebfbee; border-radius: 10px; padding: 2px 8px; }
             .badge { font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; background: #fff3cd; color: #856404; }
             p.note { background: #fff8e1; border: 1px solid #ffe08a; color: #6b5200; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 8px 0; }
             #toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none;
@@ -446,9 +482,9 @@
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
             <div id="sumDiver" class="card sum" style="display:none">
                 <div id="sumName" class="diver-name"></div>
-                <div class="diver-row"><span class="ico" aria-hidden="true">&#127891;</span>
+                <div class="diver-row"><span class="ico" aria-hidden="true"><svg class="flag" viewBox="0 0 36 24" width="34" height="23"><rect width="36" height="24" rx="2" fill="#d94b3c"/><polygon points="0,0 4.3,0 36,20.3 36,24 32.2,24 0,3.8" fill="#fff"/></svg></span>
                     <div><div class="lbl">Latest certification</div><div id="sumCert" class="diver-val"></div><div id="sumCertSub" class="muted"></div></div></div>
-                <div id="sumDanRow" class="diver-row dan-none"><span class="ico" aria-hidden="true">&#128737;</span>
+                <div id="sumDanRow" class="diver-row dan-none"><span class="ico" aria-hidden="true"><img class="dan-logo" src="dan-logo.png" alt="" width="31" height="32"></span>
                     <div><div class="lbl">DAN member</div><div id="sumDan" class="diver-val"></div><div id="sumDanValid" class="dan-valid"></div></div></div>
             </div>
             <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
@@ -459,6 +495,13 @@
                 <div id="sumRegMsg" class="reg-msg"></div>
             </div>
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
+            <div id="mapCard" class="card" style="display:none">
+                <div class="sum-label">Where you have dived</div>
+                <div id="sumMap" class="mapbox" role="region" aria-label="Map of the places you have dived"></div>
+                <div id="mapMsg" class="muted"></div>
+                <div id="mapUnplaced"></div>
+                <details class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
+            </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">
                     <div class="sum-label">Last dive</div>
@@ -807,8 +850,35 @@
             <div id="locPrompt" class="card" style="display:none" role="region" aria-label="Dive locations"></div>
             <div id="locBanner" class="card" style="display:none"><span aria-hidden="true">&#128205;</span> <span id="locBannerText"></span>
                 <button id="locBannerBtn" class="btn-set" type="button" style="margin-left:8px">Add locations</button></div>
+            <div id="placeBanner" class="card" style="display:none"><span aria-hidden="true">&#128506;</span> <span id="placeBannerText"></span>
+                <button id="placeBannerBtn" class="btn-set" type="button" style="margin-left:8px">Place on map</button></div>
             <datalist id="locList"></datalist>
-            <div class="card">
+            <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
+            <div id="importCard" class="card" style="display:none">
+                <h3 id="impTitle">Shearwater Peregrine</h3>
+                <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
+                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:#495057">
+                    <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
+                    <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
+                    <li>Drag the file into the box below (or tap the box to choose it). A <b>UDDF</b> export works too.</li>
+                </ol>
+                <label id="dropZone" for="impFile" tabindex="0" role="button" aria-label="Drop a Shearwater Cloud file here, or tap to choose one">
+                    <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <b>Drop your Shearwater Cloud file here</b>
+                    <span>or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF</span>
+                </label>
+                <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
+                <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
+                <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
+                    <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
+                    <button id="pgBtn" class="btn-main" type="button" style="background:#6c757d">Download dives over Bluetooth</button>
+                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                    <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
+                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Cancel</button>
+                </details>
+            </div>
+            <div id="syncCard" class="card">
                 <h3>Sync</h3>
                 <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
                 <div class="bar"><div id="diveBar"></div></div>
@@ -914,6 +984,8 @@
                 <div class="acc-body">
                     <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
                     <div id="certList"></div>
+                    <p id="certLatestHint" class="muted" style="margin:8px 0 0"></p>
+                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:#6c757d;margin-top:6px">Use the newest by date instead</button>
                     <div class="subcard" style="margin-top:10px">
                         <h4>Add a certification</h4>
                         <label class="label" for="certLabel">Name</label>
@@ -1019,13 +1091,31 @@
             <a id="signOut" class="btn-main" href="/auth/logout" style="background:#6c757d;text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
+        <div id="placePicker" role="dialog" aria-modal="true" aria-labelledby="ppTitle" hidden>
+            <div class="pp-head"><b id="ppTitle">Where is it?</b><button id="ppClose" class="btn-set" type="button" style="background:#6c757d" aria-label="Close">&#10005;</button></div>
+            <div class="pp-search"><input id="ppQuery" type="search" placeholder="Search a place, e.g. Tulamben" maxlength="80" autocomplete="off" aria-label="Search for a place" /><button id="ppGo" class="btn-set" type="button">Search</button></div>
+            <div id="ppResults"></div>
+            <div id="ppMap" class="mapbox tall"></div>
+            <div id="ppHint" class="muted"></div><div id="ppCoords" class="muted" style="font-family:var(--mono)"></div>
+            <div class="row" style="margin-top:10px"><button id="ppSave" class="btn-main" type="button" disabled>Save pin</button><button id="ppSkip" class="btn-set" type="button" style="background:#6c757d">Cancel</button><button id="ppSkipAll" class="btn-set" type="button" style="background:#6c757d;display:none">Skip all</button></div>
+            <label class="opt" style="min-height:36px;margin-top:6px"><input type="checkbox" id="ppAuto" checked /> Open the map when I enter a new location</label>
+            <p class="muted" style="margin-top:10px">Map and search: &copy; OpenStreetMap contributors. Only the place name you search for is sent to OpenStreetMap.</p>
+        </div>
+
         <div id="toast" role="status" aria-live="polite"></div>
 
         <details class="logwrap"><summary>Activity log</summary>
         <div id="log">Waiting for connection...</div></details>
+        <script src="vendor/leaflet.js"></script>
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
+        <script src="dive-import.js"></script>
+        <script src="shearwater.js"></script>
+        <script src="sqlite-lite.js"></script>
+        <script src="shearwater-cloud.js"></script>
+        <script src="places.js"></script>
         <script src="dives.js"></script>
+        <script src="places-ui.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
@@ -1078,7 +1168,7 @@
                 if (v === "account") { Account.load(); AccountArea.show(); }
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
-                if (v === "summary") Dives.render();
+                if (v === "summary") Dives.render().then(() => PlacesUI.shown());
             }
             const isConnected = () => !!(dev && dev.gatt && dev.gatt.connected && txChar);
             function opt(id, def) { try { const v = localStorage.getItem(id); return v === null ? def : v === "1"; } catch (e) { return def; } }
@@ -1711,6 +1801,7 @@
             }
             window.addEventListener("load", () => {
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
+                PlacesUI.init();                                                             // map pins of the places you have dived
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });
                 document.getElementById("cancelSync").addEventListener("click", () => { cancelFlag = true; if (lineWaiter) lineWaiter(null); });
