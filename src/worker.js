@@ -1,3 +1,5 @@
+import ASSETS from "./assets.generated.js";
+
 // Cosmiq Manager API. Cloudflare Access (Google login) sits in front of the whole site;
 // this Worker ALSO verifies the Access JWT, so the API stays closed even if Access is
 // misconfigured or the *.workers.dev URL is hit directly. Fails closed.
@@ -48,13 +50,25 @@ function validDive(d) {
     typeof d.startedAt === "string" && d.startedAt.length <= 32;
 }
 
+function serveAsset(request, pathname) {
+  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, 405);
+  const a = ASSETS[pathname === "/" ? "/index.html" : pathname];
+  if (!a) return json({ error: "not found" }, 404);
+  const bin = Uint8Array.from(atob(a.b), (c) => c.charCodeAt(0));
+  return new Response(request.method === "HEAD" ? null : bin, {
+    headers: { "content-type": a.t, "cache-control": "private, no-cache", "x-content-type-options": "nosniff" },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
+    // Everything (pages too) requires a valid Cloudflare Access login: fails closed.
     let email;
     try { email = await authenticate(request, env); }
     catch (e) { return json({ error: e.message }, e.status || 401); }
+
+    if (!url.pathname.startsWith("/api/")) return serveAsset(request, url.pathname);
 
     if (url.pathname === "/api/me") return json({ email });
 

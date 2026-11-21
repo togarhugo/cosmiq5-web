@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import worker from "../src/worker.js";
 
 const env = { TEAM_DOMAIN: "t.cloudflareaccess.com", POLICY_AUD: "aud", ALLOWED_EMAILS: "a@b.c",
-  ASSETS: { fetch: async () => new Response("static") }, DB: {} };
+  DB: {} };
 const call = (path, init, e = env) => worker.fetch(new Request("https://x" + path, init), e);
 
 test("API fails closed without a token", async () => {
@@ -14,8 +14,9 @@ test("API refuses to run with placeholder config", async () => {
   const r = await call("/api/dives", {}, { ...env, POLICY_AUD: "REPLACE_WITH_AUD_TAG" });
   assert.equal(r.status, 503);
 });
-test("static assets are passed through", async () => {
-  assert.equal(await (await call("/index.html")).text(), "static");
+test("pages also fail closed without an Access token", async () => {
+  assert.equal((await call("/")).status, 401);
+  assert.equal((await call("/index.html")).status, 401);
 });
 
 // ---- happy path with a real RS256 signature and a stubbed JWKS endpoint ----
@@ -45,5 +46,11 @@ test("valid Access token is accepted; forged / expired / wrong-aud / wrong-user 
     assert.equal((await me(await idp.sign({ ...good, aud: ["nope"] }))).status, 401, "wrong audience");
     assert.equal((await me(await idp.sign({ ...good, iss: "https://evil" }))).status, 401, "wrong issuer");
     assert.equal((await me(await idp.sign({ ...good, email: "x@y.z" }))).status, 403, "email not allowed");
+    const page = await call("/", { headers: { "Cf-Access-Jwt-Assertion": await idp.sign(good) } });
+    assert.equal(page.status, 200); assert.match(await page.text(), /Cosmiq Manager/);
+    assert.equal(page.headers.get("content-type"), "text/html; charset=utf-8");
+    const png = await call("/icon-192.png", { headers: { "Cf-Access-Jwt-Assertion": await idp.sign(good) } });
+    assert.equal(new Uint8Array(await png.arrayBuffer())[1], 0x50, "PNG signature intact"); // 'P' of \x89PNG
+    assert.equal((await call("/nope", { headers: { "Cf-Access-Jwt-Assertion": await idp.sign(good) } })).status, 404);
   } finally { globalThis.fetch = realFetch; }
 });

@@ -8,3 +8,4 @@ plots/
 node_modules/
 .wrangler/
 .dev.vars
+src/assets.generated.js
