@@ -680,6 +680,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   await page.goto(base);
   try {
     await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    assert.equal(await page.locator("#impFile").getAttribute("accept"), null, "no file-type filter: macOS greys out files the filter does not know (.db)");
     await page.locator("#importCard").screenshot({ path: process.env.SHOT_IMPORT || "/tmp/shot-import.png" });
     assert.match(await page.locator("#importCard").innerText(), /Export the database|export the database/i); assert.match(await page.locator("#importCard").innerText(), /Shearwater Cloud/);
     const dbBytes = makeDb({ dives: [cloudDive(0), cloudDive(1), cloudDive(2, { deleted: true }), cloudDive(3, { format: "sw-clouddb" }), cloudDive(4, { blob: Buffer.from("this is not a dive, only text that is long enough") }), cloudDive(5)] });
@@ -704,6 +705,24 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(uploaded.length, 4); assert.deepEqual(errs, [], "page errors");
     console.log("PASS shearwater cloud database");
   } catch (e) { failed++; console.log("FAIL shearwater cloud database\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-cloud.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- optional: a real Shearwater Cloud export (REAL_DB=/path/to/file.db node test/e2e.mjs); skipped when not set ----
+if (process.env.REAL_DB) {
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const uploaded = [], errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  for (const [u, j] of [["me", { email: "you@example.com", name: "Me", version: "0.0.0" }], ["regulator", { regulator: null }], ["profile", { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } }], ["certs", { certs: [] }]]) await page.route("**/api/" + u, (r) => r.fulfill({ json: j }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } }); const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  await page.goto(base);
+  try {
+    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.setInputFiles("#impFile", process.env.REAL_DB);
+    await page.waitForFunction(() => /dives? imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 120000 });
+    console.log("  real file:", await page.locator("#impMsg").innerText());
+    const nums = await page.locator("details.dive .dive-num").allInnerTexts(); console.log("  newest numbers:", nums.slice(0, 5).join(","), "oldest:", nums.slice(-3).join(","), "total", nums.length);
+    await page.locator("details.dive").first().locator("summary").click(); await page.locator("details.dive[open] svg.chart").waitFor(); await page.screenshot({ path: process.env.SHOT_REAL || "/tmp/shot-real.png", fullPage: true });
+    assert.deepEqual(errs, [], "page errors"); console.log("PASS real shearwater export");
+  } catch (e) { failed++; console.log("FAIL real shearwater export\n ", e.message.split("\n").slice(0, 8).join(" | ")); await page.screenshot({ path: "/tmp/fail-real.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

@@ -87,7 +87,8 @@
       if (r.format && r.format !== "sw-pnf") { skipped.format++; continue; }
       try {
         const d = SW.parseDive(await unpackBlob(r.data_bytes_1)), num = numbers.get(id);
-        d.number = Number.isInteger(num) && num > 0 ? num : null; d.logId = id; dives.push(d);
+        const n = Number(num);                                                                                  // Shearwater Cloud stores the number as text ("75")
+        d.number = num != null && num !== "" && Number.isInteger(n) && n > 0 ? n : null; d.logId = id; dives.push(d);
       } catch (e) { problems.push(`${r.file_name || id}: ${e.message}`); }
       if (progress) progress(n, rows.length);
     }

@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.10.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.10.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -114,6 +114,8 @@ The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager rea
 2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
 3. In Dive Manager open **Dive log → Shearwater Peregrine → Choose Shearwater Cloud file** and pick that file. Both the `.db` and the `.zip` work, and so does a **UDDF** export.
 4. You see *"3 new dives imported, 0 already there"* and are asked where you dived.
+
+The file chooser shows **all** files (it does not filter by type), so a `.db` file is never greyed out. Tested on a real export of 138 dives: every dive decoded, and depth and duration match the numbers Shearwater Cloud itself stores.
 
 Importing again later (a newer export) only adds the dives you do not have yet. Dives you **deleted** in Shearwater Cloud are skipped. The dive numbers are the ones of your Shearwater Cloud logbook. Your files stay on your device: they are read in the browser, and only the dives are saved to your account.
 

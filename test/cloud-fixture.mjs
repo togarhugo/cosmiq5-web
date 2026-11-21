@@ -13,7 +13,7 @@ export const bigDive = (ticks, n, maxd = 285) => {
 export function makeDb({ dives, pageSize = 4096, extra }) {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "swc-")), "dive_data.db"), db = new DatabaseSync(file);
   db.exec(`PRAGMA page_size=${pageSize}; CREATE TABLE log_data (log_id TEXT PRIMARY KEY, file_name TEXT, format TEXT, format_version INTEGER, data_bytes_1 BLOB, data_bytes_2 BLOB);
-    CREATE TABLE dive_details (DiveId TEXT, DiveNumber INTEGER, DiveDate TEXT, Site TEXT, "Location" TEXT); CREATE TABLE DeletedLogs (DiveID TEXT);
+    CREATE TABLE dive_details (DiveId TEXT, DiveNumber TEXT, DiveDate TEXT, Site TEXT, "Location" TEXT); CREATE TABLE DeletedLogs (DiveID TEXT);
     CREATE TABLE misc (id INTEGER PRIMARY KEY, name TEXT);`);
   const a = db.prepare("INSERT INTO log_data VALUES (?,?,?,?,?,?)"), b = db.prepare("INSERT INTO dive_details VALUES (?,?,?,?,?)");
   for (const d of dives) { a.run(d.id, d.file || `Peregrine[12345678]#${d.number} x.swlogzp`, d.format || "sw-pnf", 0, d.blob, null); b.run(d.id, d.number, "2026-05-02", "House reef", "Banda"); if (d.deleted) db.prepare("INSERT INTO DeletedLogs VALUES (?)").run(d.id); }
