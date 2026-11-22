@@ -104,8 +104,10 @@ download and upload. Tap **Download raw backup** after the first sync.
 - **Summary, top card:** your name, your **latest certification** (the newest date earned; files without a date only count when none
   has one) and your **DAN membership with its validity**: green while valid, orange within 60 days of expiry, red once expired.
 - **Regulator:** name, type and a starting count. It counts your scuba and gauge dives (not freedives) that began after the last
-  reset, and updates itself on every sync. The Summary card is green below 70 dives, **orange from 70, red from 90**. "Reset to 0"
-  starts counting again after your latest logged dive. One regulator is tracked.
+  reset, and updates itself on every sync. Two reminders, whichever comes first: every N dives (default 90) and every N months
+  (default 12) since the last service month. Orange 20 dives / 2 months before a limit, red at it. "Reset to 0" asks for the month
+  and year of the service, keeps it in a service history (max 20) and starts counting again after your latest logged dive.
+  One regulator is tracked.
 - **Help / app version:** the version lives only here (and on the sign-in pages); "Check for update" clears the cached copy and reloads.
 - **Month bulk locations:** each month in the dive log has "Set place for the month"; the location question after a sync also has a
   "whole month" box above the dates of each month (a date's own entry wins).
@@ -174,6 +176,7 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0004_dan_and_names.sql
 npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_latest_cert.sql   # dives.device/extra, pinned latest certification (run once)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0007_api_keys.sql                   # API keys (idempotent)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0008_regulator_service.sql           # regulator service month, limits, history (run once)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)
