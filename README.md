@@ -2,14 +2,14 @@
 
 A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the official app has been discontinued: change its settings, download and keep your dive log, and track your diving, all from a phone or laptop browser over Bluetooth.
 
-> **Current version: 0.20.1** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
+> **Current version: 0.20.2** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
 
 ## What it does
 
 | | |
 |---|---|
 | **Summary** | Your name, latest certification (**you can choose which one**), **DAN membership and validity**, date of your last dive, **total dive time**, and a **regulator service card** with two reminders, by dives (default 90) and by time (default 12 months), showing the last service month. |
-| **Dive log** | Downloads your Cosmiq+ dives over Bluetooth (only the new ones), grouped by year, month and date, with **grid** depth charts, minimum temperature, surface interval and a dive location you choose (e.g. *Komodo*). Only **your** dive computers are shown (the ones with dives, plus any you add), so each person's Dive log lists just their own: Cosmiq+, Peregrine, **Perdix** (same Shearwater Cloud import) or Garmin. A **Garmin Descent** has its own log too, filled by dropping **FIT files or a Garmin Connect ZIP** (beta). A second computer, the **Shearwater Peregrine**, has its own separate log, filled by importing a **Shearwater Cloud database export** (or a UDDF file), or, experimentally, over Bluetooth. |
+| **Dive log** | Downloads your Cosmiq+ dives over Bluetooth (only the new ones), grouped by year, month and date, with **grid** depth charts, minimum temperature, surface interval and a dive location you choose (e.g. *Komodo*). Only **your** dive computers are shown (the ones with dives, plus any you add), so each person's Dive log lists just their own: Cosmiq+, Peregrine, **Perdix** (same Shearwater Cloud import) or Garmin. A **Garmin Descent** has its own log too, filled by dropping **FIT files or a Garmin Connect ZIP** (beta). A second computer, the **Shearwater Peregrine**, has its own separate log, filled by importing a **Shearwater Cloud database export** (or a UDDF file), or, better, **directly over Bluetooth** (works on a real Peregrine; the Perdix uses the same method and has not been tried yet). |
 | **Map** | Every place you have dived is a **pin on a map** in the Summary (with the number of dives). Put a place on the map by **searching** for it or tapping / dragging the pin. Maps and search come from OpenStreetMap. |
 | **Device settings** | Backlight, units, screen timeout, clock, gas mix, PPO₂, alarms, safety factor, freedive alarms. Every change is **read back from the dive computer and confirmed**. |
 | **Certificates** | Your certification scans as a **wallet of overlapping cards**: scroll, tap one to open it, **Make main** to choose the one the Summary shows. |

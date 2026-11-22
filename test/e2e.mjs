@@ -680,7 +680,9 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await openSource(page, "Peregrine"); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#impBt > details > summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    await page.click("#navLog"); await openSource(page, "Peregrine"); await page.waitForSelector("#pgBtn", { state: "visible" }); assert.ok(await page.locator("#pgBtn").isVisible(), "Bluetooth is the main way to get Peregrine dives: in view at once, not hidden away");
+    const btTop = await page.locator("#impBt").boundingBox(), fileTop = await page.locator("#dropZone").boundingBox(); assert.ok(btTop.y < fileTop.y, "the Bluetooth download comes before the file import"); assert.match(await page.locator("#impBt").innerText(), /works on a real Peregrine/); assert.doesNotMatch(await page.locator("#importCard").innerText(), /experimental/i, "no longer described as experimental");
+    assert.match(await page.locator("#impFileHead").innerText(), /Or import a file from Shearwater Cloud instead/);
     assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth on in the computer.s menu/);
     // the test button: what the browser can see, nothing downloaded or saved
     await page.click("#pgProbe"); await page.waitForFunction(() => /Result: this looks like a Shearwater/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
@@ -715,7 +717,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 1, "only the manifest is read"); assert.equal(uploaded.length, 3);
     // the same download for a Perdix 2: its own tab, its own records (device perdix), the same protocol
     await openSource(page, "Perdix"); await page.waitForFunction(() => /perdix/i.test(document.getElementById("impTitle").textContent), null, { timeout: 5000 });
-    assert.ok(await page.locator("#pgBtn").isVisible(), "the Perdix tab opens with the Bluetooth download in view"); assert.match(await page.locator("#impBt").innerText(), /Perdix/); assert.match(await page.locator("#impBt").innerText(), /Bluefy/);
+    assert.ok(await page.locator("#pgBtn").isVisible(), "the Perdix tab opens with the Bluetooth download in view"); assert.match(await page.locator("#impBt").innerText(), /Perdix has not been tried yet/); assert.match(await page.locator("#impBt").innerText(), /Bluefy/); assert.ok(!/works on a real Peregrine/.test(await page.locator("#impBt").innerText()), "the Perdix is not claimed to be proven");
     // a Peregrine (model number 9) on the Perdix tab is refused before any dive is read, so no dive is filed under the wrong computer
     sim.log.length = 0; await page.click("#pgBtn"); await page.waitForFunction(() => /says it is a Peregrine \(model number 9\)/.test(document.getElementById("pgMsg").textContent), null, { timeout: 10000 });
     assert.match(await page.locator("#pgMsg").innerText(), /Open the Shearwater Peregrine tab/); assert.equal(uploaded.length, 3, "nothing was filed under Perdix"); assert.ok(!sim.log.some((l) => /^35/.test(l)), "no dive was requested from the computer");
@@ -1380,7 +1382,7 @@ if (process.env.REAL_DB) {
     await p2.goto(base + "bluetooth-lab.html"); await p2.waitForFunction(() => window.__labReady === true); assert.match(await p2.locator("#envTable").innerText(), /NO Bluetooth adapter found or it is switched off/); assert.match(await p2.locator("#envTable").innerText(), /switched off \(needs a Chrome setting/); assert.ok(!/System Settings/.test(await p2.locator("#envHints").innerText()), "no Mac hint on Windows");
     await p2.click("#scanStart"); assert.match(await p2.locator("#scanHelp").innerText(), /enable-experimental-web-platform-features/); assert.deepEqual(e2, []);
     // the app links to the lab from the Bluetooth section
-    await page.goto(base); await page.click("#navLog"); await openSource(page, "Peregrine"); await page.locator("#impBt > details > summary").click(); assert.equal(await page.locator("#labLink").getAttribute("href"), "bluetooth-lab.html");
+    await page.goto(base); await page.click("#navLog"); await openSource(page, "Peregrine"); assert.equal(await page.locator("#labLink").getAttribute("href"), "bluetooth-lab.html");
     console.log("PASS bluetooth lab");
   } catch (e) { failed++; console.log("FAIL bluetooth lab\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-lab.png", fullPage: true }); }
   await ctx.close();

@@ -516,6 +516,7 @@
             .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
             @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
             .no-cosmiq #connectBtn, .no-cosmiq #disconnectBtn, .no-cosmiq #status, .no-cosmiq #btBanner, .no-cosmiq #clockStatus, .no-cosmiq #navDevice, .no-cosmiq #deviceView { display: none !important; }
+            .srchead { margin: 14px 0 6px; font-size: 14px; } #impTitle + #impBt .srchead { margin-top: 4px; }
             .srclist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; } .srcbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; background: var(--bg-f1f3f5); color: var(--tx-212529); border-radius: 10px; font-size: 15px; } .srcbtn span { font-size: 12px; }
             .linkbtn { background: none; color: var(--tx-1864ab); font-size: 13px; font-weight: 600; padding: 8px 4px; min-height: 36px; } #srcAddRow { margin: -2px 0 10px; }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
@@ -986,6 +987,29 @@
             <div id="srcAddRow" style="display:none"><button id="srcAdd" class="linkbtn" type="button">+ Add a dive computer</button><div id="srcAddList" class="srclist" style="display:none"></div></div>
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
+                <div id="impBt">
+                    <h4 class="srchead">Download over Bluetooth</h4>
+                    <p id="btIntro" class="muted" style="margin:0 0 8px"></p>
+                    <ol class="help" style="margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                        <li>Use <b>Bluefy</b> on an iPhone, or Chrome on Android or a computer (Safari cannot do Bluetooth).</li>
+                        <li>On the dive computer switch <b>Bluetooth</b> on in its menu, and close Shearwater Cloud everywhere (a computer talks to one app at a time).</li>
+                        <li>Tap the button and choose your dive computer in the list. Only new dives are downloaded, each saved as it arrives.</li>
+                    </ol>
+                    <button id="pgBtn" class="btn-main" type="button">Download dives over Bluetooth</button>
+                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                    <div id="pgMsg" class="muted" role="status">Switch Bluetooth on in the computer's menu, then tap the button and choose it in the list.</div>
+                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
+                    <button id="pgProbe" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:8px">Test: what can the app see?</button>
+                    <details id="btLogBox" class="logwrap" style="margin-top:10px"><summary>Download log <span id="btLogCount" class="muted"></span></summary>
+                            <p class="muted" style="margin:6px 0">Every Bluetooth attempt on this device (a download, a test): what was chosen, each step with its time, who answered, the result and the last bytes exchanged. Use it to see where a failed attempt stopped.</p>
+                            <ul id="btLogList" style="list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-family:var(--mono)"></ul>
+                            <textarea id="btLogText" readonly aria-label="Bluetooth download log" style="width:100%;min-height:160px;font-family:var(--mono);font-size:11px;border:1px solid var(--bd-ced4da);border-radius:8px;padding:8px;background:var(--bg-fff);color:var(--text)"></textarea>
+                            <div class="row wrap" style="margin:8px 0 0"><button id="btLogCopy" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy</button><button id="btLogSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save as file</button><button id="btLogSend" class="btn-set" type="button">Send to my account</button><button id="btLogClear" class="btn-set" type="button" style="background:var(--bg-6c757d)">Clear</button></div>
+                            <div id="btLogMsg" class="muted" role="status" style="margin-top:6px"></div>
+                        </details>
+                    <a id="labLink" class="linkbtn" href="bluetooth-lab.html" style="display:inline-block;margin-top:8px">Open the Bluetooth lab (detailed troubleshooting)</a>
+                </div>
+                <h4 id="impFileHead" class="srchead">Or import a file from Shearwater Cloud</h4>
                 <div id="impPeregrine">
                     <p class="muted" style="margin:0 0 10px">The <span class="impModel">Peregrine</span> hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
                     <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
@@ -1014,24 +1038,6 @@
                 <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The <span class="impModel">Peregrine</span> keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
                 </div>
                 <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
-                <div id="impBt">
-                <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
-                        <p class="muted" style="margin:6px 0 10px">Reads the <span class="impModel">Peregrine</span> directly, without Shearwater Cloud. Needs a browser with Bluetooth: <b>Bluefy</b> on iPhone, Chrome on Android or a computer. On the dive computer just switch <b>Bluetooth</b> on in its menu, and close Shearwater Cloud first (only one app can be connected). Older computers with classic Bluetooth, such as the Petrel 1, cannot connect from a browser. This had not worked on a real Peregrine when released: if it does not, run the test below and use the file import above.</p>
-                        <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
-                        <button id="pgProbe" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:8px">Test: what can the app see?</button>
-                        <details id="btLogBox" class="logwrap" style="margin-top:10px"><summary>Download log <span id="btLogCount" class="muted"></span></summary>
-                            <p class="muted" style="margin:6px 0">Every Bluetooth attempt on this device (a download, a test): what was chosen, each step with its time, who answered, the result and the last bytes exchanged. Use it to see where a failed attempt stopped.</p>
-                            <ul id="btLogList" style="list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-family:var(--mono)"></ul>
-                            <textarea id="btLogText" readonly aria-label="Bluetooth download log" style="width:100%;min-height:160px;font-family:var(--mono);font-size:11px;border:1px solid var(--bd-ced4da);border-radius:8px;padding:8px;background:var(--bg-fff);color:var(--text)"></textarea>
-                            <div class="row wrap" style="margin:8px 0 0"><button id="btLogCopy" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy</button><button id="btLogSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save as file</button><button id="btLogSend" class="btn-set" type="button">Send to my account</button><button id="btLogClear" class="btn-set" type="button" style="background:var(--bg-6c757d)">Clear</button></div>
-                            <div id="btLogMsg" class="muted" role="status" style="margin-top:6px"></div>
-                        </details>
-                        <a id="labLink" class="linkbtn" href="bluetooth-lab.html" style="display:inline-block;margin-top:8px">Open the Bluetooth lab (detailed troubleshooting)</a>
-                        <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
-                        <div id="pgMsg" class="muted" role="status">Switch Bluetooth on in the computer's menu, then tap a button and choose it in the list.</div>
-                        <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
-                    </details>
-                </div>
             </div>
             <div id="srcHideRow" style="display:none;margin:-4px 0 12px"><button id="srcHide" class="linkbtn" type="button">Hide this dive computer (it has no dives yet)</button></div>
             <div id="syncCard" class="card">

@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.20.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.20.2. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -118,7 +118,7 @@ A badge may appear on a dive:
 | **PARTIAL PROFILE** | The device had already overwritten the last minutes of the profile; the chart shows the gap. All summary numbers are still correct. |
 | **SUMMARY ONLY** | The device overwrote this dive's whole profile (it keeps roughly the last 128). Depth, duration and temperature are intact. |
 
-### Shearwater Peregrine: import from Shearwater Cloud
+### Shearwater Peregrine and Perdix: import a Shearwater Cloud file (the alternative to Bluetooth)
 The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager reads what Shearwater Cloud exports.
 1. Download your dives from the Peregrine into **Shearwater Cloud**, as you normally do.
 2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
@@ -142,13 +142,16 @@ Garmin does **not** let other apps read your dives straight from the watch or fr
 Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Summary and the regulator counter, using the first computer's record.
 The time shown is the watch's clock (the file stores a UTC time and the watch's offset). If a file has no offset the app says so and shows UTC. This import reads Garmin's published file format and is **beta**: it was built and tested with files made to that format and has not yet been compared with every watch, so check your first import against the watch. A freedive session is imported as one dive per file.
 
-### Shearwater Bluetooth download (Peregrine, Perdix 2) and the Bluetooth test
-Under **Bluetooth download (experimental)** (already open on the Perdix tab) the app can read the **Peregrine** or **Perdix 2** directly, without Shearwater Cloud and without exporting anything. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released (the phone's list did not show it), and the Perdix 2 has not been tried yet. It only reads: nothing is written to the computer.
+### Shearwater Bluetooth download (Peregrine, Perdix 2): the main way
+**Download over Bluetooth** is the first thing on the Peregrine and Perdix tabs: no export, no Shearwater Cloud, only new dives are downloaded, each saved as it arrives. It reads only: nothing is written to the computer. A dive already in your log (even from an earlier file import) is recognised and not added twice.
+* **Peregrine:** works on a real Peregrine (tried from Chrome on a Mac: it connected, answered with its serial, firmware and model number, and downloaded).
+* **Perdix:** the same method and the same code. It has **not yet been tried on a real Perdix**, so it is not claimed to work: if it fails, use the test and send the download log (below). A Perdix 2 should work; older computers with classic Bluetooth (the Petrel 1, and possibly the original Perdix) cannot connect from a browser at all.
+* The **file import** (Shearwater Cloud database or UDDF) stays underneath as the alternative, for example for a computer that cannot connect.
 1. You need a browser with Bluetooth: **Bluefy** on an iPhone, Chrome on Android or a computer. Safari cannot do it.
 2. On the dive computer switch **Bluetooth** on in its menu. Close Shearwater Cloud (and any other app) first: a dive computer talks to one app at a time.
 3. Tap **Test: what can the app see?** first. It picks the computer, connects, sends nothing, and says whether it can see the Shearwater data service. If the computer is missing from the list, or the result says it is not a Shearwater service, the download will not work either, and you know where it stops.
 4. Tap **Download dives over Bluetooth**. Only new dives are downloaded; each is saved the moment it arrives.
-Older computers with classic Bluetooth (such as the Petrel 1) cannot connect from a browser at all. If it does not work, use the file import above and open the **Bluetooth lab** (link under the test button, or `/bluetooth-lab.html`).
+If it does not work, use the file import below it and open the **Bluetooth lab** (link under the test button, or `/bluetooth-lab.html`).
 
 ### Download log (every Bluetooth attempt)
 Under the Bluetooth download, **Download log** records every attempt on this device: a download, a *Test: what can the app see?* or a lab handshake. Each entry shows the computer, browser and system, the time of every step, who answered (serial, firmware, model number; a model number the app knows is named: **9 = Peregrine**), the counts, the result (OK, FAILED or CANCELLED, or *no result* if the page was closed mid-way) and the first and last bytes exchanged, each with the time since the attempt began. The steps are in words: *Read serial number: "93D47FB9" (39 ms)*, *Dive list page 1: 138 dives listed*, *Dive 3 of 10 (2026-05-02 09:30): 14336 bytes, 480 depth samples, 2.4 s*, or *Dive 4 of 10: FAILED: the reason*. If a computer says it is a Peregrine (model number 9) but you are on the Perdix tab, the download stops before any dive is read, so no dive is filed under the wrong computer. The newest 25 are kept on this device (never HTML, capped in size). **Copy**, **Save as file**, **Clear**, or **Send to my account**: that stores the log privately in your own account (the newest 30 are kept) so someone helping can look at it afterwards. A different person signing in on the same browser starts with an empty log.

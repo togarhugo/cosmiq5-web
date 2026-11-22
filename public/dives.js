@@ -521,7 +521,9 @@ const Dives = (() => {
     if (imp) {
       imp.style.display = shown && shown !== "cosmiq" ? "" : "none";
       const garmin = shown === "garmin", shearwater = shown === "peregrine" || shown === "perdix", model = (U.DEVICES.find((x) => x.id === shown) || { short: "" }).short;
-      show("impPeregrine", shearwater); show("impNotePeregrine", shearwater); show("impBt", shown === "peregrine" || shown === "perdix"); if (shown === "perdix") { const bt = document.querySelector("#impBt details"); if (bt && !bt.dataset.opened) { bt.open = true; bt.dataset.opened = "1"; } } show("impGarmin", garmin); show("impNoteGarmin", garmin);
+      show("impPeregrine", shearwater); show("impNotePeregrine", shearwater); show("impBt", shown === "peregrine" || shown === "perdix");
+      const intro = $("btIntro"); if (intro) intro.textContent = shown === "perdix" ? "Reads the Perdix straight over Bluetooth, the same way as the Peregrine: no export and no Shearwater Cloud. The Peregrine version is proven on a real computer; the Perdix has not been tried yet, so if it fails, run the test below and send the download log. A Perdix 2 should work; an older computer with classic Bluetooth cannot connect from a browser." : "Reads the Peregrine straight over Bluetooth: no export and no Shearwater Cloud. This works on a real Peregrine. Dives already in your log (from an earlier file import too) are recognised and not added twice.";
+      const fh = $("impFileHead"); if (fh) { fh.style.display = garmin ? "none" : ""; fh.textContent = "Or import a file from Shearwater Cloud instead"; } show("impGarmin", garmin); show("impNoteGarmin", garmin);
       const set = (id, t) => { const el = $(id); if (el) el.textContent = t; };
       set("impTitle", (U.DEVICES.find((x) => x.id === shown) || { name: "" }).name);
       document.querySelectorAll(".impModel").forEach((el) => { el.textContent = model; });
