@@ -333,7 +333,7 @@
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
             .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
             .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
-            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); }
+            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); } .ti-import { --ti: url(/auth/icon-import.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
             .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
@@ -515,8 +515,10 @@
             .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
             .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
             @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
+            @media (max-width: 1023px) { .nav { gap: 3px; } .nav button { flex: 1 1 auto; font-size: 12px; padding: 8px 3px 7px; } .nav .ti { width: 28px; height: 28px; } }
             .no-cosmiq #connectBtn, .no-cosmiq #disconnectBtn, .no-cosmiq #status, .no-cosmiq #btBanner, .no-cosmiq #clockStatus, .no-cosmiq #navDevice, .no-cosmiq #deviceView { display: none !important; }
             .srchead { margin: 14px 0 6px; font-size: 14px; } #impTitle + #impBt .srchead { margin-top: 4px; }
+            .devchip { font-size: 11px; font-weight: 600; color: var(--tx-495057); background: var(--bg-e9ecef); border-radius: 10px; padding: 2px 8px; margin-left: 6px; white-space: nowrap; } .devchip.shared { color: var(--tx-1864ab); background: var(--bg-e7f5ff); }
             .srclist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; } .srcbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; background: var(--bg-f1f3f5); color: var(--tx-212529); border-radius: 10px; font-size: 15px; } .srcbtn span { font-size: 12px; }
             .linkbtn { background: none; color: var(--tx-1864ab); font-size: 13px; font-weight: 600; padding: 8px 4px; min-height: 36px; } #srcAddRow { margin: -2px 0 10px; }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
@@ -547,7 +549,7 @@
                 #sumRegHint { margin: 0; }
                 #sumMap { height: 440px; }
                 #certsView { max-width: 700px; } .wallet { --cw-h: 230px; --cw-peek: 116px; }
-                #logView { max-width: 980px; } #deviceView { max-width: 1120px; }
+                #logView, #importView { max-width: 980px; } #deviceView { max-width: 1120px; }
                 #deviceView .section.active { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; } #deviceView .section.active > .card { margin: 0; }
                 #accountView { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; max-width: 1100px; } #accountView[style*="none"] { display: none; }
                 #accountView > .card { margin: 0; }
@@ -590,6 +592,7 @@
         <div class="nav">
             <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
             <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
+            <button id="navImport" onclick="showView('import')"><i class="ti ti-import" aria-hidden="true"></i><span>Import</span></button>
             <button id="navCerts" onclick="showView('certs')"><i class="ti ti-cert" aria-hidden="true"></i><span>Certificates</span></button>
             <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
         </div>
@@ -978,6 +981,11 @@
             <div id="placeBanner" class="card" style="display:none"><span aria-hidden="true">&#128506;</span> <span id="placeBannerText"></span>
                 <button id="placeBannerBtn" class="btn-set" type="button" style="margin-left:8px">Place on map</button></div>
             <datalist id="locList"></datalist>
+            <div id="diveList"></div>
+        </div>
+
+        <div id="importView" style="display:none">
+            <div id="impIntro" class="card muted" style="margin-bottom:12px">Bring dives into Dive Manager. Pick the dive computer and download or import its dives; they appear in the <a href="#" id="impToLog">Dive log</a>, one list for all your computers with duplicates left out.</div>
             <div id="srcEmpty" class="card" style="display:none">
                 <h3>Which dive computer do you use?</h3>
                 <p class="muted" style="margin:0 0 10px">Only the dive computers that have dives, or that you add here, are shown. Pick yours to get started; you can add more later.</p>
@@ -1056,7 +1064,7 @@
                 </div>
                 <div id="diagMsg" class="muted"></div>
             </div>
-            <div id="diveList"></div>
+            <div id="impGoLog" class="card" style="display:none"><span id="impGoLogText"></span> <button id="impGoLogBtn" class="btn-set" type="button" style="margin-left:8px">Open the dive log</button></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
         </div>
 
@@ -1203,6 +1211,24 @@
                         <button id="danAdd" class="btn-set" type="button">Upload</button>
                     </div>
                     <div id="danMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
+            <details class="card acc" data-sec="share">
+                <summary>Share dives <span id="shareBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Dive together? Copy your dive log into the other person's account. Their Dive log then lists every dive once: the record of <b>their own</b> dive computer when they have one, yours otherwise. Only dives you recorded yourself are copied, and copying again adds only what is new.</p>
+                    <div id="shareOut" style="display:none">
+                        <label class="label" for="shareTo">Share with</label>
+                        <select id="shareTo" class="fld"></select>
+                        <div class="row wrap" style="margin:6px 0 0"><label class="label" style="margin:0">From <input id="shareFrom" class="fld" type="date" style="width:auto" /></label><label class="label" style="margin:0">Until <input id="shareUntil" class="fld" type="date" style="width:auto" /></label></div>
+                        <p class="muted" style="margin:6px 0 8px"><b>Think before copying everything:</b> the copied dives count in their totals, regulator counter, places and map. Choose a <b>From</b> date so dives they were not on are left out.</p>
+                        <div id="sharePreview" class="box" style="margin-bottom:8px">Press <b>Preview</b> to see how many dives would be copied.</div>
+                        <div class="row wrap" style="margin:0"><button id="sharePreviewBtn" class="btn-set" type="button" style="background:var(--bg-6c757d)">Preview</button><button id="shareCopyBtn" class="btn-set" type="button" disabled>Copy dives</button></div>
+                    </div>
+                    <p id="shareNone" class="muted" style="display:none;margin:0">There is nobody else on the allow-list to share with.</p>
+                    <div id="shareIn" style="display:none;margin-top:12px"><div class="label" style="margin-top:0">Shared with you</div><div id="shareInList"></div></div>
+                    <div id="shareMsg" class="msg" role="status"></div>
                 </div>
             </details>
 
@@ -1422,13 +1448,14 @@
             let currentView = "summary";
             function showView(v) {
                 currentView = v;
-                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["certs", "navCerts"], ["account", null]]) {
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["import", "navImport"], ["certs", "navCerts"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
                     if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
                 document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
                 if (v === "account") { Account.load(); AccountArea.show(); }
                 if (v === "certs") AccountArea.showCerts();
+                if (v === "import") Dives.render();
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
                 if (v === "summary") Dives.render().then(() => PlacesUI.shown());

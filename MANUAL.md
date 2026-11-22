@@ -1,13 +1,13 @@
 # Dive Manager — User Manual
 
-*For version 0.20.3. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.21.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
 2. [Finding your way around](#2-finding-your-way-around)
 3. [Summary](#3-summary)
 4. [Connecting and syncing](#4-connecting-and-syncing)
-5. [Dive log](#5-dive-log)
+5. [Dive log and Import](#5-dive-log-and-import)
 6. [Dive locations](#6-dive-locations)
 7. [Device settings](#7-device-settings)
 8. [Account](#8-account) (including [API access](#api-access-let-other-tools-read-your-dive-log))
@@ -87,22 +87,36 @@ Tap the You card or the regulator card to jump to the matching Account section.
 Good to know:
 * **Each dive is saved the moment it arrives.** If the connection drops, or you tap **Cancel**, you keep what was downloaded; tap sync again to continue.
 * Downloading is slow (the device sends very small pieces): a few dives take seconds, a whole log can take minutes. Keep the screen on.
-* In **Dive log → Sync** you can switch off the clock sync or the automatic download, and tap **Re-check every dive** if something seems missing.
+* In **Import → Cosmiq+ → Sync** you can switch off the clock sync or the automatic download, and tap **Re-check every dive** if something seems missing.
 * **Download raw backup** saves all your dives as a file you can keep.
 * **Copy diagnostics / Save diagnostics** produce a report (version, device traffic) you can send when something goes wrong.
 
 ---
 
-## 5. Dive log
+## 5. Dive log and Import
 
-At the top, choose the dive computer. Each has its **own log**. Only **your** dive computers are listed: the ones that already have dives in your account, plus the ones you add yourself. The choices are **Cosmiq+ Gen 5**, **Shearwater Peregrine**, **Shearwater Perdix** and **Garmin Descent**.
-* **Nothing listed yet?** The app asks *Which dive computer do you use?*: tap yours and its sync or import box appears.
+Two separate tabs: the **Dive log** only lists your dives; **Import** is where dives come in.
+
+### Dive log: one list, every dive once
+* **One list for all your dive computers.** A dive that two computers recorded (you wore both) appears **once**, with the record of the computer ranked first in this list: **Peregrine, Perdix, Garmin, Cosmiq+**. So for you: a Peregrine dive is shown instead of the Cosmiq+ copy; for someone with a Perdix and a Garmin the Perdix record is shown. The row says which computer it is (a small chip) and which others recorded it (*also on Cosmiq+*); the header says how many duplicates were left out. The same rule decides the Summary, the regulator counter and the map.
+* **Places are kept.** A place entered on a hidden record is shown on the record that is displayed, and a place you enter applies to both.
+* **Numbers.** The number in the box is your logbook number: 1 is your oldest dive. A computer's own number is in the dive's details.
+* **Dives from another person** (see *Share dives* in Account) appear in the same list with a chip *from <name>*. A dive both of you recorded shows **your own computer's** record, never the shared copy.
+* An empty log points you to Import.
+
+### Import: bring dives in
+Open **Import**. Only **your** dive computers are listed: the ones that already have dives in your account, plus the ones you add yourself. The choices are **Cosmiq+ Gen 5**, **Shearwater Peregrine**, **Shearwater Perdix** and **Garmin Descent**. Each has its own box with its own steps: the Cosmiq+ syncs over Bluetooth, the Peregrine and Perdix download over Bluetooth or import a Shearwater Cloud file, the Garmin imports FIT files. The count next to each computer is how many dives *that computer* holds (before duplicates are left out). When something new arrives, the Import tab says so and has an **Open the dive log** button.
+* **Nothing listed yet?** The app asks *Which dive computer do you use?*: tap yours and its box appears.
 * **Another computer later:** tap **+ Add a dive computer** under the tabs.
 * **Added by mistake?** While a computer has no dives, **Hide this dive computer** removes its tab.
 * **No Cosmiq+?** If your dive computers do not include a Cosmiq+, its **Connect & Sync** button, connection status and the **Device** tab are hidden, because they only make sense with one. Add the Cosmiq+ and they come back.
-* **Shearwater Perdix:** works exactly like the Peregrine import below (Shearwater Cloud export, drag the file into the box).
-Each person only ever sees their own dives: every account has its own log, and if someone else signs in on the same browser, the dives and settings stored there for the previous person are cleared first (dives that were never uploaded are saved to a backup file, never given to the other account).
+* **Download raw backup (.json)** is at the bottom of Import.
+Each person only ever sees their own dives (plus any another person chose to share): every account has its own log, and if someone else signs in on the same browser, the dives and settings stored there for the previous person are cleared first (dives that were never uploaded are saved to a backup file, never given to the other account).
 
+### Share dives (Account)
+You dive together? **Account → Share dives** copies **your own** dive log into the other person's account (any other name on the allow-list). Choose the person, optionally a **From** / **Until** date, press **Preview** (it shows how many dives per year would be copied), then **Copy** (tap twice). Copying again adds only what is new, and dives that were shared with *you* are never passed on. The copies carry your name, rank **after** the other person's own computers, and the other person can **Remove** everything you shared (Account → Share dives → *Shared with you*). Think before copying everything: the copied dives count in that person's totals, regulator counter, places and map, so choose a **From** date and leave out dives they were not on.
+
+### The dive list
 Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number (bold, in a small box), time, mode (scuba / freedive / gauge), maximum depth and duration.
 
 Tap a dive to open it:
@@ -122,7 +136,7 @@ A badge may appear on a dive:
 The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager reads what Shearwater Cloud exports.
 1. Download your dives from the Peregrine into **Shearwater Cloud**, as you normally do.
 2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
-3. In Dive Manager open **Dive log → Shearwater Peregrine**, then **drag the file into the dashed box** (or tap the box and choose it). Both the `.db` and the `.zip` work, and so does a **UDDF** export.
+3. In Dive Manager open **Import → Shearwater Peregrine**, then **drag the file into the dashed box** (or tap the box and choose it). Both the `.db` and the `.zip` work, and so does a **UDDF** export.
 4. You see *"3 new dives imported, 0 already there"* and are asked where you dived.
 
 On a computer you can also **drag the file onto the card** instead of using the chooser (handy when you cannot find the folder: drag it straight from a Finder or Spotlight result). The file chooser shows **all** files (it does not filter by type), so a `.db` file is never greyed out. Tested on a real export of 138 dives: every dive decoded, and depth and duration match the numbers Shearwater Cloud itself stores.
@@ -349,7 +363,7 @@ The menu itself shows your own address and a ready-to-copy example. In short:
 | "This browser can't use Bluetooth" | Use Chrome/Edge, or Bluefy on iPhone/iPad. |
 | Can't find the dive computer | Wake it, keep it close, make sure Bluetooth is on and no other app is connected to it. |
 | Sync stops or times out | Tap **Cancel**/wait, then sync again: downloaded dives are kept and it continues. |
-| A dive is missing | **Dive log → Re-check every dive**. |
+| A dive is missing | **Import → Cosmiq+ → Re-check every dive**. |
 | A chart says *summary only* | The device overwrote that profile; nothing can bring it back. Sync after each trip. |
 | "Not applied: the dive computer still shows …" | Try again; check the device's screen; reconnect if it keeps happening. |
 | Signed out / "reload the page to sign in again" | Reload; sign in again. Unsent edits are kept and retried. |

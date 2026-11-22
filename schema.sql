@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS dives (
   location     TEXT,                   -- free-text dive area ("Komodo"); NULL = not set
   device       TEXT NOT NULL DEFAULT 'cosmiq',  -- which dive computer: 'cosmiq' (Bluetooth) or an imported one ('peregrine')
   extra        TEXT,                   -- imported dives: decoded values + depth samples as JSON (header_hex/profile_hex are empty)
+  shared_from  TEXT NOT NULL DEFAULT '',  -- '' = recorded on this person's own computers; otherwise the email of the person who shared this dive (see migrations/0010_shared_dives.sql)
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, fingerprint)
 );

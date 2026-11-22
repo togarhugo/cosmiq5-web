@@ -23,14 +23,18 @@ const Dives = (() => {
     const t = db.transaction(STORE, mode), s = t.objectStore(STORE); const out = fn(s);
     t.oncomplete = () => res(out.result); t.onerror = () => rej(t.error); }); };
   const all = () => tx("readonly", (s) => s.getAll());
+  /** Remove the dives another person shared with you from this device too (the account's copies were deleted on the server). */
+  async function forgetShared(from) { const gone = (await all()).filter((r) => r.sharedFrom === from); for (const r of gone) await tx("readwrite", (s) => s.delete(r.fingerprint)); return gone.length; }
   const put = (rec) => tx("readwrite", (s) => s.put(rec));
 
+  /** "name.surname@example.com" -> "Name": how a person is named next to a dive that was shared by them. */
+  const whoIs = (email) => { const t = String(email || "").split("@")[0].split(/[._-]/)[0]; return t.charAt(0).toUpperCase() + t.slice(1); };
   function toRecord(raw, deviceMac) {
     const d = P.parseDive(P.fromHex(raw.headerHex), P.fromHex(raw.profileHex));
     return { fingerprint: raw.fingerprint, deviceMac: deviceMac || raw.deviceMac || null,
       headerHex: raw.headerHex, profileHex: raw.profileHex, startedAt: d.startedAt, mode: d.mode,
       durationSec: d.durationSec, maxDepthM: +d.maxDepthM.toFixed(2), o2Percent: d.o2Percent,
-      uploaded: !!raw.uploaded, location: raw.location || undefined };
+      uploaded: !!raw.uploaded, location: raw.location || undefined, sharedFrom: raw.sharedFrom || undefined };
   }
 
   // Imported dives (another computer's log read from a file) have no raw device bytes: they keep decoded values + depth samples.
@@ -40,7 +44,7 @@ const Dives = (() => {
     let x = {}; try { x = JSON.parse(d.extra || "{}"); } catch (e) {}
     return { fingerprint: d.fingerprint, device: d.device, startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec, maxDepthM: d.maxDepthM,
       o2Percent: d.o2Percent == null ? null : d.o2Percent, number: x.n == null ? null : x.n, minTempC: x.t == null ? null : x.t, intervalSec: x.iv || 10,
-      samples: Array.isArray(x.s) ? x.s : [], headerHex: "", profileHex: "", uploaded: true, location: d.location || undefined };
+      samples: Array.isArray(x.s) ? x.s : [], headerHex: "", profileHex: "", uploaded: true, location: d.location || undefined, sharedFrom: d.sharedFrom || undefined };
   }
   function toWire(r) {
     if (!isImported(r)) return r;
@@ -69,10 +73,11 @@ const Dives = (() => {
   // ---------- locations (free text per dive; edited per date) ----------
   /** map: fingerprint -> text ("" clears). Saved on this phone first, then sent to the cloud. */
   async function setLocations(map) {
-    const recs = await all(), known = U.knownLocations(recs), entered = [];
-    for (const r of recs) if (Object.prototype.hasOwnProperty.call(map, r.fingerprint)) {
-      const loc = U.normalizeLocation(map[r.fingerprint], known);
-      await put({ ...r, location: loc || undefined, locDirty: true }); if (loc) entered.push(loc);
+    const recs = await all(), known = U.knownLocations(recs), entered = [], { extras } = U.duplicateGroups(recs);
+    const target = new Map(); for (const fp of Object.keys(map)) { target.set(fp, fp); for (const h of extras.get(fp) || []) target.set(h.fingerprint, fp); }   // the record shown and the ones hidden behind it all get the place
+    for (const r of recs) if (target.has(r.fingerprint)) {
+      const loc = U.normalizeLocation(map[target.get(r.fingerprint)], known);
+      await put({ ...r, location: loc || undefined, locDirty: true }); if (loc && target.get(r.fingerprint) === r.fingerprint) entered.push(loc);
     }
     render(); await pushLocations(); render();
     // a place you picked from the map suggestions is put on the map with that position; any other new place goes to the map search
@@ -129,7 +134,7 @@ const Dives = (() => {
 
   async function syncFromDevice(io, opts) {
     if (busy) return;
-    busy = true; setBusy(true); showBanner(true);
+    busy = true; setBusy(true); showBanner(true); { const g = $("impGoLog"); if (g) g.style.display = "none"; }
     let saved = 0, info = {}; const savedRecs = [];
     try {
       const known = new Set((await all()).map((d) => d.fingerprint));
@@ -149,11 +154,13 @@ const Dives = (() => {
       progress(msg, 0); log(msg, "log-err"); saveLast({ ok: false, msg, saved, ...info });
       if (saved) await cloudPush();
     } finally { if (io.end) io.end(); busy = false; setBusy(false); showBanner(false); render(); }
-    if (savedRecs.length) openPrompt(savedRecs, "Where did you dive?", `${savedRecs.length} new dive${savedRecs.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    if (savedRecs.length) { importDone(savedRecs.length); openPrompt(savedRecs, "Where did you dive?", `${savedRecs.length} new dive${savedRecs.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`); }
     return { saved };
   }
 
   // ---------- import a log exported from another dive computer's app ----------
+  /** After an import or a sync: tell where the new dives went, with a way to open them (the Import view has no dive list). */
+  function importDone(n) { const c = $("impGoLog"); if (!c || !n) return; $("impGoLogText").textContent = `${n} new dive${n === 1 ? "" : "s"} added to your dive log.`; c.style.display = ""; }
   /** A decoded dive (from a file or from Bluetooth) -> the record stored on the phone and in the cloud. */
   const importedRecord = (d, deviceId) => ({
     fingerprint: window.DiveImport.fingerprint(deviceId + "|" + d.startedAt.slice(0, 16)), device: deviceId, startedAt: d.startedAt, mode: d.mode, durationSec: d.durationSec,
@@ -163,7 +170,7 @@ const Dives = (() => {
   async function importFiles(files, deviceId) {
     const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
-    busy = true; say2("Reading\u2026");
+    busy = true; say2("Reading\u2026"); { const g = $("impGoLog"); if (g) g.style.display = "none"; }
     const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0, gNotDive = 0, gUtc = 0; const problems = [];
     try {
       for (const f of files) {
@@ -201,7 +208,7 @@ const Dives = (() => {
       say2(parts.join(", ") + "." + (problems.length ? " " + problems.join(" ") : ""), !fresh.length && !!problems.length);
       if (fresh.length) say(`${fresh.length} dive${fresh.length === 1 ? "" : "s"} imported`);
     } finally { busy = false; render(); }
-    if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} imported dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    if (fresh.length) { importDone(fresh.length); openPrompt(fresh, "Where did you dive?", `${fresh.length} imported dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`); }
     return { imported: fresh.length, already, skipped, found };
   }
 
@@ -223,7 +230,7 @@ const Dives = (() => {
     const L = window.BtLog.begin({ kind: "download", device, model });
     const say2 = (t, bad) => { L.step(t); if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : ""; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); L.end(false, "Another sync was running."); return; }
-    busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0";
+    busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0"; { const g = $("impGoLog"); if (g) g.style.display = "none"; }
     const fp = (startedAt) => window.DiveImport.fingerprint(device + "|" + startedAt.slice(0, 16));
     const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0, ended = false;
     const trace = (l) => { if (typeof diag === "function") diag("PG " + l); L.trace(l); };
@@ -252,10 +259,10 @@ const Dives = (() => {
       say2(m + (fresh.length ? ` ${fresh.length} dive(s) were saved before it stopped: run it again to continue.` : ""), !(e && e.name === "NotFoundError"));
       log(model + " sync stopped: " + m, "log-err"); if (fresh.length) await cloudPush(); L.end(false, m + (fresh.length ? ` (${fresh.length} dives saved before it stopped)` : ""), { cancelled, fresh: fresh.length }); ended = true;
     } finally { if (conn) conn.close(); busy = false; btn.disabled = false; cancel.style.display = "none"; if (!ended) L.end(false, "stopped unexpectedly"); render(); renderBtLog(); }
-    if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} new ${model} dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
+    if (fresh.length) { importDone(fresh.length); openPrompt(fresh, "Where did you dive?", `${fresh.length} new ${model} dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`); }
     return { saved: fresh.length };
   }
-  // ---- the download log panel (Dive log > Bluetooth download) ----
+  // ---- the download log panel (Import > Bluetooth download) ----
   function renderBtLog() {
     const box = $("btLogBox"); if (!box || !window.BtLog) return;
     const list = window.BtLog.list(); $("btLogCount").textContent = list.length ? `(${list.length})` : "";
@@ -405,7 +412,7 @@ const Dives = (() => {
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     const kc = $("sumLastKind"); kc.className = "kindchip kind-" + sm.last.kind; kc.textContent = KIND_LABEL[sm.last.kind];
     $("sumKinds").innerHTML = U.KINDS.filter((k) => k === "scuba" || sm.byKind[k].count).map((k) => `<div class="kindrow"><span class="kindchip kind-${k}">${KIND_LABEL[k]}</span><b>${U.durText(sm.byKind[k].sec)}</b><span class="muted">${sm.byKind[k].count} dive${sm.byKind[k].count === 1 ? "" : "s"}</span></div>`).join("");
-    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on ${new Set(recs.map(U.deviceOf)).size > 2 ? "more than one" : "both"} computers, counted once (${new Set(recs.map(U.deviceOf)).size > 2 ? "the first computer's record" : "Cosmiq+"} used)` : "");
+    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on ${new Set(recs.map(U.deviceOf)).size > 2 ? "more than one" : "both"} computers, counted once (${new Set(recs.map(U.deviceOf)).size > 2 ? "the preferred computer's record" : (U.DEVICES.find((x) => x.id === U.PREFERENCE.find((p) => recs.some((r) => U.deviceOf(r) === p))) || { short: "the preferred computer" }).short} used)` : "");
   }
   /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */
   function renderDiverCard() {
@@ -554,12 +561,14 @@ const Dives = (() => {
     } catch (e) { /* offline or signed out: keep what is cached for the same person */ }
     return false;
   }
-  function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
+  function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; const g = $("impGoLog"); if (g) g.style.display = "none"; render(); }
 
   let renderPending = false, wired = false;
   function wireList(list) {
     if (wired) return; wired = true;
     $("devTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-dev]"); if (b) pickDevice(b.dataset.dev); });
+    document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest(".togo-import, #impToLog"); if (!a) return; e.preventDefault(); window.showView(a.id === "impToLog" ? "log" : "import"); });
+    $("impGoLogBtn").addEventListener("click", () => window.showView("log"));
     for (const id of ["srcEmptyList", "srcAddList"]) $(id).addEventListener("click", (e) => { const b = e.target.closest("button[data-add]"); if (b) addSource(b.dataset.add); });
     $("srcAdd").addEventListener("click", () => { const l = $("srcAddList"); l.style.display = l.style.display === "none" ? "" : "none"; });
     $("srcHide").addEventListener("click", hideSource);
@@ -622,20 +631,27 @@ const Dives = (() => {
   async function render() {
     const list = $("diveList"); if (!list) return;
     const everything = (await all()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-    $("diveCount").textContent = everything.length ? `(${everything.length})` : "";
-    renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(everything); wireList(list);
+    const own = everything.filter((r) => !r.sharedFrom);                              // the computers of this person (dives shared with you do not make a computer of yours)
+    const { dup, extras } = U.duplicateGroups(everything), recs = U.uniqueDives(everything).reverse();    // the dive log: every dive once, newest first, the preferred computer's record
+    $("diveCount").textContent = recs.length ? `(${recs.length})` : "";
+    renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(recs); wireList(list);
     if (typeof PlacesUI !== "undefined") PlacesUI.render(everything);                  // map pins + places still to put on the map
-    const dups = U.duplicateMap(everything), byFp = new Map(everything.map((x) => [x.fingerprint, x])), keptName = (fp) => { const k = byFp.get(dups.get(fp)); return k ? (U.DEVICES.find((x) => x.id === U.deviceOf(k)) || { short: "the other computer" }).short : "Cosmiq+"; };                                            // dives both computers recorded: only the Cosmiq+ one is counted
-    const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
+    renderDeviceTabs(own);                                                              // the Import view: which dive computers, their sync / import cards
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "var(--tx-c92a2a)" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
-    if (!recs.length) { list.innerHTML = dev === "cosmiq" ? "<p class='muted'>No Cosmiq+ dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>" : `<p class='muted'>No ${esc(deviceName(dev))} dives yet. ${dev === "garmin" ? "Drop your FIT files or a Garmin Connect ZIP into the box above." : "Export your log from Shearwater Cloud and choose the file above."}</p>`; return; }
+    const asc0 = recs.slice().reverse(), numbers = new Map(asc0.map((r, i) => [r.fingerprint, i + 1]));      // logbook numbers: 1 = your oldest dive
+    const chip = (r) => `<span class="devchip">${esc((U.DEVICES.find((x) => x.id === U.deviceOf(r)) || { short: U.deviceOf(r) }).short)}</span>` + (r.sharedFrom ? `<span class="devchip shared" title="A dive shared with you">from ${esc(whoIs(r.sharedFrom))}</span>` : "");
+    const alsoOn = (r) => { const hid = extras.get(r.fingerprint) || []; const names = [...new Set(hid.map((h) => (U.DEVICES.find((x) => x.id === U.deviceOf(h)) || { short: "another computer" }).short))]; return names.length ? `<span class="badge also" title="Also recorded by: ${esc(names.join(", "))}. This record is the one shown and counted.">also on ${esc(names.join(", "))}</span>` : ""; };
+    if (!recs.length) { list.innerHTML = "<p class='muted'>No dives yet. Open <a href=\"#\" class=\"togo-import\">Import</a> to download or import the dives of your dive computer.</p>"; return; }
     const ae = document.activeElement;                                              // never rebuild the list under someone who is typing
     if (ae && ae.tagName === "INPUT" && (list.contains(ae) || ($("locPrompt") && $("locPrompt").contains(ae)))) { renderPending = true; return; }
 
-    const resolved = dev === "cosmiq" ? P.reconcileProfiles(recs) : Object.fromEntries(recs.map((r) => [r.fingerprint, { status: "ok" }]));   // which profile really belongs to which dive (imports are complete)
+    const resolved = {}; for (const r of recs) resolved[r.fingerprint] = { status: "ok" };                                  // imports are complete
+    const cosmiqGroups = new Map(); for (const r of everything) if (U.deviceOf(r) === "cosmiq") { const k = (r.sharedFrom || "") + "|" + (r.deviceMac || ""); if (!cosmiqGroups.has(k)) cosmiqGroups.set(k, []); cosmiqGroups.get(k).push(r); }
+    const reconciled = {}; for (const g of cosmiqGroups.values()) Object.assign(reconciled, P.reconcileProfiles(g));             // which Cosmiq+ profile really belongs to which dive (one computer at a time)
+    for (const r of recs) if (reconciled[r.fingerprint]) resolved[r.fingerprint] = reconciled[r.fingerprint];
     const asc = recs.slice().reverse(), gapBefore = new Map();
     asc.forEach((r, i) => { if (i) gapBefore.set(r.fingerprint, (asMs(r.startedAt) - (asMs(asc[i - 1].startedAt) + asc[i - 1].durationSec * 1000)) / 60000); });
 
@@ -652,13 +668,13 @@ const Dives = (() => {
       const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
         ${numBox(num)}<span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
-        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${dups.has(r.fingerprint) ? `<span class="badge also" title="Recorded by two computers: the ${esc(keptName(r.fingerprint))} dive is the one counted in the Summary">also on ${esc(keptName(r.fingerprint))}</span>` : ""}
+        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${chip(r)}${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${alsoOn(r)}
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };
-    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${dev === "cosmiq" ? ` \u00b7 ${full} with full depth profile` +
-      `${partial ? ` \u00b7 ${partial} partial` : ""}${summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : ""}` : ""}</p>`;
-    for (const y of years) {
+    const hiddenN = [...extras.values()].reduce((n, x) => n + x.length, 0), sharedN = recs.filter((r) => r.sharedFrom).length;
+    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${hiddenN ? ` \u00b7 ${hiddenN} duplicate${hiddenN === 1 ? "" : "s"} from another computer left out` : ""}${sharedN ? ` \u00b7 ${sharedN} shared with you` : ""}` +
+      `${full !== recs.length ? ` \u00b7 ${full} with full depth profile` + (partial ? ` \u00b7 ${partial} partial` : "") + (summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : "") : ""}</p>`;    for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
         U.groupByMonth(g).map(({ month, recs: mrs }) => {
@@ -710,5 +726,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { claimDevice, syncFromDevice, syncPeregrine, probeShearwater, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { claimDevice, forgetShared, syncFromDevice, syncPeregrine, probeShearwater, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();

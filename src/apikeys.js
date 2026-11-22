@@ -94,7 +94,7 @@ async function authenticate(request, env) {
 
 const toBytes = (h) => Uint8Array.from(h.match(/../g) || [], (x) => parseInt(x, 16));
 const kindOf = (mode) => (mode === "freedive" ? "freedive" : "scuba");
-const SELECT = "fingerprint, device, started_at, mode, duration_sec, max_depth_m, o2_percent, location, created_at, header_hex, json_extract(extra, '$.n') AS x_number, json_extract(extra, '$.t') AS x_temp";
+const SELECT = "fingerprint, shared_from, device, started_at, mode, duration_sec, max_depth_m, o2_percent, location, created_at, header_hex, json_extract(extra, '$.n') AS x_number, json_extract(extra, '$.t') AS x_temp";
 
 /** One dive as the API shows it. `data` (samples / raw) is only added when asked for, because it is the expensive part. */
 function shape(r, places, data) {
@@ -103,7 +103,7 @@ function shape(r, places, data) {
   if (cosmiq && r.header_hex && r.header_hex.length === 72) { h = toBytes(r.header_hex); const d = CosmiqDive.parseDive(h, new Uint8Array(0)); number = d.number; minTemp = d.minTempC; }
   const pos = r.location ? places.get(r.location.trim().toLowerCase()) : null;
   const o = { id: r.fingerprint, device: r.device || "cosmiq", kind: kindOf(r.mode), mode: r.mode, startedAt: r.started_at, durationSec: r.duration_sec, maxDepthM: r.max_depth_m, minTempC: minTemp, o2Percent: r.o2_percent ?? null,
-    diveNumber: number, location: r.location || null, position: pos || null, uploadedAt: iso(r.created_at) };
+    diveNumber: number, location: r.location || null, position: pos || null, uploadedAt: iso(r.created_at), ...(r.shared_from ? { sharedFrom: r.shared_from } : {}) };     // sharedFrom: a dive copied from another person's log
   if (data) {
     if (cosmiq) {
       let samples = null, status = "unavailable";

@@ -139,7 +139,7 @@ test("uniqueDives: a dive recorded by two computers counts once; separate dives 
   assert.equal(U.uniqueDives([cosmiq, d("2026-05-02T10:15:00", 2400, "peregrine")]).length, 2, "starting exactly when the other ended is a new dive");
   assert.equal(U.uniqueDives([]).length, 0);
   // totals and the regulator use it
-  assert.equal(U.summarize([cosmiq, peregrine]).count, 1); assert.equal(U.summarize([cosmiq, peregrine]).totalSec, 2700);
+  assert.equal(U.summarize([cosmiq, peregrine]).count, 1); assert.equal(U.summarize([cosmiq, peregrine]).totalSec, 2640, "the Peregrine record is the one used");
   assert.equal(U.regulatorCount({ baseline: 10, since: "" }, [cosmiq, peregrine]), 11);
   assert.equal(U.regulatorCount({ baseline: 0, since: "" }, [cosmiq, peregrine, d("2026-05-03T09:00:00", 3000, "peregrine")]), 2);
 });
@@ -161,13 +161,14 @@ test("chart axes: round gridlines that always cover the data", () => {
   assert.ok(U.timeTicks(3 * 3600).ticks.every((t) => t < 3 * 3600)); assert.ok(U.timeTicks(86400).ticks.length <= 12);
 });
 
-test("two dive computers: the Cosmiq+ dive is the one kept, in every situation seen in a real log", () => {
+test("two dive computers: the Peregrine dive is the one kept, in every situation seen in a real log", () => {
   const d = (startedAt, durationSec, depth, device) => ({ fingerprint: (device || "cosmiq") + startedAt, startedAt, durationSec, maxDepthM: depth, ...(device ? { device } : {}) });
   const cosmiq = (a, b, c) => d(a, b, c), pere = (a, b, c) => d(a, b, c, "peregrine");
   const keptOf = (recs) => U.uniqueDives(recs).map((r) => r.fingerprint);
-  // the Peregrine started first: still the Cosmiq record is used (it used to be the earlier one)
-  assert.deepEqual(keptOf([pere("2026-05-02T09:28:00", 2760, 28.4), cosmiq("2026-05-02T09:30:00", 2700, 28.5)]), ["cosmiq2026-05-02T09:30:00"]);
-  assert.deepEqual(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:28:00", 2760, 28.4)]), ["cosmiq2026-05-02T09:30:00"], "order of the list does not matter");
+  // whichever computer started first, the Peregrine record is the one used
+  assert.deepEqual(keptOf([pere("2026-05-02T09:28:00", 2760, 28.4), cosmiq("2026-05-02T09:30:00", 2700, 28.5)]), ["peregrine2026-05-02T09:28:00"]);
+  assert.deepEqual(keptOf([cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:28:00", 2760, 28.4)]), ["peregrine2026-05-02T09:28:00"], "order of the list does not matter");
+  assert.deepEqual(keptOf([pere("2026-05-02T09:40:00", 2700, 28.5), cosmiq("2026-05-02T09:30:00", 2700, 28.5)]), ["peregrine2026-05-02T09:40:00"], "even when the Cosmiq+ started first");
   // clocks 12 minutes apart (September 2024 in the real log): they still overlap
   assert.equal(keptOf([cosmiq("2024-09-07T12:00:00", 3600, 21.76), pere("2024-09-07T12:12:00", 3600, 22)]).length, 1);
   // clocks exactly one hour apart (5 May 2022 in the real log): no overlap on the clock, but the same dive
@@ -183,8 +184,8 @@ test("two dive computers: the Cosmiq+ dive is the one kept, in every situation s
   // a Cosmiq dive that already has its own Peregrine twin is not matched again by a look-alike an hour away
   assert.equal(keptOf([cosmiq("2026-05-02T11:00:00", 3000, 20), pere("2026-05-02T11:01:00", 3000, 20), pere("2026-05-02T10:00:00", 3000, 20)]).length, 2, "the look-alike stays a separate dive");
   const all = [cosmiq("2026-05-02T09:30:00", 2700, 28.5), pere("2026-05-02T09:31:00", 2640, 28.4), pere("2026-05-03T07:00:00", 3000, 20, "peregrine"), cosmiq("2026-05-04T07:00:00", 3000, 20)];
-  const m = U.duplicateMap(all); assert.deepEqual([...m.entries()], [["peregrine2026-05-02T09:31:00", "cosmiq2026-05-02T09:30:00"]], "only the Peregrine copy is marked, and it points at the Cosmiq dive");
-  assert.equal(U.uniqueDives(all).length, 3); const sm = U.summarize(all, new Date(2026, 10, 21)); assert.equal(sm.count, 3); assert.equal(sm.duplicates, 1); assert.equal(sm.totalSec, 2700 + 3000 + 3000, "the Cosmiq length is used, not the Peregrine's");
+  const m = U.duplicateMap(all); assert.deepEqual([...m.entries()], [["cosmiq2026-05-02T09:30:00", "peregrine2026-05-02T09:31:00"]], "only the Cosmiq+ copy is marked, and it points at the Peregrine dive");
+  assert.equal(U.uniqueDives(all).length, 3); const sm = U.summarize(all, new Date(2026, 10, 21)); assert.equal(sm.count, 3); assert.equal(sm.duplicates, 1); assert.equal(sm.totalSec, 2640 + 3000 + 3000, "the Peregrine length is used, not the Cosmiq+'s");
   // short surface blips on the Peregrine during a Cosmiq dive are not extra dives
   assert.equal(keptOf([cosmiq("2022-06-09T08:16:00", 3900, 16.89), pere("2022-06-09T08:20:00", 20, 2.4)]).length, 1);
   // same computer never merges with itself, and unknown computers are left alone
@@ -238,7 +239,7 @@ test("fonts and tab icons: Geist and Geist Mono served from the app, tab icons a
   for (const [f, min] of [["auth/fonts/Geist-Variable.woff2", 40000], ["auth/fonts/GeistMono-Variable.woff2", 40000]]) { const b = fs.readFileSync(new URL(f, root)); assert.equal(b.slice(0, 4).toString(), "wOF2", f + " is a WOFF2 font"); assert.ok(b.length > min && b.length < 120000, f + " " + b.length); }
   assert.match(fs.readFileSync(new URL("auth/fonts/LICENSE-Geist-OFL.txt", root), "utf8"), /OPEN FONT LICENSE/i, "the licence travels with the fonts");
   const css = fs.readFileSync(new URL("auth/fonts.css", root), "utf8"); assert.match(css, /font-family: "Geist";[^}]*Geist-Variable\.woff2[^}]*font-weight: 100 900/); assert.match(css, /font-family: "Geist Mono";[^}]*GeistMono-Variable\.woff2/); assert.ok(!/https?:\/\//.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), "no font is loaded from another website");
-  for (const f of ["auth/icon-summary.png", "auth/icon-log.png", "auth/icon-cert.png", "auth/icon-device.png"]) { const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]); assert.equal(b.readUInt32BE(16), 148); assert.equal(b.readUInt32BE(20), 148); assert.equal(b[25], 6, f + " has an alpha channel (the mask)"); }
+  for (const f of ["auth/icon-summary.png", "auth/icon-log.png", "auth/icon-import.png", "auth/icon-cert.png", "auth/icon-device.png"]) { const b = fs.readFileSync(new URL(f, root)); assert.deepEqual([...b.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]); assert.equal(b.readUInt32BE(16), 148); assert.equal(b.readUInt32BE(20), 148); assert.equal(b[25], 6, f + " has an alpha channel (the mask)"); }
   const main = fs.readFileSync(new URL("index.html", root), "utf8"); assert.match(main, /href="\/auth\/fonts\.css"/); assert.match(main, /rel="preload" href="\/auth\/fonts\/Geist-Variable\.woff2" as="font" type="font\/woff2" crossorigin/); assert.match(main, /--mono: "Geist Mono"/);
   for (const [id, cls] of [["navSummary", "ti-summary"], ["navLog", "ti-log"], ["navDevice", "ti-device"]]) assert.match(main, new RegExp(`id="${id}"[^>]*><i class="ti ${cls}" aria-hidden="true"></i><span>`));
   for (const f of ["auth/login.html", "auth/mfa.html"]) { const h = fs.readFileSync(new URL(f, root), "utf8"); assert.match(h, /<link rel="stylesheet" href="\/auth\/fonts\.css">/, f); assert.match(h, /font-family:"Geist"/, f); }
@@ -253,9 +254,9 @@ test("scuba and freedive: told apart in the totals and on the map, each dive cou
   const k = U.byKind(recs); assert.deepEqual(k, { scuba: { count: 5, sec: 3000 + 3300 + 2700 + 3000 + 600 }, freedive: { count: 3, sec: 45 + 70 + 90 } });
   const sm = U.summarize(recs, new Date(2026, 10, 1)); assert.deepEqual(sm.byKind, k); assert.equal(sm.count, 8); assert.equal(sm.last.kind, "scuba"); assert.equal(sm.totalSec, k.scuba.sec + k.freedive.sec, "kinds add up to the total");
   assert.equal(U.summarize([d("2026-05-09T08:00:00", 50, "freedive")], new Date(2026, 10, 1)).last.kind, "freedive");
-  // the same dive on both computers is one dive of one kind (the Cosmiq+ record decides)
+  // the same dive on both computers is one dive of one kind (the Peregrine record decides)
   const twin = [d("2026-05-06T09:00:00", 3000, "scuba"), d("2026-05-06T09:02:00", 2940, "scuba", undefined, "peregrine"), d("2026-05-06T15:00:00", 60, "freedive", undefined, "peregrine")];
-  assert.deepEqual(U.byKind(twin), { scuba: { count: 1, sec: 3000 }, freedive: { count: 1, sec: 60 } });
+  assert.deepEqual(U.byKind(twin), { scuba: { count: 1, sec: 2940 }, freedive: { count: 1, sec: 60 } }, "the Peregrine length (2940), not the Cosmiq+ one");
   // places: both kinds counted per place, Bunaken/bunaken is one place
   const ps = U.placeStats(recs), by = (n) => ps.find((e) => e.name.toLowerCase() === n.toLowerCase());
   assert.deepEqual(ps.map((e) => e.key), ["bunaken", "tulamben", "komodo", "raja ampat"].sort((a, b) => (by(b) || { count: 0 }).count - (by(a) || { count: 0 }).count || a.localeCompare(b)), "most dives first");
@@ -340,4 +341,29 @@ test("regulator reset: counter back to 0, the service month recorded, history ke
   let h = reg; for (let i = 0; i < 25; i++) h = U.regulatorReset(h, recs, { serviced: "2026-05", today }); assert.equal(h.history.length, 20, "at most 20 services are kept");
   assert.equal(U.regulatorReset({ name: "N", type: "", baseline: 3, since: "" }, recs, { serviced: "2026-05", today }).history.length, 1, "a regulator without a history starts one");
   assert.equal(U.regulatorStatus(r, recs, new Date(2026, 5, 3)).months, 1); assert.equal(U.regulatorStatus(r, recs, new Date(2026, 5, 3)).dives, 0, "after the reset: 0 dives, 1 month since the service month");
+});
+
+test("which record is shown: Peregrine before Perdix before Garmin before Cosmiq+; a dive shared with you always after your own computers", () => {
+  const d = (device, startedAt, over = {}) => ({ fingerprint: device + (over.sharedFrom || "") + startedAt, startedAt, durationSec: 2700, maxDepthM: 20, device, ...over });
+  const kept = (recs) => U.uniqueDives(recs).map((r) => r.fingerprint);
+  assert.deepEqual(U.PREFERENCE, ["peregrine", "perdix", "garmin", "cosmiq"]);
+  // Togar: Cosmiq+ and Peregrine -> Peregrine
+  assert.deepEqual(kept([d("cosmiq", "2026-05-02T09:30:00"), d("peregrine", "2026-05-02T09:31:00")]), ["peregrine2026-05-02T09:31:00"]);
+  // Sharon: Garmin and Perdix -> Perdix, in any order
+  assert.deepEqual(kept([d("garmin", "2026-05-02T09:30:00"), d("perdix", "2026-05-02T09:32:00")]), ["perdix2026-05-02T09:32:00"]); assert.deepEqual(kept([d("perdix", "2026-05-02T09:32:00"), d("garmin", "2026-05-02T09:30:00")]), ["perdix2026-05-02T09:32:00"]);
+  // all four on one dive: one record, the Peregrine
+  assert.deepEqual(kept(["cosmiq", "garmin", "perdix", "peregrine"].map((x, i) => d(x, "2026-05-02T09:3" + i + ":00"))), ["peregrine2026-05-02T09:33:00"]);
+  // Sharon's account holds Togar's dives too (shared copies): her own Perdix beats his Peregrine copy, his dives she has no record of stay, and his Cosmiq+ copy hides behind his Peregrine copy
+  const togar = { sharedFrom: "togar" }, sharon = [d("perdix", "2026-05-02T09:32:00"), d("garmin", "2026-05-02T09:30:00"), d("peregrine", "2026-05-02T09:31:00", togar), d("cosmiq", "2026-05-02T09:29:00", togar),
+    d("peregrine", "2026-05-03T09:00:00", togar), d("cosmiq", "2026-05-03T09:02:00", togar), d("garmin", "2026-05-04T09:00:00"), d("cosmiq", "2026-05-05T09:00:00", togar)];
+  assert.deepEqual(kept(sharon), ["perdix2026-05-02T09:32:00", "peregrinetogar2026-05-03T09:00:00", "garmin2026-05-04T09:00:00", "cosmiqtogar2026-05-05T09:00:00"], "one record per dive: hers first, then his Peregrine, then his Cosmiq+");
+  assert.equal(U.summarize(sharon, new Date(2026, 10, 1)).count, 4); assert.equal(U.isShared(sharon[2]), true); assert.equal(U.isShared(sharon[0]), false);
+  const g = U.duplicateGroups(sharon); assert.deepEqual([...g.extras.get("perdix2026-05-02T09:32:00")].map((r) => r.fingerprint).sort(), ["cosmiqtogar2026-05-02T09:29:00", "garmin2026-05-02T09:30:00", "peregrinetogar2026-05-02T09:31:00"], "everything hidden behind her Perdix dive");
+});
+
+test("a place entered on a hidden record is not lost when another computer's record is shown", () => {
+  const d = (device, startedAt, location) => ({ fingerprint: device + startedAt, startedAt, durationSec: 2700, maxDepthM: 20, device, ...(location ? { location } : {}) });
+  const recs = [d("cosmiq", "2026-05-02T09:30:00", "Komodo"), d("peregrine", "2026-05-02T09:31:00"), d("cosmiq", "2026-05-03T09:30:00"), d("peregrine", "2026-05-03T09:31:00", "Banda")];
+  const u = U.uniqueDives(recs); assert.deepEqual(u.map((r) => [r.device, r.location]), [["peregrine", "Komodo"], ["peregrine", "Banda"]], "the Peregrine record shows the place the Cosmiq+ record had");
+  assert.deepEqual(U.placeStats(recs).map((p) => [p.name, p.count]).sort(), [["Banda", 1], ["Komodo", 1]], "so the map and the totals still know both places"); assert.equal(recs[1].location, undefined, "the stored record itself is not changed");
 });

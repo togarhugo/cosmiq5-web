@@ -252,3 +252,39 @@ test("Bluetooth reports: saved to your own account, listed, read back, deleted; 
   for (let i = 0; i < 34; i++) await send(me, { kind: "download", body: "run " + i });
   const kept = (await (await get(me)).json()).reports; assert.equal(kept.length, 30, "only the newest 30 are kept"); assert.equal((await get(me, "/" + id2)).status, 404, "the oldest were dropped");
 });
+
+test("sharing a dive log: you copy your OWN dives into the other person's account; only on the allow-list; idempotent; labelled; removable; nothing leaks or bounces back", async () => {
+  const env = makeEnv(); const { cookie: me } = await googleSession(env); const { cookie: other } = await googleSession(env, { email: "other@example.com" });
+  const send = (cookie, dives) => post(env, "/api/dives", { dives }, { cookie }), api = (cookie, path, body) => body === undefined ? call(env, path, { headers: { cookie } }) : post(env, path, body, { cookie }), list = async (cookie) => (await (await call(env, "/api/dives", { headers: { cookie } })).json()).dives;
+  const imp = (device, fp, startedAt, extra = {}) => ({ fingerprint: fp, device, startedAt, mode: "scuba", durationSec: 2400, maxDepthM: 18, o2Percent: 32, headerHex: "", profileHex: "", extra: JSON.stringify({ n: 1, t: 27, iv: 10, s: [[0, 0, 28]] }), ...extra });
+  const raw = { fingerprint: "aaaaaaaaaaaa", headerHex: "00".repeat(36), profileHex: "ab".repeat(40), startedAt: "2021-06-11T14:10:00", location: "Tulamben" };
+  await send(me, [raw, imp("peregrine", "bbbbbbbbbbbb", "2022-05-05T10:03:00"), imp("peregrine", "cccccccccccc", "2025-03-14T09:00:00", { location: "Komodo" })]); await send(other, [imp("garmin", "dddddddddddd", "2025-03-14T09:05:00")]);
+  assert.equal((await call(env, "/api/share")).status, 401, "signed out: refused");
+  // who can I share with, and what has been shared with me
+  const info = await (await api(me, "/api/share")).json(); assert.deepEqual(info, { targets: ["other@example.com"], received: [] });
+  // preview: only MY dives, by year, nothing from the other account
+  const pv = await (await api(me, "/api/share/preview", { to: "other@example.com" })).json(); assert.deepEqual(pv, { total: 3, byYear: [{ year: "2021", count: 1 }, { year: "2022", count: 1 }, { year: "2025", count: 1 }] });
+  assert.deepEqual(await (await api(me, "/api/share/preview", { to: "other@example.com", from: "2025-01-01" })).json(), { total: 1, byYear: [{ year: "2025", count: 1 }] }, "a start date");
+  assert.deepEqual((await (await api(me, "/api/share/preview", { to: "other@example.com", from: "2022-01-01", until: "2022-12-31" })).json()).total, 1, "a date range");
+  // rules: another person on the allow-list, real dates
+  for (const [name, body] of [["yourself", { to: "me@example.com" }], ["someone not allowed", { to: "stranger@example.com" }], ["nobody", {}], ["bad date", { to: "other@example.com", from: "2025-13-40" }], ["dates the wrong way round", { to: "other@example.com", from: "2025-06-01", until: "2025-01-01" }], ["text date", { to: "other@example.com", from: "last year" }]])
+    for (const p of ["/api/share/preview", "/api/share/copy"]) assert.equal((await api(me, p, body)).status, 400, name + " " + p);
+  assert.equal((await call(env, "/api/share/copy", { method: "POST", headers: { cookie: me, "content-type": "application/json", origin: "https://evil.example" }, body: JSON.stringify({ to: "other@example.com" }) })).status, 403, "cross-site posts are refused");
+  // copy from 2022 on: the 2021 Cosmiq+ dive stays behind
+  const c1 = await (await api(me, "/api/share/copy", { to: "other@example.com", from: "2022-01-01" })).json(); assert.equal(c1.copied, 2);
+  const theirs = await list(other); assert.equal(theirs.length, 3, "her own Garmin dive plus the two copies");
+  const copy = theirs.find((d) => d.fingerprint === "cccccccccccc"); assert.equal(copy.sharedFrom, "me@example.com"); assert.equal(copy.device, "peregrine"); assert.equal(copy.location, "Komodo"); assert.equal(copy.startedAt, "2025-03-14T09:00:00"); assert.ok(JSON.parse(copy.extra).s, "the depth samples came along");
+  assert.equal(theirs.find((d) => d.fingerprint === "dddddddddddd").sharedFrom, "", "her own dive is not marked"); assert.ok(!theirs.some((d) => d.fingerprint === "aaaaaaaaaaaa"), "the dive before the start date was not copied");
+  assert.ok((await list(me)).every((d) => d.sharedFrom === ""), "my own rows are untouched"); assert.equal((await list(me)).length, 3);
+  // again: only what is new is added (here: everything else, now without a start date)
+  assert.equal((await (await api(me, "/api/share/copy", { to: "other@example.com", from: "2022-01-01" })).json()).copied, 0, "idempotent"); assert.equal((await (await api(me, "/api/share/copy", { to: "other@example.com" })).json()).copied, 1, "the 2021 dive is added now, the rest skipped");
+  const raw2 = (await list(other)).find((d) => d.fingerprint === "aaaaaaaaaaaa"); assert.equal(raw2.headerHex, "00".repeat(36)); assert.equal(raw2.profileHex, "ab".repeat(40), "a Cosmiq+ dive keeps its raw bytes"); assert.equal(raw2.location, "Tulamben");
+  // what she sees about it, and that nothing bounces back: sharing from her side copies only HER own dives
+  const info2 = await (await api(other, "/api/share")).json(); assert.deepEqual(info2.targets, ["me@example.com"]); assert.deepEqual(info2.received.map((r) => [r.from, r.count, r.first, r.last]), [["me@example.com", 3, "2021-06-11T14:10:00", "2025-03-14T09:00:00"]]);
+  assert.equal((await (await api(other, "/api/share/preview", { to: "me@example.com" })).json()).total, 1, "only her own Garmin dive, not the three copies");
+  assert.equal((await (await api(other, "/api/share/copy", { to: "me@example.com" })).json()).copied, 1); assert.equal((await list(me)).filter((d) => d.sharedFrom === "other@example.com").length, 1); assert.equal((await list(me)).filter((d) => d.sharedFrom === "me@example.com").length, 0, "my own dives did not come back marked as shared");
+  // she can remove what was shared with her, and only that
+  assert.equal((await api(other, "/api/share/remove", { from: "other@example.com" })).status, 400, "not from yourself"); assert.equal((await api(other, "/api/share/remove", {})).status, 400);
+  assert.equal((await (await api(other, "/api/share/remove", { from: "me@example.com" })).json()).removed, 3); const left = await list(other); assert.deepEqual(left.map((d) => d.fingerprint), ["dddddddddddd"], "her own dive stays"); assert.equal((await list(me)).filter((d) => d.sharedFrom === "").length, 3, "and my own dives were not touched");
+  assert.equal((await (await api(me, "/api/share/copy", { to: "other@example.com" })).json()).copied, 3, "after a removal the dives can be shared again");
+});

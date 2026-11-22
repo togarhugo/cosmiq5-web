@@ -32,7 +32,7 @@
   function verdict() {
     const v = [], rows = [...scan.rows.values()], hasBt = env.some((e) => e.label === "Web Bluetooth" && e.state === "ok");
     if (env.length && !hasBt) v.push("This browser cannot use Bluetooth (use Chrome or Edge, or Bluefy on iPhone).");
-    if (shake && shake.serial) v.push(`REACHABLE: ${shake.name} answered the Shearwater protocol (serial ${shake.serial}, firmware ${shake.firmware}, model number ${shake.model}${shake.modelName ? " = " + shake.modelName : ", not in the list of known models"}). Bluetooth works from this browser. Next: Dive log > Download dives over Bluetooth.`);
+    if (shake && shake.serial) v.push(`REACHABLE: ${shake.name} answered the Shearwater protocol (serial ${shake.serial}, firmware ${shake.firmware}, model number ${shake.model}${shake.modelName ? " = " + shake.modelName : ", not in the list of known models"}). Bluetooth works from this browser. Next: Import > Download dives over Bluetooth.`);
     else if (shake && shake.failed) v.push("The handshake failed: " + shake.failed);
     else if (inspect.services.some((s) => s.uuid === SHEARWATER_UUID)) v.push(`The device "${inspect.name}" offers the Shearwater data service. The handshake (section 4) has not been run yet.`);
     else if (inspect.name) v.push(`The device "${inspect.name}" was inspected but does not offer the Shearwater service.`);

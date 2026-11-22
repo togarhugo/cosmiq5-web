@@ -87,12 +87,12 @@ test("long dives are thinned to 1000 samples keeping the deepest point", async (
   assert.ok(r.samples.length <= G.MAX_SAMPLES + 2); assert.equal(Math.max(...r.samples.map((s) => s[1])), 31.7); assert.equal(r.durationSec, 5400);
 });
 
-test("Garmin dives sit in the list of dive computers, ranked after the Cosmiq+ and the Peregrine for duplicates", () => {
+test("Garmin dives sit in the list of dive computers; one dive on three wrists counts once, with the Peregrine record (then Perdix, Garmin, Cosmiq+)", () => {
   assert.deepEqual(U.DEVICES.map((d) => d.id), ["cosmiq", "peregrine", "perdix", "garmin"]);
   const dive = (device, startedAt, fingerprint) => ({ fingerprint, device, startedAt, durationSec: 1800, maxDepthM: 20 });
   const recs = [dive("garmin", "2025-03-01T09:02:00", "g1"), dive("cosmiq", "2025-03-01T09:00:00", "c1"), dive("peregrine", "2025-03-01T09:01:00", "p1")];
-  assert.deepEqual([...U.duplicateMap(recs)].sort(), [["g1", "c1"], ["p1", "c1"]], "one dive on three wrists counts once, the Cosmiq+ record");
-  assert.deepEqual(U.uniqueDives(recs).map((r) => r.fingerprint), ["c1"]);
+  assert.deepEqual([...U.duplicateMap(recs)].sort(), [["c1", "p1"], ["g1", "p1"]], "the Cosmiq+ and the Garmin records hide behind the Peregrine one");
+  assert.deepEqual(U.uniqueDives(recs).map((r) => r.fingerprint), ["p1"]);
 });
 
 test("the device list of the page and of the Worker are the same", async () => {
