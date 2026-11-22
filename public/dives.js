@@ -373,7 +373,7 @@ const Dives = (() => {
     $("sumName").textContent = d.name || "Your name"; $("sumName").style.color = d.name ? "" : "var(--tx-868e96)";
     const c = d.latestCert;
     $("sumCert").textContent = c ? c.label : "None added yet";
-    $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in Account \u203a Dive certifications";
+    $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in the Certificates tab";
     const dan = d.dan || {}, st = U.danStatus(dan.validUntil, new Date()), row = $("sumDanRow");
     row.className = "diver-row dan-" + (dan.number ? (st.state === "none" ? "none" : st.state) : "none");
     if (!dan.number) { $("sumDan").textContent = "Not added yet"; $("sumDanValid").textContent = "Add it in Account \u203a DAN insurance"; $("sumDanValid").style.fontWeight = "400"; return; }
@@ -387,12 +387,15 @@ const Dives = (() => {
     const reg = typeof AccountArea !== "undefined" ? AccountArea.regulator() : null;
     $("sumRegHint").style.display = reg ? "none" : "";
     card.style.display = reg ? "" : "none"; if (!reg) return;
-    const n = U.regulatorCount(reg, recs), lvl = U.regulatorLevel(n);
-    card.className = "card sum reg-" + lvl; card.setAttribute("role", lvl === "ok" ? "button" : "alert");
-    $("sumRegCount").textContent = n; $("sumRegName").textContent = [reg.name, reg.type].filter(Boolean).join(" \u00b7 ");
-    $("sumRegBar").style.width = Math.min(100, (n / U.REG_RED) * 100) + "%";
-    $("sumRegMsg").textContent = lvl === "red" ? `Service now: ${n} dives, the ${U.REG_RED}-dive limit is reached`
-      : lvl === "orange" ? `Service soon: ${U.REG_RED - n} dive${U.REG_RED - n === 1 ? "" : "s"} to the ${U.REG_RED}-dive limit` : `Service is due at ${U.REG_ORANGE} dives (${U.REG_ORANGE - n} to go)`;
+    const st = U.regulatorStatus(reg, recs, new Date());
+    card.className = "card sum reg-" + st.level; card.setAttribute("role", st.level === "ok" ? "button" : "alert");
+    $("sumRegCount").textContent = st.dives; $("sumRegName").textContent = [reg.name, reg.type].filter(Boolean).join(" \u00b7 ");
+    $("sumRegMonthsWrap").style.display = st.months == null ? "none" : ""; if (st.months != null) { $("sumRegMonths").textContent = st.months; $("sumRegMonthsUnit").textContent = st.months === 1 ? "month" : "months"; }
+    const line = (id, level, frac, warnFrac, txt) => { const el = $(id + "Line"); el.className = "regline lv-" + level; $(id + "Bar").style.width = Math.min(100, Math.max(0, frac * 100)) + "%"; $(id + "Tick").style.left = (warnFrac * 100) + "%"; $(id + "Txt").textContent = txt; };
+    line("sumRegDives", st.diveLevel, st.limitDives ? st.dives / st.limitDives : 0, st.limitDives ? st.diveWarnAt / st.limitDives : 0, `${st.dives} / ${st.limitDives}`);
+    line("sumRegTime", st.monthLevel, st.limitMonths && st.months != null ? st.months / st.limitMonths : 0, st.limitMonths ? st.monthWarnAt / st.limitMonths : 0, st.months == null ? "not set" : `${st.months} / ${st.limitMonths} mo`);
+    const last = $("sumRegLast"); last.textContent = reg.serviced ? `Last service: ${U.monthLabel(reg.serviced)}` + (st.months === 0 ? " (this month)" : ` (${st.months} month${st.months === 1 ? "" : "s"} ago)`) : "Last service: not set";
+    $("sumRegMsg").textContent = U.regulatorMessage(st);
   }
 
   // ---------- locations: the question after a sync, the banner, date headers, per-dive field ----------

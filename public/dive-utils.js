@@ -180,16 +180,62 @@
     return [...m.entries()].map(([month, rows]) => ({ month, asks: rows }));
   }
 
-  // ---- regulator service counter ----
-  const REG_ORANGE = 70, REG_RED = 90;
+  // ---- regulator service: a reminder by dives AND a reminder by time ----
+  const REG_ORANGE = 70, REG_RED = 90, REG_DEFAULT_MONTHS = 12, REG_HISTORY_MAX = 20;       // the original fixed limits: 90 dives, warning from 70
   /** Dives on the regulator: the starting count plus every dive that began after `since`. Freedives do not use a regulator. */
   function regulatorCount(reg, recs) {
     if (!reg) return 0;
     return (reg.baseline || 0) + uniqueDives(recs).filter((r) => r.mode !== "freedive" && (!reg.since || r.startedAt > reg.since)).length;
   }
+  /** Whole months from a service month ("2026-03") to today: 0 in the same month. */
+  const monthsSince = (ym, today) => { const t = today || new Date(); return (t.getFullYear() * 12 + t.getMonth()) - (+ym.slice(0, 4) * 12 + (+ym.slice(5, 7) - 1)); };
+  const monthLabel = (ym, locale) => new Date(+ym.slice(0, 4), +ym.slice(5, 7) - 1, 1).toLocaleDateString(locale, { month: "short", year: "numeric" });
+  /** The warning starts 20 dives / 2 months before the limit (for small limits: after 75 % / one month before). */
+  const diveWarnAt = (limit) => (limit >= 40 ? limit - 20 : Math.floor(limit * 0.75));
+  const monthWarnAt = (limit) => (limit >= 6 ? limit - 2 : limit - 1);
+  const worst = (levels) => (levels.includes("red") ? "red" : levels.includes("orange") ? "orange" : "ok");
+  /**
+   * Where the regulator stands. Two reminders, each optional (a limit of 0 switches it off): dives since the last service
+   * and months since the last service (needs the service month). The regulator is orange / red when EITHER one is.
+   * -> {dives, limitDives, diveLevel, divesLeft, months, limitMonths, monthLevel, monthsLeft, level, serviced, dueBy}
+   *    diveLevel / monthLevel: "ok" | "orange" | "red" | "off" (limit 0) | "unknown" (no service month yet, months only)
+   */
+  function regulatorStatus(reg, recs, today) {
+    const limitDives = reg && reg.limitDives != null ? reg.limitDives : REG_RED, limitMonths = reg && reg.limitMonths != null ? reg.limitMonths : REG_DEFAULT_MONTHS;
+    const dives = regulatorCount(reg, recs), serviced = (reg && reg.serviced) || "", months = serviced ? monthsSince(serviced, today) : null;
+    const diveLevel = !limitDives ? "off" : dives >= limitDives ? "red" : dives >= diveWarnAt(limitDives) ? "orange" : "ok";
+    const monthLevel = !limitMonths ? "off" : months == null ? "unknown" : months >= limitMonths ? "red" : months >= monthWarnAt(limitMonths) ? "orange" : "ok";
+    const level = worst([diveLevel, monthLevel]);
+    const dueBy = level === "ok" ? null : [diveLevel === level ? "dives" : "", monthLevel === level ? "time" : ""].filter(Boolean).join("+");
+    return { dives, limitDives, diveLevel, divesLeft: limitDives ? Math.max(0, limitDives - dives) : null, diveWarnAt: limitDives ? diveWarnAt(limitDives) : null,
+      months, limitMonths, monthLevel, monthsLeft: limitMonths && months != null ? Math.max(0, limitMonths - months) : null, monthWarnAt: limitMonths ? monthWarnAt(limitMonths) : null, level, dueBy, serviced };
+  }
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  /** One sentence for the Summary: what is due, or how much is left. */
+  function regulatorMessage(st, locale) {
+    if (st.level === "red") {
+      const parts = []; if (st.diveLevel === "red") parts.push(`${plural(st.dives, "dive")} (limit ${st.limitDives})`); if (st.monthLevel === "red") parts.push(`${plural(st.months, "month")} since ${monthLabel(st.serviced, locale)} (limit ${st.limitMonths})`);
+      return "Service now: " + parts.join(" and ");
+    }
+    const left = []; if (st.divesLeft != null) left.push([st.diveLevel, plural(st.divesLeft, "dive")]); if (st.monthsLeft != null) left.push([st.monthLevel, plural(st.monthsLeft, "month")]);
+    if (!left.length) return "Add the last service date to get a time reminder";
+    if (st.level === "orange") return "Service soon: " + left.filter(([l]) => l === "orange").map(([, t]) => t).join(" or ") + " to go";
+    return "Next service in " + left.map(([, t]) => t).join(" or ");
+  }
+  /** The original single-number rule (90 dives, warning from 70) for callers that only have a count. Custom limits and the time reminder: regulatorStatus. */
   const regulatorLevel = (n) => (n >= REG_RED ? "red" : n >= REG_ORANGE ? "orange" : "ok");
-  /** Reset to 0: count only dives after the latest one logged so far. */
-  const regulatorReset = (reg, recs) => ({ ...reg, baseline: 0, since: recs.reduce((a, r) => (r.startedAt > a ? r.startedAt : a), "") });
+  /**
+   * Reset to 0: count only dives after the latest one logged so far. With `opts.serviced` ("YYYY-MM") the service is recorded: the month becomes the
+   * last service and the service is added to the history together with the dives the regulator had done.
+   */
+  function regulatorReset(reg, recs, opts) {
+    const next = { ...reg, baseline: 0, since: recs.reduce((a, r) => (r.startedAt > a ? r.startedAt : a), "") };
+    if (opts && opts.serviced) {
+      const t = opts.today || new Date(), at = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      next.serviced = opts.serviced; next.history = [{ m: opts.serviced, dives: regulatorCount(reg, recs), at }, ...(reg && reg.history || [])].slice(0, REG_HISTORY_MAX);
+    }
+    return next;
+  }
 
   // ---- diver profile (Summary): latest certification, DAN validity ----
   /** Whole days from today (local) until `key` (YYYY-MM-DD): positive = in the future, 0 = today, negative = past. */
@@ -219,6 +265,6 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  const api = { regulatorStatus, regulatorMessage, monthsSince, monthLabel, REG_HISTORY_MAX, KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

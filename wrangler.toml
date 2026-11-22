@@ -3,7 +3,11 @@ main = "src/worker.js"  # the app files in public/ are bundled into the Worker b
 compatibility_date = "2025-01-01"
 
 # Serve on your own domain (the zone must be on this Cloudflare account).
-routes = [{ pattern = "dive-comp.thmlab.org", custom_domain = true }]
+# Both addresses are served while you move: dive-manager is the new one, dive-comp the old one (see CANONICAL_HOST below).
+routes = [
+  { pattern = "dive-manager.thmlab.org", custom_domain = true },
+  { pattern = "dive-comp.thmlab.org", custom_domain = true },
+]
 workers_dev = false
 preview_urls = false
 
@@ -14,7 +18,10 @@ database_id = "da3daca5-ced2-46b5-924e-0021b8afb5f3"
 
 [vars]
 # Google OAuth client (public identifier, same one the other thmlab apps use).
-# Its redirect URI list in Google Cloud Console must include https://dive-comp.thmlab.org/auth/callback
+# Its redirect URI list in Google Cloud Console must include https://dive-manager.thmlab.org/auth/callback (and the old dive-comp one while it is still used)
+# Moving addresses: once Google sign-in works on the new address, uncomment these two lines and deploy; the old address then forwards to the new one.
+# CANONICAL_HOST = "dive-manager.thmlab.org"
+# LEGACY_HOSTS = "dive-comp.thmlab.org"
 GOOGLE_CLIENT_ID = "234504022788-v4pd8ehvn3g5i6qqv7ce7ce2dert3152.apps.googleusercontent.com"
 # Secrets (never commit these):
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET

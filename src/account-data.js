@@ -38,6 +38,15 @@ async function body(request) {
   try { const b = JSON.parse(t); return b && typeof b === "object" ? { b } : { b: null }; } catch { return { b: null }; }
 }
 
+const REGULATOR_SELECT = "SELECT name, type, baseline, since, serviced, limit_dives AS limitDives, limit_months AS limitMonths, history FROM regulators WHERE user_email = ?";
+function regulatorOut(r) { let h = []; try { h = JSON.parse(r.history || "[]"); } catch { h = []; } return { name: r.name, type: r.type, baseline: r.baseline, since: r.since, serviced: r.serviced, limitDives: r.limitDives, limitMonths: r.limitMonths, history: Array.isArray(h) ? h : [] }; }
+/** "" (not set) or a real month YYYY-MM from 1990 to next month (the clock of a far-away phone may be a day ahead). */
+function monthOk(v) {
+  if (v === "" || v === undefined || v === null) return v === "";
+  if (typeof v !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return false;
+  const y = +v.slice(0, 4), mo = +v.slice(5, 7), n = new Date(), limit = n.getUTCFullYear() * 12 + n.getUTCMonth() + 1;
+  return y >= 1990 && y * 12 + (mo - 1) <= limit;
+}
 export async function handleAccountData(request, url, env, email) {
   const path = url.pathname, m = request.method;
 
@@ -93,17 +102,27 @@ export async function handleAccountData(request, url, env, email) {
 
   // ---- regulator ---------------------------------------------------------------------------------------------------
   if (path === "/api/regulator" && m === "GET") {
-    const r = await env.DB.prepare("SELECT name, type, baseline, since FROM regulators WHERE user_email = ?").bind(email).first();
-    return json({ regulator: r || null });
+    const r = await env.DB.prepare(REGULATOR_SELECT).bind(email).first();
+    return json({ regulator: r ? regulatorOut(r) : null });
   }
   if (path === "/api/regulator" && m === "PUT") {
     const { b, tooBig } = await body(request);
     if (tooBig || !b) return json({ error: "bad request" }, tooBig ? 413 : 400);
+    const cur = await env.DB.prepare(REGULATOR_SELECT).bind(email).first();           // fields an older page does not send keep their stored value
+    const has = (k) => b[k] !== undefined, keep = cur ? regulatorOut(cur) : { serviced: "", limitDives: 90, limitMonths: 12, history: [] };
     const name = text(b.name, 60), type = text(b.type, 40), since = b.since === undefined || b.since === null ? "" : b.since;
+    const serviced = has("serviced") ? b.serviced : keep.serviced, limitDives = has("limitDives") ? b.limitDives : keep.limitDives, limitMonths = has("limitMonths") ? b.limitMonths : keep.limitMonths, history = has("history") ? b.history : keep.history;
     if (!name || type === false || !Number.isInteger(b.baseline) || b.baseline < 0 || b.baseline > 99999 ||
         !(since === "" || (typeof since === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(since)))) return json({ error: "invalid regulator" }, 400);
-    await env.DB.prepare("INSERT INTO regulators (user_email, name, type, baseline, since, updated_at) VALUES (?,?,?,?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET name = excluded.name, type = excluded.type, baseline = excluded.baseline, since = excluded.since, updated_at = excluded.updated_at")
-      .bind(email, name, type, b.baseline, since).run();
+    if (!monthOk(serviced)) return json({ error: "The service month must be like 2026-03 and not in the future." }, 400);
+    if (!Number.isInteger(limitDives) || !(limitDives === 0 || (limitDives >= 10 && limitDives <= 1000))) return json({ error: "Service every: dives must be 10 to 1000, or 0 for no dive reminder." }, 400);
+    if (!Number.isInteger(limitMonths) || !(limitMonths === 0 || (limitMonths >= 3 && limitMonths <= 60))) return json({ error: "Service every: months must be 3 to 60, or 0 for no time reminder." }, 400);
+    if (!limitDives && !limitMonths) return json({ error: "Keep at least one reminder: by dives or by months." }, 400);
+    if (!Array.isArray(history) || history.length > 20 || !history.every((h) => h && typeof h === "object" && monthOk(h.m) && h.m !== "" && Number.isInteger(h.dives) && h.dives >= 0 && h.dives <= 99999 && dateOnly(h.at) && dateOnly(h.at) !== ""))
+      return json({ error: "invalid service history" }, 400);
+    const hist = JSON.stringify(history.map((h) => ({ m: h.m, dives: h.dives, at: h.at })));
+    await env.DB.prepare("INSERT INTO regulators (user_email, name, type, baseline, since, serviced, limit_dives, limit_months, history, updated_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now')) ON CONFLICT(user_email) DO UPDATE SET name = excluded.name, type = excluded.type, baseline = excluded.baseline, since = excluded.since, serviced = excluded.serviced, limit_dives = excluded.limit_dives, limit_months = excluded.limit_months, history = excluded.history, updated_at = excluded.updated_at")
+      .bind(email, name, type, b.baseline, since, serviced, limitDives, limitMonths, hist).run();
     return json({ ok: true });
   }
   if (path === "/api/regulator" && m === "DELETE") {

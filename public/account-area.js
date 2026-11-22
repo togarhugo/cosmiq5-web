@@ -121,11 +121,61 @@ const AccountArea = (() => {
     { kind: "cert", list: "certList", label: "certLabel", number: "certNumber", date: "certDate", file: "certFile", fileName: "certFileName", add: "certAdd", msg: "certMsg", none: "No certifications yet.", numberTag: "#", deleted: "Certification deleted", uploaded: "Certification uploaded" },
     { kind: "dan", list: "danList", label: "danLabel", number: "danDocNumber", file: "danFile", fileName: "danFileName", add: "danAdd", msg: "danMsg", none: "No insurance documents yet.", numberTag: "policy #", deleted: "Document deleted", uploaded: "Insurance document uploaded", defaultLabel: "DAN insurance card" },
   ];
+  const fileCache = new Map();                                                   // id -> {url, mime, filename, label}: scans are fetched once and kept for the session
+  let openCert = "";                                                             // the card that is expanded ("" = the stack is closed)
+  const tint = (label) => { let n = 0; for (const ch of String(label)) n = (n * 31 + ch.charCodeAt(0)) >>> 0; return `hsl(${n % 360} 48% 34%)`; };
+  function certCard(f, isMain, i, n) {
+    const sub = [f.number ? "#" + esc(f.number) : "", f.certifiedOn ? esc(fmtDay(f.certifiedOn)) : ""].filter(Boolean).join(" \u00b7 ");
+    const open = openCert === f.id;
+    return `<article class="cert wcard${isMain ? " main" : ""}${open ? " open" : ""}" data-id="${esc(f.id)}" style="z-index:${n - i}">
+      <div class="wface" role="button" tabindex="0" aria-expanded="${open}" aria-label="${esc(f.label)}"><div class="wimg" style="--tint:${tint(f.label)}"></div><div class="wshade"></div>
+        <div class="wtitle">${esc(f.label)}${f.certifiedOn ? `<small>${esc(fmtDay(f.certifiedOn))}</small>` : ""}</div>${isMain ? '<span class="latest-tag">\u2605 Main</span>' : ""}
+        <button class="wclose cert-close" type="button" aria-label="Close">\u2715</button></div>
+      <div class="wfoot"><div class="wf-title"><b>${esc(f.label)}</b>${isMain ? '<span class="cc-mainbadge">\u2605 Main certification</span>' : ""}</div><div class="wf-sub muted">${sub || "No number or date added"}</div>
+        <div class="row wrap" style="margin:0">${isMain ? "" : '<button class="btn-set cert-latest" type="button">Make main</button>'}<a class="btn-set cert-full" href="#" target="_blank" rel="noopener" style="background:var(--bg-6c757d)">${f.mime === "application/pdf" ? "Open PDF" : "Full size"}</a><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-c92a2a)">Delete</button></div></div></article>`;
+  }
+  /** Natural height of the open card's scan at the current width (capped to the screen), so it can grow smoothly. */
+  function sizeOpenCard() {
+    for (const card of document.querySelectorAll("#certList .wcard")) {
+      const img = card.querySelector(".wimg"); if (!img) continue;
+      if (card.dataset.id === openCert) { const r = Number(card.dataset.ratio) || 0.7; img.style.height = Math.min(Math.round(img.clientWidth * r), Math.round(window.innerHeight * 0.8)) + "px"; } else img.style.height = "";
+    }
+  }
+  async function fillFace(card) {
+    const id = card.dataset.id; if (!id || card.dataset.done) return; card.dataset.done = "1";
+    try {
+      let c = fileCache.get(id);
+      if (!c) { const { cert, blob } = await fetchFile(id); c = { url: URL.createObjectURL(blob), mime: cert.mime, filename: cert.filename, label: cert.label }; fileCache.set(id, c); }
+      const box = card.querySelector(".wimg"), full = card.querySelector(".cert-full"); full.href = c.url;
+      if (c.mime === "application/pdf") { card.dataset.ratio = "0.62"; box.innerHTML = `<div class="wpdf"><span class="pdfmark">PDF</span></div>`; sizeOpenCard(); }
+      else { const im = new Image(); im.alt = c.label; im.onload = () => { card.dataset.ratio = String(im.naturalHeight / im.naturalWidth); sizeOpenCard(); }; im.src = c.url; box.innerHTML = ""; box.appendChild(im); }
+    } catch (e) { card.dataset.done = ""; }
+  }
+  async function loadFaces() {                                                   // a few at a time, so the whole stack fills in without a burst of requests
+    const cards = [...document.querySelectorAll("#certList .wcard")].filter((c) => !c.dataset.done);
+    for (let i = 0; i < cards.length; i += 3) await Promise.all(cards.slice(i, i + 3).map(fillFace));
+  }
+  function toggleCert(id, want) {
+    openCert = want === false || (want === undefined && openCert === id) ? "" : id;
+    document.querySelectorAll("#certList .wcard").forEach((c) => { const o = c.dataset.id === openCert; c.classList.toggle("open", o); c.querySelector(".wface").setAttribute("aria-expanded", o); });
+    sizeOpenCard();
+    const c = openCert && document.querySelector(`#certList .wcard[data-id="${openCert}"]`);
+    if (c && c.scrollIntoView) setTimeout(() => c.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
+  window.addEventListener("resize", () => { if (openCert) sizeOpenCard(); });
   function renderFiles() {
     for (const c of FILE_KINDS) {
       const box = $(c.list); if (!box) continue;
       const mine = allFiles.filter((f) => (f.kind || "cert") === c.kind).sort((a, b) => (b.certifiedOn || "").localeCompare(a.certifiedOn || "") || String(b.createdAt).localeCompare(String(a.createdAt)));
       const latest = c.kind === "cert" ? U.latestCert(allFiles, pinnedCert) : null;
+      if (c.kind === "cert") {                                                    // certificates: the main one first, then newest to oldest, each on its own card
+        mine.sort((a, b) => (latest && b.id === latest.id) - (latest && a.id === latest.id));
+        if (openCert && !mine.some((f) => f.id === openCert)) openCert = "";
+        box.innerHTML = mine.length ? mine.map((f, i) => certCard(f, latest && latest.id === f.id, i, mine.length)).join("") : `<div class="card muted">${c.none} Tap <b>Add a certificate</b> to upload a scan or PDF of your card.</div>`;
+        if ($("certCount")) $("certCount").textContent = mine.length ? `\u00b7 ${mine.length}` : "";
+        if ($("certWalletHint")) $("certWalletHint").style.display = mine.length ? "" : "none";
+        loadFaces(); sizeOpenCard(); continue;
+      }
       box.innerHTML = mine.length ? mine.map((f) => { const isLatest = latest && latest.id === f.id; return `<div class="cert${isLatest ? " latest" : ""}" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${isLatest ? '<span class="latest-tag">\u2605 Latest</span>' : ""}${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
         <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-6c757d)">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:var(--bg-2b8a3e)">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
         : `<p class="muted" style="margin:0">${c.none}</p>`;
@@ -134,7 +184,7 @@ const AccountArea = (() => {
     diverData.pinnedCertId = pinnedCert;
     diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles, pinnedCert) || {});
     const hint = $("certLatestHint");
-    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose the latest certification yourself." : "Shown on your Summary: the newest by date. Tap \u201cSet as my latest certification\u201d on one to choose it yourself.";
+    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Summary." : "Your main certification is shown on the Summary: the newest by date. Open another card and tap \u201cMake main\u201d to choose it yourself.";
     if ($("certAuto")) $("certAuto").style.display = pinnedCert ? "" : "none";
     saveDiver(); Dives.render();
   }
@@ -142,13 +192,20 @@ const AccountArea = (() => {
     try { allFiles = (await api("GET", "/api/certs")).certs; renderFiles(); }
     catch (e) { for (const c of FILE_KINDS) if ($(c.list)) $(c.list).innerHTML = `<p class="muted">${e.status === 401 ? "Signed out: reload the page." : "Could not load: " + esc(e.message)}</p>`; }
   }
+  function hideCertAdd() { $("certAddBox").style.display = "none"; $("certShowAdd").style.display = ""; }
   async function fetchFile(id) { const { cert } = await api("GET", "/api/certs/" + id); return { cert, blob: new Blob([fromBase64(cert.data)], { type: cert.mime }) }; }
   async function fileAction(cfg, e) {
     const item = e.target.closest(".cert"); if (!item) return;
-    const id = item.dataset.id, btn = e.target.closest("button"); if (!btn) return;
+    const id = item.dataset.id, btn = e.target.closest("button");
+    if (cfg.kind === "cert") {
+      if (e.target.closest("a")) return;                                          // "Full size" / "Open PDF" are plain links
+      if (btn && btn.classList.contains("cert-close")) return toggleCert(id, false);
+      if (!btn && e.target.closest(".wface")) return toggleCert(id, openCert === id ? false : true);
+    }
+    if (!btn) return;
     try {
-      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; say("Latest certification updated"); return renderFiles(); }
-      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); say(cfg.deleted); loadFiles(); });
+      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; openCert = id; say("Main certification updated"); renderFiles(); const m = document.querySelector("#certList .wcard.main"); if (m && m.scrollIntoView) setTimeout(() => m.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); const c = fileCache.get(id); if (c) { URL.revokeObjectURL(c.url); fileCache.delete(id); } if (openCert === id) openCert = ""; say(cfg.deleted); loadFiles(); });
       const { cert, blob } = await fetchFile(id), url = URL.createObjectURL(blob);
       if (btn.classList.contains("cert-view")) {
         if (cert.mime === "application/pdf") { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click(); }
@@ -170,42 +227,78 @@ const AccountArea = (() => {
       const f = await prepareFile(file);
       await api("POST", "/api/certs", { kind: cfg.kind, label, number: $(cfg.number).value.trim(), certifiedOn: cfg.date ? $(cfg.date).value : "", ...f });
       for (const id of [cfg.label, cfg.number, cfg.date, cfg.file]) if (id) $(id).value = "";
-      $(cfg.fileName).textContent = ""; say(cfg.uploaded); note(cfg.msg, "Uploaded."); loadFiles();
+      $(cfg.fileName).textContent = ""; say(cfg.uploaded); note(cfg.msg, "Uploaded."); if (cfg.kind === "cert") hideCertAdd(); loadFiles();
     } catch (e) { note(cfg.msg, e.message, true); }
     finally { btn.disabled = false; btn.textContent = "Upload"; }
   }
 
   // ---------- regulator ----------
+  const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }));
+  /** Fills a pair of month/year selects. `blank` adds a "not set" choice. Years run from 15 years back to this year. */
+  function fillMonthPicker(mId, yId, value, blank) {
+    const now = new Date(), m = $(mId), y = $(yId), cur = value ? value.split("-") : null;
+    const opt = (v, t) => `<option value="${v}">${t}</option>`;
+    m.innerHTML = (blank ? opt("", "Month") : "") + MONTHS.map((n, i) => opt(String(i + 1).padStart(2, "0"), n)).join("");
+    y.innerHTML = (blank ? opt("", "Year") : "") + Array.from({ length: 16 }, (_, i) => now.getFullYear() - i).map((v) => opt(v, v)).join("");
+    if (cur) { m.value = cur[1]; if (![...y.options].some((o) => o.value === cur[0])) y.insertAdjacentHTML("beforeend", opt(cur[0], cur[0])); y.value = cur[0]; }
+    else if (!blank) { m.value = String(now.getMonth() + 1).padStart(2, "0"); y.value = String(now.getFullYear()); }
+  }
+  /** "YYYY-MM" from a picker, "" when left blank, null when only half filled or in the future. */
+  function readMonthPicker(mId, yId) {
+    const m = $(mId).value, y = $(yId).value; if (!m && !y) return ""; if (!m || !y) return null;
+    const v = y + "-" + m, now = new Date(); return v > now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") ? null : v;
+  }
   async function renderRegulator() {
-    const recs = await Dives.all(), reg = regulator, form = $("regForm");
+    const recs = await Dives.all(), reg = regulator, form = $("regForm"), rform = $("regResetForm");
     $("regStatus").style.display = reg && form.style.display === "none" ? "" : "none";
     $("regAdd").style.display = !reg && form.style.display === "none" ? "" : "none";
     const badge = $("regBadge");
     if (reg) {
-      const n = U.regulatorCount(reg, recs), lvl = U.regulatorLevel(n);
-      $("regShownName").textContent = reg.name; $("regShownType").textContent = reg.type ? "· " + reg.type : ""; $("regShownCount").textContent = n;
-      badge.textContent = n + (n === 1 ? " dive" : " dives"); badge.className = "regbadge " + (lvl === "ok" ? "" : lvl); badge.style.display = "";
-    } else badge.style.display = "none";
+      const st = U.regulatorStatus(reg, recs, new Date());
+      $("regShownName").textContent = reg.name; $("regShownType").textContent = reg.type ? "\u00b7 " + reg.type : ""; $("regShownCount").textContent = st.dives;
+      $("regShownMonthsWrap").style.display = st.months == null ? "none" : ""; if (st.months != null) { $("regShownMonths").textContent = st.months; $("regShownMonthsUnit").textContent = st.months === 1 ? "month" : "months"; }
+      $("regShownLast").textContent = reg.serviced ? `Last service: ${U.monthLabel(reg.serviced)}` : "Last service: not set";
+      $("regShownEvery").textContent = "Service every " + [st.limitDives ? st.limitDives + " dives" : "", st.limitMonths ? st.limitMonths + " months" : ""].filter(Boolean).join(" or ");
+      const msg = $("regShownMsg"); msg.textContent = U.regulatorMessage(st); msg.className = "reg-msg " + (st.level === "red" ? "lv-red" : st.level === "orange" ? "lv-orange" : "");
+      const worst = st.level === "unknown" ? "" : st.level;
+      badge.textContent = st.dives + (st.dives === 1 ? " dive" : " dives") + (st.months != null ? " \u00b7 " + st.months + " mo" : ""); badge.className = "regbadge " + (worst === "ok" ? "" : worst); badge.style.display = "";
+      const hist = reg.history || [];
+      $("regHistory").style.display = hist.length ? "" : "none"; $("regHistoryCount").textContent = hist.length ? "(" + hist.length + ")" : "";
+      $("regHistoryList").innerHTML = hist.map((h) => `<li><span>${U.monthLabel(h.m)}</span><span>${h.dives} ${h.dives === 1 ? "dive" : "dives"} on it</span></li>`).join("");
+    } else { badge.style.display = "none"; rform.style.display = "none"; }
     Dives.render();                                                       // refreshes the Summary card too
   }
   const setReg = (r) => { regulator = r; store.set("regulator", r); };
   function openRegForm(reg) {
     $("regName").value = reg ? reg.name : ""; $("regType").value = reg ? reg.type : ""; $("regBase").value = reg ? reg.baseline : 0;
+    fillMonthPicker("regSvcMonth", "regSvcYear", reg ? reg.serviced : "", true);
+    $("regLimDives").value = reg && reg.limitDives != null ? reg.limitDives : 90; $("regLimMonths").value = reg && reg.limitMonths != null ? reg.limitMonths : 12;
     $("regForm").style.display = ""; $("regStatus").style.display = "none"; $("regAdd").style.display = "none"; $("regName").focus();
   }
   async function saveReg() {
-    const name = $("regName").value.trim(), base = Number($("regBase").value);
+    const name = $("regName").value.trim(), base = Number($("regBase").value), ld = Number($("regLimDives").value), lm = Number($("regLimMonths").value);
+    const serviced = readMonthPicker("regSvcMonth", "regSvcYear");
     if (!name) return note("regMsg", "Enter the regulator's name.", true);
     if (!Number.isInteger(base) || base < 0 || base > 99999) return note("regMsg", "Dives already on it must be a whole number, 0 or more.", true);
+    if (serviced === null) return note("regMsg", "Pick both a month and a year for the last service, and not a month in the future.", true);
+    if (!Number.isInteger(ld) || (ld !== 0 && (ld < 10 || ld > 1000))) return note("regMsg", "Service every: dives must be 0 (off) or between 10 and 1000.", true);
+    if (!Number.isInteger(lm) || (lm !== 0 && (lm < 3 || lm > 60))) return note("regMsg", "Service every: months must be 0 (off) or between 3 and 60.", true);
+    if (!ld && !lm) return note("regMsg", "Keep at least one reminder: by dives or by months.", true);
     try {
       const recs = await Dives.all();
-      const next = { name, type: $("regType").value.trim(), baseline: base, since: regulator ? regulator.since : U.regulatorReset({}, recs).since };    // a new regulator counts dives after today's last logged one
+      const next = { name, type: $("regType").value.trim(), baseline: base, since: regulator ? regulator.since : U.regulatorReset({}, recs).since,    // a new regulator counts dives after today's last logged one
+        serviced, limitDives: ld, limitMonths: lm, history: regulator ? regulator.history || [] : [] };
       await api("PUT", "/api/regulator", next); setReg(next); $("regForm").style.display = "none"; note("regMsg", ""); say("Regulator saved"); renderRegulator();
     } catch (e) { note("regMsg", e.message, true); }
   }
+  function openResetForm() { fillMonthPicker("regRstMonth", "regRstYear", "", false); $("regResetForm").style.display = ""; $("regRstMonth").focus(); }
   async function resetReg() {
-    try { const next = U.regulatorReset(regulator, await Dives.all()); await api("PUT", "/api/regulator", next); setReg(next); say("Regulator counter reset to 0"); renderRegulator(); }
-    catch (e) { note("regMsg", e.message, true); }
+    const serviced = readMonthPicker("regRstMonth", "regRstYear");
+    if (!serviced) return note("regMsg", "Pick the month and year of the service (not in the future).", true);
+    try {
+      const next = U.regulatorReset(regulator, await Dives.all(), { serviced });
+      await api("PUT", "/api/regulator", next); setReg(next); $("regResetForm").style.display = "none"; note("regMsg", ""); say("Regulator counter reset to 0"); renderRegulator();
+    } catch (e) { note("regMsg", e.message, true); }
   }
   async function removeReg() {
     try { await api("DELETE", "/api/regulator"); setReg(null); say("Regulator removed"); renderRegulator(); } catch (e) { note("regMsg", e.message, true); }
@@ -249,23 +342,28 @@ const AccountArea = (() => {
       $(cfg.file).addEventListener("change", (e) => { const f = e.target.files[0]; $(cfg.fileName).textContent = f ? f.name : ""; if (f && !$(cfg.label).value) $(cfg.label).value = cfg.defaultLabel || f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
       $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
     }
-    $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Latest certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
+    $("certList").addEventListener("keydown", (e) => { const f = e.target.closest && e.target.closest(".wface"); if (f && e.target === f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); const id = f.closest(".wcard").dataset.id; toggleCert(id, openCert === id ? false : true); } });
+    $("certShowAdd").addEventListener("click", () => { $("certAddBox").style.display = ""; $("certShowAdd").style.display = "none"; note("certMsg", ""); $("certLabel").focus(); });
+    $("certAddCancel").addEventListener("click", () => { hideCertAdd(); note("certMsg", ""); });
+    $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Main certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
     $("nameSave").addEventListener("click", saveName); $("fullName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveName(); });
     $("danSave").addEventListener("click", saveDan); $("danClear").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", clearDan));
     const sum = $("sumDiver");                                                    // the Summary card leads to the matching Account section
-    if (sum) { const go = (e) => { window.showView("account"); open(e && e.target.closest("#sumDanRow") ? "dan" : e && e.target.closest(".diver-row") ? "certs" : "profile"); }; sum.addEventListener("click", go); }
+    if (sum) { const go = (e) => { if (e && e.target.closest(".diver-row") && !e.target.closest("#sumDanRow")) return window.showView("certs"); window.showView("account"); open(e && e.target.closest("#sumDanRow") ? "dan" : "profile"); }; sum.addEventListener("click", go); }
     $("regAdd").addEventListener("click", () => openRegForm(null)); $("regEdit").addEventListener("click", () => openRegForm(regulator));
     $("regCancel").addEventListener("click", () => { $("regForm").style.display = "none"; note("regMsg", ""); renderRegulator(); });
     $("regSave").addEventListener("click", saveReg);
     $("regUseLogged").addEventListener("click", async () => { const n = U.uniqueDives(await Dives.all()).filter((r) => r.mode !== "freedive").length; $("regBase").value = n; note("regMsg", `Filled in with your ${n} logged scuba/gauge dives.`); });
-    $("regReset").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to reset to 0", resetReg));
+    $("regReset").addEventListener("click", () => { if ($("regResetForm").style.display === "none") openResetForm(); else $("regResetForm").style.display = "none"; note("regMsg", ""); });
+    $("regRstSave").addEventListener("click", resetReg); $("regRstCancel").addEventListener("click", () => { $("regResetForm").style.display = "none"; note("regMsg", ""); });
     $("regRemove").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", removeReg));
     $("updateBtn").addEventListener("click", checkUpdate);
     $("helpDiag").addEventListener("click", async () => note("helpMsg", await Dives.copyDiagnostics()));
     const hint = $("sumRegHintLink"); if (hint) hint.addEventListener("click", (e) => { e.preventDefault(); window.showView("account"); open("regulator"); });
     const card = $("sumReg"); if (card) { const go = () => { window.showView("account"); open("regulator"); }; card.addEventListener("click", go); card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); }); }
   }
-  function show() { loadFiles(); renderRegulator(); showVersions(); }
+  function show() { renderRegulator(); showVersions(); }
+  function showCerts() { loadFiles(); }
 
-  return { init, show, open, regulator: () => regulator, diver, refresh: renderRegulator };
+  return { init, show, showCerts, open, regulator: () => regulator, diver, refresh: renderRegulator };
 })();

@@ -127,7 +127,7 @@ async function finishLogin(request, url, env) {
   return redirect("/", await issueSession(env, { email, name: claims.name, amr: "google" }));
 }
 
-const PUBLIC_ASSET = /^\/auth\/(favicon\.svg|apple-touch-icon\.png|theme\.(js|css)|fonts\.css|logo-(light|dark)\.png|icon-(summary|log|device)\.png|fonts\/[A-Za-z-]+\.(woff2|txt))$/;
+const PUBLIC_ASSET = /^\/auth\/(favicon\.svg|apple-touch-icon\.png|theme\.(js|css)|fonts\.css|logo-(light|dark)\.png|icon-(summary|log|cert|device)\.png|fonts\/[A-Za-z-]+\.(woff2|txt))$/;
 const LOGIN_CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /** Handles the GET /auth/* routes; returns a Response, or null if the path is not one of them.

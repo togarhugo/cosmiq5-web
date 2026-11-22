@@ -38,7 +38,7 @@ test("regulator: validated, stored per user, updatable, removable", async () => 
   assert.deepEqual(await (await send(env, me, "GET", "/api/regulator")).json(), { regulator: null });
   const reg = { name: "  Apeks   XTX50 ", type: "Balanced piston", baseline: 12, since: "2026-10-17T08:26:00" };
   assert.equal((await send(env, me, "PUT", "/api/regulator", reg)).status, 200);
-  assert.deepEqual((await (await send(env, me, "GET", "/api/regulator")).json()).regulator, { name: "Apeks XTX50", type: "Balanced piston", baseline: 12, since: "2026-10-17T08:26:00" });
+  assert.deepEqual((await (await send(env, me, "GET", "/api/regulator")).json()).regulator, { name: "Apeks XTX50", type: "Balanced piston", baseline: 12, since: "2026-10-17T08:26:00", serviced: "", limitDives: 90, limitMonths: 12, history: [] }, "an older page that sends none of the new fields still works: 90 dives, 12 months, no service month");
   assert.equal((await (await send(env, other, "GET", "/api/regulator")).json()).regulator, null, "private");
   assert.equal((await send(env, me, "PUT", "/api/regulator", { ...reg, baseline: 0, since: "" })).status, 200, "reset = baseline 0 and a new 'since'");
   assert.equal((await (await send(env, me, "GET", "/api/regulator")).json()).regulator.baseline, 0);
@@ -176,4 +176,33 @@ test("places on the map: validated, one per name (any capitalisation), updatable
   for (let i = 0; i < 500; i++) await env.DB.prepare("INSERT OR IGNORE INTO places (user_email, k, name, lat, lon) VALUES (?,?,?,?,?)").bind("me@example.com", "fill" + i, "fill" + i, 0, 0).run();
   const full = await send(env, me, "PUT", "/api/places", { name: "One too many", lat: 1, lon: 1 }); assert.equal(full.status, 409);
   assert.equal((await send(env, me, "PUT", "/api/places", { name: "Banda", lat: -4.6, lon: 129.95 })).status, 200, "an existing place can still be moved when full");
+});
+
+test("regulator service: last service month, two reminder limits and a history; validated; older pages do not wipe them", async () => {
+  const { env, me, other } = await two(); const get = async (c = me) => (await (await send(env, c, "GET", "/api/regulator")).json()).regulator, put = (body, c = me) => send(env, c, "PUT", "/api/regulator", body);
+  const ym = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`, now = new Date(), thisMonth = ym(now), nextMonth = ym(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))), twoAhead = ym(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1)));
+  const reg = { name: "Tecline R4", type: "Balanced piston", baseline: 0, since: "2026-10-17T08:26:00" };
+  const full = { ...reg, serviced: "2026-03", limitDives: 100, limitMonths: 18, history: [{ m: "2026-03", dives: 88, at: "2026-03-20" }, { m: "2025-02", dives: 91, at: "2025-02-11" }] };
+  assert.equal((await put(full)).status, 200); assert.deepEqual(await get(), { ...full, since: reg.since }, "everything is stored and returned");
+  // an older page (no new fields) saves the regulator: the service data is kept
+  assert.equal((await put({ ...reg, name: "Tecline R4 (renamed)", baseline: 5 })).status, 200); const kept = await get(); assert.equal(kept.name, "Tecline R4 (renamed)"); assert.deepEqual([kept.serviced, kept.limitDives, kept.limitMonths, kept.history.length], ["2026-03", 100, 18, 2], "unchanged");
+  // limits: the dive reminder or the time reminder can be switched off (0), but not both
+  assert.equal((await put({ ...full, limitDives: 0 })).status, 200); assert.equal((await get()).limitDives, 0); assert.equal((await put({ ...full, limitMonths: 0 })).status, 200); assert.equal((await get()).limitMonths, 0);
+  const both = await put({ ...full, limitDives: 0, limitMonths: 0 }); assert.equal(both.status, 400); assert.match((await both.json()).error, /at least one reminder/);
+  // a service month: real, not before 1990, not in the future (next month is allowed for a phone in another time zone)
+  assert.equal((await put({ ...full, serviced: "" })).status, 200); assert.equal((await get()).serviced, "", "not set is fine"); assert.equal((await put({ ...full, serviced: thisMonth })).status, 200); assert.equal((await put({ ...full, serviced: nextMonth })).status, 200);
+  for (const [name, change] of [["two months ahead", { serviced: twoAhead }], ["year 3000", { serviced: "3000-01" }], ["month 13", { serviced: "2026-13" }], ["month 00", { serviced: "2026-00" }], ["before 1990", { serviced: "1989-12" }], ["a date, not a month", { serviced: "2026-03-15" }],
+    ["text", { serviced: "March 2026" }], ["number", { serviced: 202603 }], ["null", { serviced: null }], ["injection", { serviced: "2026-03'; DROP TABLE regulators;--" }],
+    ["dives below 10", { limitDives: 9 }], ["dives above 1000", { limitDives: 1001 }], ["fractional dives", { limitDives: 90.5 }], ["text dives", { limitDives: "90" }], ["negative dives", { limitDives: -1 }],
+    ["months below 3", { limitMonths: 2 }], ["months above 60", { limitMonths: 61 }], ["fractional months", { limitMonths: 12.5 }], ["text months", { limitMonths: "12" }], ["negative months", { limitMonths: -3 }],
+    ["history not a list", { history: "x" }], ["history of 21", { history: Array.from({ length: 21 }, () => ({ m: "2026-03", dives: 1, at: "2026-03-01" })) }], ["history entry without a month", { history: [{ dives: 1, at: "2026-03-01" }] }], ["history blank month", { history: [{ m: "", dives: 1, at: "2026-03-01" }] }],
+    ["history negative dives", { history: [{ m: "2026-03", dives: -1, at: "2026-03-01" }] }], ["history bad date", { history: [{ m: "2026-03", dives: 1, at: "soon" }] }], ["history entry not an object", { history: ["x"] }], ["history null entry", { history: [null] }]])
+    assert.equal((await put({ ...full, ...change })).status, 400, name);
+  assert.deepEqual((await get()).history.map((h) => h.m), ["2026-03", "2025-02"], "refused updates changed nothing");
+  assert.equal((await put({ ...full, history: [] })).status, 200); assert.deepEqual((await get()).history, [], "an empty history is fine"); assert.equal((await put({ ...full, history: Array.from({ length: 20 }, (_, i) => ({ m: "2025-0" + (1 + (i % 9)), dives: i, at: "2025-01-0" + (1 + (i % 9)) })) })).status, 200, "20 entries are the limit");
+  assert.equal((await put({ ...full, history: [{ m: "2026-03", dives: 88, at: "2026-03-20", extra: "x".repeat(9999) }] })).status, 200); assert.deepEqual(Object.keys((await get()).history[0]).sort(), ["at", "dives", "m"], "only the three known fields are stored");
+  // private per user, and removing the regulator removes all of it
+  assert.equal(await get(other), null); assert.equal((await put({ ...reg, serviced: "2024-01" }, other)).status, 200); assert.equal((await get(other)).serviced, "2024-01"); assert.equal((await get()).serviced, "2026-03", "mine is not touched by theirs");
+  assert.equal((await send(env, me, "DELETE", "/api/regulator")).status, 200); assert.equal(await get(), null); assert.equal((await put(reg)).status, 200); assert.deepEqual([(await get()).serviced, (await get()).limitDives, (await get()).limitMonths], ["", 90, 12], "a new regulator starts from the defaults");
+  assert.equal((await put(full, null)).status, 401, "signed-out");
 });

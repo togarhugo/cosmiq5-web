@@ -333,7 +333,7 @@
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
             .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
             .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
-            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); }
+            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
             .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
@@ -367,15 +367,22 @@
             .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--bd-dee2e6); }
             .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: var(--tx-495057); line-height: 1.45; } ul.help li { margin-bottom: 6px; }
             .reg-title { font-size: 15px; } .reg-count { font-size: 30px; font-weight: 700; margin: 2px 0; }
+            .regevery { display: flex; align-items: center; gap: 8px; } .regevery .rel { width: 62px; } .regevery .fld { width: 78px; margin: 0; text-align: center; }
+            .reghist { margin-top: 10px; } .reghist > summary { cursor: pointer; font-size: 13px; font-weight: 600; } .reghist ul { list-style: none; margin: 6px 0 0; padding: 0; } .reghist li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px solid var(--bd-e9ecef); font-size: 13px; } .reghist li span:last-child { color: var(--tx-868e96); }
             .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: var(--bg-2b8a3e); color: var(--tx-fff); }
             .regbadge.orange { background: var(--bg-e67700); } .regbadge.red { background: var(--bg-c92a2a); }
-            .regbar { position: relative; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; margin: 10px 0 6px; overflow: visible; }
-            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: var(--bg-2b8a3e); width: 0; transition: width .3s; }
-            .regbar i { position: absolute; left: 77.78%; top: -3px; width: 2px; height: 14px; background: rgba(0,0,0,.35); }
-            .reg-msg { font-size: 13px; font-weight: 600; }
+            .regbars { margin: 10px 0 2px; } .regline { display: flex; align-items: center; gap: 10px; margin: 8px 0; } .regline.lv-off { display: none; }
+            .reglbl { width: 40px; flex: none; font-size: 12px; font-weight: 600; color: var(--tx-868e96); }
+            .regbar { position: relative; flex: 1; height: 8px; background: var(--bg-e9ecef); border-radius: 4px; overflow: visible; }
+            .regbar .fill { height: 100%; border-radius: 4px; background: var(--bg-2b8a3e); width: 0; transition: width .3s; }
+            .regbar i { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--tx-868e96); opacity: .6; }
+            .regtxt { flex: none; min-width: 70px; text-align: right; font-size: 12px; font-family: var(--mono); color: var(--tx-495057); }
+            .regline.lv-orange .fill { background: var(--bg-e67700); } .regline.lv-red .fill { background: var(--bg-c92a2a); } .regline.lv-orange .regtxt { color: var(--tx-d9480f); font-weight: 600; } .regline.lv-red .regtxt { color: var(--tx-c92a2a); font-weight: 700; }
+            .regline.lv-unknown .regbar { opacity: .5; } .sum-sub { font-size: 20px; font-weight: 600; opacity: .85; }
+            .reg-msg { font-size: 13px; font-weight: 600; } .reg-msg.lv-orange { color: var(--tx-d9480f); } .reg-msg.lv-red { color: var(--tx-c92a2a); }
             .sum.reg-ok { border-left: 5px solid var(--bd-2b8a3e); } .sum.reg-ok .reg-msg { color: var(--tx-2b8a3e); }
-            .sum.reg-orange { border-left: 5px solid var(--bd-e67700); background: var(--bg-fff4e6); } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: var(--tx-d9480f); } .sum.reg-orange #sumRegBar { background: var(--bg-e67700); }
-            .sum.reg-red { border-left: 5px solid var(--bd-c92a2a); background: var(--bg-fff5f5); } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: var(--tx-c92a2a); } .sum.reg-red #sumRegBar { background: var(--bg-c92a2a); }
+            .sum.reg-orange { border-left: 5px solid var(--bd-e67700); background: var(--bg-fff4e6); } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: var(--tx-d9480f); }
+            .sum.reg-red { border-left: 5px solid var(--bd-c92a2a); background: var(--bg-fff5f5); } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: var(--tx-c92a2a); }
             .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
             .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: var(--bg-f8f9fa); }
             .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; }
@@ -485,16 +492,75 @@
             .btn-opt.applied { animation: appliedFlash 1.2s ease-out; }
             @keyframes appliedFlash { 0% { box-shadow: 0 0 0 0 rgba(43,138,62,.7); background: var(--bg-d3f9d8); } 100% { box-shadow: 0 0 0 10px rgba(43,138,62,0); } }
             @media (prefers-reduced-motion: reduce) { #toast, .btn-opt.applied, #toast .spin { animation: none; transition: none; } }
+
+
+            /* ---------- certificates: a wallet. Cards overlap showing a title strip; tap one to open it (scan large, details and actions below) ---------- */
+            #certsView .card { margin-bottom: 12px; } .cert-headrow { font-size: 16px; }
+            .wallet { --cw-h: 190px; --cw-peek: 96px; display: flex; flex-direction: column; padding: 4px 0 6px; }
+            .wcard { position: relative; margin-top: calc(var(--cw-peek) - var(--cw-h)); border-radius: 20px; background: var(--bg-fff); box-shadow: 0 -1px 0 rgba(255, 255, 255, .25), 0 4px 14px rgba(0, 0, 0, .22); overflow: hidden; scroll-margin-top: 12px; }
+            .wcard:first-child, .wcard.open, .wcard.open + .wcard { margin-top: 12px; } .wcard:first-child { margin-top: 0; }
+            .wface { position: relative; cursor: pointer; outline-offset: -3px; } .wcard.open .wface { cursor: default; }
+            .wimg { height: var(--cw-h); overflow: hidden; background: var(--bg-f1f3f5); transition: height .4s ease; }
+            .wimg img { display: block; width: 100%; height: 100%; object-fit: cover; } .wcard.open .wimg img { object-fit: contain; }
+            .wpdf { height: 100%; background: var(--tint, #3b5b92); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #fff; } .wpdf .pdfmark { font-size: 15px; font-weight: 700; letter-spacing: .08em; border: 2px solid currentColor; border-radius: 7px; padding: 4px 10px; }
+            .wshade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(0, 0, 0, .7), rgba(0, 0, 0, 0) 58%); transition: opacity .3s; }
+            .wtitle { position: absolute; left: 16px; right: 84px; bottom: 12px; color: #fff; font-size: 20px; font-weight: 700; line-height: 1.2; text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 2px rgba(0, 0, 0, .9); transition: opacity .3s; } .wtitle small { display: block; font-size: 12px; font-weight: 500; opacity: .9; }
+            .wcard .latest-tag { position: absolute; right: 12px; bottom: 14px; background: var(--bg-2b8a3e); color: var(--tx-fff); padding: 4px 10px; font-size: 12px; transition: opacity .3s; }
+            .wcard.open .wshade, .wcard.open .wtitle, .wcard.open .latest-tag { opacity: 0; }
+            .wclose { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; min-height: 0; padding: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 16px; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .3s; } .wcard.open .wclose { opacity: 1; pointer-events: auto; }
+            .wfoot { max-height: 0; padding: 0 16px; overflow: hidden; transition: max-height .4s ease, padding .3s ease; } .wcard.open .wfoot { max-height: 340px; padding: 14px 16px 16px; }
+            .wf-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 17px; } .wf-sub { margin: 2px 0 10px; font-size: 13px; }
+            .cc-mainbadge { font-size: 13px; font-weight: 700; color: var(--tx-2b8a3e); display: inline-flex; align-items: center; min-height: 44px; }
+            .wfoot .row { align-items: center; gap: 8px; } .wfoot .row .btn-set { flex: 1 1 auto; padding: 8px 10px; min-width: 0; text-align: center; } .cc-mainbadge { min-height: 0 !important; } .wfoot a.btn-set, .wfoot a.btn-set:visited { text-decoration: none; color: #fff !important; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; font-family: inherit; font-weight: 600; }
+            .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
+            .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
+            @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
+            /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
+            #shell, #side, #main { display: contents; } .acct-label { display: none; }
+            @media (min-width: 1024px) {
+                body { max-width: none; margin: 0; padding: 0; }
+                #shell { display: grid; grid-template-columns: 268px minmax(0, 1fr); min-height: 100vh; }
+                #side { display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; box-sizing: border-box; overflow-y: auto; padding: 24px 16px 14px; background: var(--bg-fff); border-right: 1px solid var(--bd-dee2e6); }
+                #side header { display: contents; }
+                #side .brand { order: 0; text-align: left; margin: 0 0 22px 6px; } #side .brand .logo { width: 150px; height: auto; }
+                #side .nav { order: 1; flex-direction: column; gap: 4px; margin: 0 0 18px; overflow: visible; }
+                #side .nav button { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; font-size: 15px; text-align: left; border-radius: 10px; }
+                #side .nav .ti { width: 24px; height: 24px; flex: none; }
+                #side .nav button:not(.active) { background: transparent; } #side .nav button:not(.active):hover { background: var(--bg-e9ecef); }
+                #side #connectBtn, #side #disconnectBtn { order: 2; margin-bottom: 6px; font-size: 15px; padding: 12px; }
+                #side #status { order: 3; text-align: left; margin: 2px 6px 10px; }
+                #side #btBanner, #side #clockStatus, #side #syncBanner { order: 4; text-align: left; font-size: 12px; }
+                #side .theme-slot { order: 8; position: static; margin-top: auto; padding: 16px 6px 10px; }
+                #side #acctBtn.avatar { order: 9; position: static; width: 100%; height: auto; min-height: 0; border-radius: 10px; padding: 8px 10px; gap: 12px; justify-content: flex-start; background: transparent; box-shadow: none; border: 0; color: var(--tx-495057); font-size: 15px; font-weight: 600; }
+                #side #acctBtn.avatar:hover { background: var(--bg-e9ecef); } #side #acctBtn.avatar.active { background: var(--bg-343a40); color: var(--tx-fff); box-shadow: none; }
+                #side #acctBtn .acct-label { display: inline; }
+                #side #acctBtn img, #side #acctBtn #acctIcon { width: 32px; height: 32px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-dee2e6); } #side #acctBtn img[hidden] { display: none; }
+                #main { display: block; padding: 28px 44px 56px; min-width: 0; max-width: 1280px; }
+                #summaryView { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+                #summaryView > .card, #sumCards > .card { margin: 0; }
+                #sumEmpty, #sumRegHint, #mapCard, #sumCards { grid-column: 1 / -1; }
+                #sumCards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } #sumCards[style*="none"] { display: none; }
+                #sumRegHint { margin: 0; }
+                #sumMap { height: 440px; }
+                #certsView { max-width: 700px; } .wallet { --cw-h: 230px; --cw-peek: 116px; }
+                #logView { max-width: 980px; } #deviceView { max-width: 1120px; }
+                #deviceView .section.active { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; } #deviceView .section.active > .card { margin: 0; }
+                #accountView { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; max-width: 1100px; } #accountView[style*="none"] { display: none; }
+                #accountView > .card { margin: 0; }
+                #toast { left: calc(50% + 134px); }
+            }
             @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } }
             #accountView input[type="password"], #accountView input[inputmode] { box-sizing: border-box; min-height: 44px; font-size: 16px; }
         </style>
     </head>
     <body>
+        <div id="shell">
+        <aside id="side">
         <header>
             <div class="theme-slot" data-theme-switch></div>
             <h1 class="brand"><img class="logo logo-light" src="/auth/logo-light.png" alt="Dive Manager" width="176" height="78"><img class="logo logo-dark" src="/auth/logo-dark.png" alt="Dive Manager" width="176" height="78" loading="lazy"></h1>
             <div id="status" class="status">Disconnected</div>
-            <button id="acctBtn" class="avatar" type="button" aria-label="Account" onclick="showView('account')"><img id="acctImg" alt="" hidden /><span id="acctIcon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span></button>
+            <button id="acctBtn" class="avatar" type="button" aria-label="Account" onclick="showView('account')"><img id="acctImg" alt="" hidden /><span id="acctIcon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z" fill="currentColor"/></svg></span><span class="acct-label">Account</span></button>
         </header>
 
         <button id="connectBtn" class="btn-main" onclick="connect()">
@@ -520,9 +586,12 @@
         <div class="nav">
             <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
             <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
+            <button id="navCerts" onclick="showView('certs')"><i class="ti ti-cert" aria-hidden="true"></i><span>Certificates</span></button>
             <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
         </div>
 
+        </aside>
+        <main id="main">
         <div id="summaryView" style="display:none">
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
             <div id="sumDiver" class="card sum" style="display:none">
@@ -534,9 +603,13 @@
             </div>
             <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
                 <div class="sum-label">Regulator service</div>
-                <div class="sum-big"><span id="sumRegCount">0</span> dives</div>
+                <div class="sum-big"><span id="sumRegCount">0</span> dives<span id="sumRegMonthsWrap" class="sum-sub"> &middot; <span id="sumRegMonths">0</span> <span id="sumRegMonthsUnit">months</span></span></div>
                 <div id="sumRegName" class="muted"></div>
-                <div class="regbar" aria-hidden="true"><div id="sumRegBar"></div><i></i></div>
+                <div class="regbars">
+                    <div id="sumRegDivesLine" class="regline"><span class="reglbl">Dives</span><div class="regbar" aria-hidden="true"><div id="sumRegDivesBar" class="fill"></div><i id="sumRegDivesTick"></i></div><span id="sumRegDivesTxt" class="regtxt"></span></div>
+                    <div id="sumRegTimeLine" class="regline"><span class="reglbl">Time</span><div class="regbar" aria-hidden="true"><div id="sumRegTimeBar" class="fill"></div><i id="sumRegTimeTick"></i></div><span id="sumRegTimeTxt" class="regtxt"></span></div>
+                </div>
+                <div id="sumRegLast" class="muted"></div>
                 <div id="sumRegMsg" class="reg-msg"></div>
             </div>
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
@@ -946,6 +1019,38 @@
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
         </div>
 
+        <div id="certsView" style="display:none">
+            <div id="certHead" class="card">
+                <div class="cert-headrow"><b>Dive certificates</b> <span id="certCount" class="muted"></span></div>
+                <p id="certLatestHint" class="muted" style="margin:6px 0 10px"></p>
+                <div class="row wrap" style="margin:0">
+                    <button id="certShowAdd" class="btn-set" type="button">Add a certificate</button>
+                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d)">Use the newest by date instead</button>
+                </div>
+            </div>
+            <div id="certAddBox" class="card" style="display:none">
+                <h4 style="margin:0 0 6px">Add a certificate</h4>
+                <p class="muted" style="margin:0 0 6px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
+                <label class="label" for="certLabel">Name</label>
+                <input id="certLabel" class="fld" maxlength="80" placeholder="e.g. PADI Advanced Open Water" autocomplete="off" />
+                <label class="label" for="certNumber">Certificate / diver number (optional)</label>
+                <input id="certNumber" class="fld" maxlength="40" autocomplete="off" />
+                <label class="label" for="certDate">Date certified (optional)</label>
+                <input id="certDate" class="fld" type="date" />
+                <div class="row wrap" style="margin:0 0 6px">
+                    <label class="btn-set filebtn" tabindex="0">Choose file<input id="certFile" type="file" accept="application/pdf,image/*" hidden /></label>
+                    <span id="certFileName" class="muted"></span>
+                </div>
+                <div class="row wrap" style="margin:0">
+                    <button id="certAdd" class="btn-set" type="button">Upload</button>
+                    <button id="certAddCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
+                </div>
+            </div>
+            <div id="certMsg" class="msg" role="status"></div>
+            <div id="certList" class="wallet"></div>
+            <p id="certWalletHint" class="wallet-hint muted" style="display:none">Tap any card to open it, make it your main one, or share it.</p>
+        </div>
+
         <div id="accountView" style="display:none">
             <details class="card acc" data-sec="profile">
                 <summary>Profile picture</summary>
@@ -1027,31 +1132,6 @@
                 </div>
             </details>
 
-            <details class="card acc" data-sec="certs">
-                <summary>Dive certifications</summary>
-                <div class="acc-body">
-                    <p class="muted" style="margin:0 0 10px">Keep a scan or PDF of your certification card here, ready to show when you register for a dive. PDF, JPEG, PNG or WebP, up to 1 MB each.</p>
-                    <div id="certList"></div>
-                    <p id="certLatestHint" class="muted" style="margin:8px 0 0"></p>
-                    <button id="certAuto" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Use the newest by date instead</button>
-                    <div class="subcard" style="margin-top:10px">
-                        <h4>Add a certification</h4>
-                        <label class="label" for="certLabel">Name</label>
-                        <input id="certLabel" class="fld" maxlength="80" placeholder="e.g. PADI Advanced Open Water" autocomplete="off" />
-                        <label class="label" for="certNumber">Certificate / diver number (optional)</label>
-                        <input id="certNumber" class="fld" maxlength="40" autocomplete="off" />
-                        <label class="label" for="certDate">Date certified (optional)</label>
-                        <input id="certDate" class="fld" type="date" />
-                        <div class="row wrap" style="margin:0 0 6px">
-                            <label class="btn-set filebtn" tabindex="0">Choose file<input id="certFile" type="file" accept="application/pdf,image/*" hidden /></label>
-                            <span id="certFileName" class="muted"></span>
-                        </div>
-                        <button id="certAdd" class="btn-set" type="button">Upload</button>
-                    </div>
-                    <div id="certMsg" class="msg" role="status"></div>
-                </div>
-            </details>
-
             <details class="card acc" data-sec="dan">
                 <summary>DAN insurance <span id="danBadge" class="regbadge" style="display:none"></span></summary>
                 <div class="acc-body">
@@ -1088,15 +1168,28 @@
             <details class="card acc" data-sec="regulator">
                 <summary>Regulator <span id="regBadge" class="regbadge" style="display:none"></span></summary>
                 <div class="acc-body">
-                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) so you know when to service it: orange from 70 dives, red from 90.</p>
+                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) and the months since its last service. You are reminded by whichever comes first: the number of dives or the time.</p>
                     <div id="regStatus" style="display:none">
                         <div class="reg-title"><b id="regShownName"></b> <span id="regShownType" class="muted"></span></div>
-                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span></div>
+                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span><span id="regShownMonthsWrap"> <span class="muted">&middot;</span> <span id="regShownMonths">0</span> <span id="regShownMonthsUnit" class="muted">months</span></span></div>
+                        <div id="regShownLast" class="muted"></div>
+                        <div id="regShownEvery" class="muted"></div>
+                        <div id="regShownMsg" class="reg-msg" style="margin-top:4px"></div>
                         <div class="row wrap" style="margin:8px 0 0">
                             <button id="regReset" class="btn-set" type="button">Reset to 0</button>
                             <button id="regEdit" class="btn-set" type="button" style="background:var(--bg-6c757d)">Edit</button>
                             <button id="regRemove" class="btn-set" type="button" style="background:var(--bg-6c757d)">Remove</button>
                         </div>
+                        <div id="regResetForm" class="subcard" style="display:none">
+                            <div class="label" style="margin-top:0">Serviced in</div>
+                            <div class="row" style="margin:0 0 4px"><select id="regRstMonth" class="fld" aria-label="Month serviced" style="margin:0"></select><select id="regRstYear" class="fld" aria-label="Year serviced" style="margin:0"></select></div>
+                            <div class="muted" style="margin:0 0 8px">Month and year are enough. The counter goes back to 0 and the date is kept in the service history.</div>
+                            <div class="row wrap" style="margin:0">
+                                <button id="regRstSave" class="btn-set" type="button">Reset counter</button>
+                                <button id="regRstCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
+                            </div>
+                        </div>
+                        <details id="regHistory" class="reghist" style="display:none"><summary>Service history <span id="regHistoryCount" class="muted"></span></summary><ul id="regHistoryList"></ul></details>
                     </div>
                     <div id="regForm" class="subcard" style="display:none">
                         <label class="label" for="regName">Regulator name</label>
@@ -1107,6 +1200,12 @@
                         <label class="label" for="regBase">Dives already on it</label>
                         <div class="row" style="margin-bottom:6px"><input id="regBase" class="fld" type="number" min="0" max="99999" value="0" inputmode="numeric" style="margin:0" />
                             <button id="regUseLogged" class="btn-set" type="button" style="background:var(--bg-6c757d);white-space:nowrap">Use my logged dives</button></div>
+                        <div class="label">Last serviced <span class="muted">(optional)</span></div>
+                        <div class="row" style="margin:0 0 6px"><select id="regSvcMonth" class="fld" aria-label="Month of last service" style="margin:0"></select><select id="regSvcYear" class="fld" aria-label="Year of last service" style="margin:0"></select></div>
+                        <div class="label">Service reminder</div>
+                        <div class="regevery"><span class="rel">Every</span><input id="regLimDives" class="fld" type="number" min="0" max="1000" value="90" inputmode="numeric" aria-label="Service every this many dives" /><span>dives</span></div>
+                        <div class="regevery" style="margin-top:6px"><span class="rel">or every</span><input id="regLimMonths" class="fld" type="number" min="0" max="60" value="12" inputmode="numeric" aria-label="Service every this many months" /><span>months</span></div>
+                        <div class="muted" style="margin:4px 0 8px">Whichever comes first. Put 0 to switch one off. Orange 20 dives (or 2 months) before the limit, red at the limit.</div>
                         <div class="row wrap" style="margin:0">
                             <button id="regSave" class="btn-set" type="button">Save regulator</button>
                             <button id="regCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
@@ -1207,6 +1306,11 @@
             <a id="signOut" class="btn-main" href="/auth/logout" style="background:var(--bg-6c757d);text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
+        <details class="logwrap"><summary>Activity log</summary>
+        <div id="log">Waiting for connection...</div></details>
+        </main>
+        </div>
+
         <div id="placePicker" role="dialog" aria-modal="true" aria-labelledby="ppTitle" hidden>
             <div class="pp-head"><b id="ppTitle">Where is it?</b><button id="ppClose" class="btn-set" type="button" style="background:var(--bg-6c757d)" aria-label="Close">&#10005;</button></div>
             <div class="pp-search"><input id="ppQuery" type="search" placeholder="Search a place, e.g. Tulamben" maxlength="80" autocomplete="off" aria-label="Search for a place" /><button id="ppGo" class="btn-set" type="button">Search</button></div>
@@ -1220,8 +1324,6 @@
 
         <div id="toast" role="status" aria-live="polite"></div>
 
-        <details class="logwrap"><summary>Activity log</summary>
-        <div id="log">Waiting for connection...</div></details>
         <script src="vendor/leaflet.js"></script>
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
@@ -1277,12 +1379,13 @@
             let currentView = "summary";
             function showView(v) {
                 currentView = v;
-                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["account", null]]) {
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["certs", "navCerts"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
                     if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
                 document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
                 if (v === "account") { Account.load(); AccountArea.show(); }
+                if (v === "certs") AccountArea.showCerts();
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
                 if (v === "summary") Dives.render().then(() => PlacesUI.shown());
