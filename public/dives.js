@@ -392,8 +392,8 @@ const Dives = (() => {
       <p class="muted">Depth assumes seawater (1025 kg/m\u00b3) like the device.${usable ? ` ${d.samples.length} sample${d.samples.length === 1 ? "" : "s"}, every ${d.sampleIntervalSec}s.` : ""}</p>${techDetails(rec, res)}`;
   }
 
-  const YEARS_KEY = "yearsOpen";
-  const loadYears = () => { try { return JSON.parse(localStorage.getItem(YEARS_KEY) || "null"); } catch (e) { return null; } };
+  const YEARS_KEY = "yearsOpen", MONTHS_KEY = "monthsOpen";
+  const loadOpen = (key) => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }, loadYears = () => loadOpen(YEARS_KEY);
   const say = (t, kind) => { if (window.toast) window.toast(t, kind || "ok"); };
   const dayOf = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d); };
   const fmtDayShort = (key) => dayOf(key).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -498,7 +498,7 @@ const Dives = (() => {
   const DEV_KEY = "logDevice";
   let selDevice = (() => { try { return localStorage.getItem(DEV_KEY); } catch (e) { return null; } })();
   // ---- which dive computers are shown: the ones that have dives, plus the ones this person added by hand ----
-  const SRC_KEY = "sources", OWNER_KEY = "owner", USER_KEYS = ["lastSync", "diver", "regulator", SRC_KEY, "logDevice", "yearsOpen", "btLog"];
+  const SRC_KEY = "sources", OWNER_KEY = "owner", USER_KEYS = ["lastSync", "diver", "regulator", SRC_KEY, "logDevice", "yearsOpen", "monthsOpen", "btLog"];
   const HOW = { cosmiq: "Sync over Bluetooth", peregrine: "From a Shearwater Cloud export", perdix: "From a Shearwater Cloud export", garmin: "From FIT files (Garmin Connect)" };
   const loadSrc = () => { try { const a = JSON.parse(localStorage.getItem(SRC_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => U.DEVICES.some((v) => v.id === x)) : []; } catch (e) { return []; } };
   const saveSrc = (a) => { try { localStorage.setItem(SRC_KEY, JSON.stringify(a)); } catch (e) {} };
@@ -661,6 +661,7 @@ const Dives = (() => {
     const openNow = list.querySelector("details.year") ? new Set([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year)) : null;
     const openDives = new Set([...list.querySelectorAll("details.dive[open]")].map((e) => e.dataset.fp));
     const saved = loadYears(), open = openNow || new Set(saved || [years[0]]);
+    const openMonthsNow = list.querySelector("details.mbox") ? new Set([...list.querySelectorAll("details.mbox[open]")].map((e) => e.dataset.month)) : null, savedMonths = loadOpen(MONTHS_KEY), openMonths = openMonthsNow || new Set(savedMonths || [recs[0].startedAt.slice(0, 7)]);   // the newest month starts open
 
     const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
     const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
@@ -679,18 +680,21 @@ const Dives = (() => {
       const tile = (v, label) => `<div><b>${v}</b><span>${label}</span></div>`;
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><span class="yname">${y}</span><span class="ystats">${tile(g.length, g.length === 1 ? "dive" : "dives")}${tile(fmtDur(secs), "time")}${tile(deepest.toFixed(1) + " m", "deepest")}</span><span class="chev" aria-hidden="true">\u25B8</span></summary><div class="ybody">` +
         U.groupByMonth(g).map(({ month, recs: mrs }) => {
-          const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))], msecs = mrs.reduce((a, r) => a + r.durationSec, 0), share = secs ? Math.max(2, Math.round(100 * msecs / secs)) : 0;
-          const head = `<div class="monthhead" data-month="${esc(month)}"><span class="mh-name">${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}</span><span class="mh-stat">${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(msecs)} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m</span>` +
-            `<span class="mh-place">${names.length ? "\ud83d\udccd " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button><span class="mh-bar" title="Share of the year's dive time"><i style="width:${share}%"></i></span></div>`;
-          return `<div class="mbox">` + head + U.groupByDate(mrs).map(({ date, recs: rs }) => {
+          const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))], msecs = mrs.reduce((a, r) => a + r.durationSec, 0);
+          const head = `<summary class="monthhead" data-month="${esc(month)}"><span class="mh-name"><span class="mh-chev" aria-hidden="true">\u25B8</span>${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}</span><span class="mh-stat">${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(msecs)} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m</span>` +
+            `<span class="mh-place">${names.length ? "\ud83d\udccd " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span></summary>`;
+          return `<details class="mbox" data-month="${esc(month)}"${openMonths.has(month) ? " open" : ""}>` + head + `<div class="mbody"><div class="mh-actions"><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button></div>` + U.groupByDate(mrs).map(({ date, recs: rs }) => {
             const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
             return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
-          }).join("") + `</div>`;
+          }).join("") + `</div></details>`;
         }).join("") + `</div></details>`;
     }
     list.innerHTML = html; fillSuggestions();
     list.querySelectorAll("details.year").forEach((el) => el.addEventListener("toggle", () => {
       try { localStorage.setItem(YEARS_KEY, JSON.stringify([...list.querySelectorAll("details.year[open]")].map((e) => e.dataset.year))); } catch (e) {}
+    }));
+    list.querySelectorAll("details.mbox").forEach((el) => el.addEventListener("toggle", () => {
+      try { localStorage.setItem(MONTHS_KEY, JSON.stringify([...list.querySelectorAll("details.mbox[open]")].map((e) => e.dataset.month))); } catch (e) {}
     }));
     list.querySelectorAll("details.dive").forEach((el) => el.addEventListener("toggle", async () => {
       if (!el.open || el.dataset.done) return;
