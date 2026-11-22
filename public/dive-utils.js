@@ -69,8 +69,8 @@
   const PREFERENCE = ["peregrine", "perdix", "garmin", "cosmiq"];
   const isShared = (r) => !!r.sharedFrom;
   const startMs = (r) => Date.parse(r.startedAt + "Z"), HOUR = 3600000;
-  /** Do the two dives overlap on the clock (the other computer started a few minutes early or late)? */
-  const overlaps = (a, b) => { const as = startMs(a), bs = startMs(b); return as < bs + (b.durationSec || 0) * 1000 && bs < as + (a.durationSec || 0) * 1000; };
+  /** Do the two dives overlap on the clock, started within 20 minutes of each other (the other computer started a few minutes early or late)? Two different dives of an hour each can overlap by chance when one clock is off, so a late start alone is not enough. */
+  const overlaps = (a, b) => { const as = startMs(a), bs = startMs(b); return Math.abs(as - bs) <= 20 * 60000 && as < bs + (b.durationSec || 0) * 1000 && bs < as + (a.durationSec || 0) * 1000; };
   /** Clocks one or two whole hours apart (time zone / daylight saving: seen as exactly one hour in a real log): same length (5 min or 15 %) and depth (2 m or 10 %). */
   function shiftedSame(a, b) {
     const diff = startMs(b) - startMs(a), h = Math.round(diff / HOUR);
@@ -78,7 +78,20 @@
     const ad = (a.durationSec || 0) * 1000, bd = (b.durationSec || 0) * 1000, ma = a.maxDepthM || 0, mb = b.maxDepthM || 0;
     return Math.abs(ad - bd) <= Math.max(300000, 0.15 * Math.max(ad, bd)) && Math.abs(ma - mb) <= Math.max(2, 0.1 * Math.max(ma, mb));
   }
-  const sameDive = (a, b) => overlaps(a, b) || shiftedSame(a, b);
+  /**
+   * A clock that is simply off by some minutes (a Perdix 66 min behind a Peregrine in June, 77 min in October: a time zone plus drift): the same dive has
+   * the same length and depth, just another start time. Tight on length (2.5 min or 6 %) and depth (1 m or 5 %), and at most 2.5 h apart.
+   */
+  function offClockSame(a, b) {
+    const ad = a.durationSec || 0, bd = b.durationSec || 0, ma = a.maxDepthM || 0, mb = b.maxDepthM || 0;
+    return Math.abs(startMs(b) - startMs(a)) <= 2.5 * HOUR && Math.abs(ad - bd) <= Math.max(150, 0.06 * Math.max(ad, bd)) && Math.abs(ma - mb) <= Math.max(1, 0.05 * Math.max(ma, mb));
+  }
+  /** The same, but the length may differ by 20 % and the depth by 4 m or 15 % (two divers wear two computers: one surfaces a little earlier, one swims a little deeper). Only trusted when the clock offset agrees with the dives around it. */
+  function offClockLoose(a, b) {
+    const ad = a.durationSec || 0, bd = b.durationSec || 0, ma = a.maxDepthM || 0, mb = b.maxDepthM || 0;
+    return Math.abs(startMs(b) - startMs(a)) <= 2.5 * HOUR && Math.abs(ad - bd) <= Math.max(150, 0.2 * Math.max(ad, bd)) && Math.abs(ma - mb) <= Math.max(4, 0.15 * Math.max(ma, mb));
+  }
+  const sameDive = (a, b) => overlaps(a, b) || shiftedSame(a, b) || offClockSame(a, b);
   /**
    * Dives recorded by two computers at once: {duplicate fingerprint -> the fingerprint it duplicates}. The computers are ranked in
    * DEVICES order (the Cosmiq+ first): the higher-ranked computer's dive is the one that is kept and counted. Dives of the same
@@ -90,9 +103,22 @@
     for (const shared of [false, true]) for (const id of PREFERENCE) {
       const mine = recs.filter((r) => deviceOf(r) === id && isShared(r) === shared), matched = new Set(), claimed = new Set(), rest = [];
       for (const r of mine) { const hit = kept.find((k) => Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && overlaps(k, r)); if (hit) { out.set(r.fingerprint, hit.fingerprint); matched.add(hit.fingerprint); } else rest.push(r); }
-      for (const r of rest) {
-        const hit = kept.find((k) => !matched.has(k.fingerprint) && !claimed.has(k.fingerprint) && Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && shiftedSame(k, r));
-        if (hit) { out.set(r.fingerprint, hit.fingerprint); claimed.add(hit.fingerprint); }
+      // dives with no simultaneous twin: the same dive on a clock that is off. One-to-one, best match first.
+      const edges = [];
+      for (const r of rest) for (const k of kept) {
+        if (matched.has(k.fingerprint) || Math.abs(startMs(k) - startMs(r)) >= 15 * HOUR) continue;
+        const whole = shiftedSame(k, r), off = !whole && offClockSame(k, r), loose = !whole && !off && offClockLoose(k, r); if (!whole && !off && !loose) continue;
+        edges.push({ r, k, dt: startMs(r) - startMs(k), whole, loose, cost: Math.abs((k.durationSec || 0) - (r.durationSec || 0)) / 60 + Math.abs((k.maxDepthM || 0) - (r.maxDepthM || 0)) - (whole ? 1 : 0) + Math.abs(startMs(r) - startMs(k)) / 1e7 });
+      }
+      edges.sort((x, y) => x.cost - y.cost);
+      const offCount = (key, fp) => edges.filter((e) => !e.whole && !e.loose && e[key].fingerprint === fp).length, refs = [], used = new Set(), take = (e) => { out.set(e.r.fingerprint, e.k.fingerprint); claimed.add(e.k.fingerprint); used.add(e.r.fingerprint); refs.push(e); };
+      for (const e of edges) {                                                      // round 1: whole hours, and look-alikes that have no competitor
+        if (used.has(e.r.fingerprint) || claimed.has(e.k.fingerprint)) continue;
+        if (e.whole || (!e.loose && offCount("r", e.r.fingerprint) === 1 && offCount("k", e.k.fingerprint) === 1)) take(e);
+      }
+      for (const e of edges) {                                                      // round 2: a dive with several look-alikes only matches the one whose clock offset agrees with its neighbours' (within 6 min, within 3 days)
+        if (used.has(e.r.fingerprint) || claimed.has(e.k.fingerprint)) continue;
+        if (refs.some((x) => Math.abs(startMs(x.r) - startMs(e.r)) <= 72 * HOUR && Math.abs(x.dt - e.dt) <= 6 * 60000)) take(e);
       }
       for (const r of mine) if (!out.has(r.fingerprint)) kept.push(r);
     }

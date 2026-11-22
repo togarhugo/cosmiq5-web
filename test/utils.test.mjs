@@ -367,3 +367,24 @@ test("a place entered on a hidden record is not lost when another computer's rec
   const u = U.uniqueDives(recs); assert.deepEqual(u.map((r) => [r.device, r.location]), [["peregrine", "Komodo"], ["peregrine", "Banda"]], "the Peregrine record shows the place the Cosmiq+ record had");
   assert.deepEqual(U.placeStats(recs).map((p) => [p.name, p.count]).sort(), [["Banda", 1], ["Komodo", 1]], "so the map and the totals still know both places"); assert.equal(recs[1].location, undefined, "the stored record itself is not changed");
 });
+
+test("a Perdix whose clock is ~77 min off still hides Togar's copy: one-to-one, her Perdix is always the shown record", () => {
+  const d = (device, startedAt, durationSec, maxDepthM, shared) => ({ fingerprint: device + startedAt + (shared ? "*" : ""), startedAt, durationSec, maxDepthM, device, ...(shared ? { sharedFrom: "togar" } : {}) });
+  // real trip: two dives that overlap on the clock only by chance (13:36 + 52 min runs into 14:22), 77 and 78 min of offset
+  const recs = [d("perdix", "2026-10-16T12:18:00", 3477, 20.6), d("perdix", "2026-10-16T14:22:00", 3803, 13.2), d("peregrine", "2026-10-16T13:36:00", 3098, 20, true), d("peregrine", "2026-10-16T15:39:00", 3785, 13.8, true)];
+  const { dup } = U.duplicateGroups(recs);
+  assert.equal(dup.get("peregrine2026-10-16T13:36:00*"), "perdix2026-10-16T12:18:00", "the first Peregrine dive is the first Perdix dive, not the second");
+  assert.equal(dup.get("peregrine2026-10-16T15:39:00*"), "perdix2026-10-16T14:22:00");
+  assert.deepEqual(U.uniqueDives(recs).map((r) => r.device), ["perdix", "perdix"]);
+});
+
+test("different dives are not merged: odd offset, different signature, or more than 2.5 h apart", () => {
+  const d = (device, startedAt, durationSec, maxDepthM, shared) => ({ fingerprint: device + startedAt, startedAt, durationSec, maxDepthM, device, ...(shared ? { sharedFrom: "togar" } : {}) });
+  const n = (recs) => U.uniqueDives(recs).length;
+  assert.equal(n([d("perdix", "2026-10-16T14:22:00", 3803, 13.2), d("peregrine", "2026-10-16T13:36:00", 3098, 20, true)]), 2, "46 min apart and 7 m deeper: two dives");
+  assert.equal(n([d("perdix", "2026-10-16T10:00:00", 3000, 20), d("peregrine", "2026-10-16T13:00:00", 3000, 20, true)]), 2, "3 h apart is never the same dive");
+  assert.equal(n([d("perdix", "2026-10-16T12:00:00", 3000, 20), d("peregrine", "2026-10-16T13:17:00", 1500, 20, true)]), 2, "half the length: two dives");
+  // a deeper / shorter look-alike with no neighbour to vouch for the clock offset is left alone (a duplicate shown is better than a dive hidden)
+  assert.equal(n([d("perdix", "2026-10-14T16:31:00", 2883, 20.8), d("peregrine", "2026-10-14T17:47:00", 3459, 22.1, true)]), 2, "no reference offset: stays two");
+  assert.equal(n([d("perdix", "2026-10-14T16:31:00", 2883, 20.8), d("peregrine", "2026-10-14T17:47:00", 3459, 22.1, true), d("perdix", "2026-10-16T14:22:00", 3803, 13.2), d("peregrine", "2026-10-16T15:39:00", 3785, 13.8, true)]), 2, "once a neighbour confirms 77 min, the 76-min pair is the same dive too");
+});
