@@ -878,7 +878,8 @@ if (process.env.REAL_DB) {
     await page.click("#navLog"); await page.waitForSelector("#placeBanner", { state: "visible" }); assert.match(await page.locator("#placeBannerText").innerText(), /1 place is not on the map yet/);
     const origin = new URL(base).origin + "/"; assert.ok(referers.length > 3 && referers.every(([, ref]) => ref === origin), "tiles and search send the app's origin as referrer: " + JSON.stringify(referers.slice(0, 3)));
     // 6. remove a pin from the list
-    await page.click("#navSummary"); await page.locator("#mapCard details summary").click(); await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
+    await page.click("#navSummary"); assert.ok(await page.locator("#placeDetails").isVisible(), "a place is still to be put on the map: the list stays"); assert.ok(!(await page.locator("#mapEdit").isVisible())); await page.locator("#mapCard details summary").click();
+    await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
     await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 1, null, { timeout: 8000 }); assert.equal(places.length, 1);
     // 7. a reload brings the pins back from the account
     await page.reload(); await page.waitForFunction(() => /1 on the map/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
@@ -1123,7 +1124,8 @@ if (process.env.REAL_DB) {
     await page.locator('#mapKinds button[data-kind="freedive"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "2", "#12b886"], ["Raja Ampat", "1", "#12b886"]], "only freedive places, with their freedive count");
     assert.match(await page.locator("#mapMsg").innerText(), /3 places . 3 on the map . showing freedive only/);
     await page.locator('#mapKinds button[data-kind="scuba"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "1", "#228be6"], ["tulamben", "3", "#228be6"]]);
-    await page.locator("#mapCard details summary").click(); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    assert.ok(!(await page.locator("#placeDetails").isVisible()), "every place is on the map: the list of places is hidden"); assert.equal(await page.locator("#mapEdit").innerText(), "Edit places"); await page.locator("#mapEdit").click(); assert.ok(await page.locator("#placeDetails").isVisible(), "Edit places shows it"); assert.equal(await page.locator("#mapEdit").innerText(), "Done editing places"); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    await page.locator("#mapEdit").click(); assert.ok(!(await page.locator("#placeDetails").isVisible()), "Done editing hides it again");
     // 3. the filter is remembered; a reload keeps it
     await page.reload(); await page.waitForSelector("#sumMap .leaflet-marker-icon"); assert.equal(await page.locator("#mapKinds button.active").getAttribute("data-kind"), "scuba", "remembered"); assert.equal(await page.evaluate(() => localStorage.getItem("mapKind")), "scuba");
     assert.deepEqual(errs, [], "page errors"); await ctx.close();
