@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.18.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.19.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -49,8 +49,8 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 
 ## 2. Finding your way around
 
-* **Top right: your profile icon** opens **Account** (picture, password, certifications, DAN, regulator, help).
-* **Three tabs** under the title: **Summary**, **Dive log** (with your dive count) and **Device** (settings).
+* **Your profile icon** opens **Account** (picture, password, DAN, regulator, API keys, help). On a phone it is at the top right; on a laptop it is **Account** at the bottom of the left sidebar.
+* **Four tabs**: **Summary**, **Dive log** (with your dive count), **Certificates** and **Device** (settings). On a phone they sit in a row under the title. On a laptop (window 1024 px or wider) they are a **sidebar on the left** with Connect & Sync, the connection status, the light/dark switch and Account; the content is wider (two columns on Summary, Device and Account).
 * The big blue **Connect & Sync** button is always at the top.
 * While syncing, a **progress banner with Cancel** appears on every tab.
 * A small green/amber/red **message at the bottom** confirms what just happened.
@@ -66,7 +66,7 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 The Summary opens first and shows, from top to bottom:
 
 1. **You**: your name, your **latest certification**, and your **DAN membership** with how long it is valid.
-   * Latest certification = the one you chose with **Set as my latest certification** (Account → Dive certifications). If you never chose one, it is the one with the **newest date earned**; certifications without a date only count if none of them has a date. Tip: add the date to each certification, or just pick the right one yourself.
+   * Latest certification = the one you made main with **Make main** (Certificates tab). If you never chose one, it is the one with the **newest date earned**; certifications without a date only count if none of them has a date. Tip: add the date to each certification, or just pick the right one yourself.
    * Total dive time and the dive count include both dive computers; a dive recorded by both at the same time is counted once.
    * DAN is **green** while valid, **orange** when it expires within 60 days, **red** once expired.
 2. **Regulator service**: dives on your regulator and months since its last service, each with its own bar (**Dives** and **Time**), plus the **last service month**. The card takes the colour of the worse bar: **green**, **orange** 20 dives (or 2 months) before a limit, **red** at the limit. Defaults: every 90 dives or 12 months.
@@ -212,12 +212,12 @@ Tap your **profile icon**. Sections open and close with a tap.
   * **Remove**: turns email login off (needs a code). Google sign-in always keeps working.
 * After **5 wrong attempts** an account is locked for 15 minutes.
 
-### Dive certifications
-Keep a scan or photo of each certification card for dive registrations.
-1. Enter a **name** (e.g. *PADI Advanced Open Water*), optionally the **certificate number** and the **date certified**.
+### Certificates
+The **Certificates** tab keeps a scan or photo of each certification card for dive registrations. The cards form a **wallet**: they overlap, each showing its scan with the name and date, and you scroll through them. **Tap a card to open it**: the scan grows to full size with its details and buttons below. Tap another card (or ✕) to close it.
+1. Tap **Add a certificate**. Enter a **name** (e.g. *PADI Advanced Open Water*), optionally the **certificate number** and the **date certified**.
 2. **Choose file** (PDF, JPEG, PNG or WebP) → **Upload**. Photos are shrunk automatically; a PDF must be **under 1 MB** (otherwise use a photo).
-3. Each file has **Open/View**, **Save**, **Share** (where your browser supports it) and **Delete** (tap twice).
-Up to 12 files. The Summary shows your **latest certification**: tap **Set as my latest certification** on the right one (it gets a green ★ Latest tag). **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic.
+3. An opened card has **Make main**, **Full size** (**Open PDF** for a PDF), **Save**, **Share** (where your browser supports it) and **Delete** (tap twice). A PDF cannot be drawn inside a card on a phone, so it shows as a coloured card with a PDF mark; a photo of the card looks best.
+Up to 12 files. The **main** certification is on top with a green ★ Main tag and is the one the Summary shows: open another card and tap **Make main** to choose it. **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic. Tapping the certification on the Summary opens this tab.
 
 ### DAN insurance
 * **DAN member number** (required), **plan** (optional, e.g. *DAN Master*) and **valid until**. Tap **Save DAN details**. A badge next to the section title shows *Valid*, *N days left* or *Expired*.

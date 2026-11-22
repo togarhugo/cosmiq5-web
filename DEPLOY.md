@@ -96,7 +96,7 @@ download and upload. Tap **Download raw backup** after the first sync.
 - **Profile picture:** cropped to a 256x256 JPEG in the browser and stored in your account; the header and Account page show it.
 - **Change password:** needs the current password and a current authenticator code; the authenticator stays the same
   (**Reset authenticator** is the separate flow that shows a new QR code).
-- **Dive certifications:** upload a PDF/JPEG/PNG/WebP of a card (up to 1 MB; photos are shrunk automatically), with a name and an
+- **Certificates (own tab):** upload a PDF/JPEG/PNG/WebP of a card (up to 1 MB; photos are shrunk automatically), with a name and an
   optional certificate number. View, Save or Share it later, e.g. when registering for a dive. Up to 12 files. The server checks
   the file's real type (first bytes), never serves it back as a web page, and only the owner can read it.
 - **Your name** (Profile section; the Google name is suggested) and **DAN insurance** (member number, plan, valid-until date, plus
