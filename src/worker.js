@@ -55,6 +55,11 @@ export default {
     const bad = configError(env);
     if (bad) return json({ error: bad }, 503);
 
+    // Optional move to a new address: when CANONICAL_HOST is set, requests that arrive on a host listed in LEGACY_HOSTS (comma separated)
+    // are sent to the same path there. 307 (temporary, keeps the method) so a mistake is never cached for good.
+    if (env.CANONICAL_HOST && url.hostname !== env.CANONICAL_HOST && String(env.LEGACY_HOSTS || "").split(",").map((h) => h.trim()).filter(Boolean).includes(url.hostname))
+      return Response.redirect("https://" + env.CANONICAL_HOST + url.pathname + url.search, 307);
+
     // The read-only API for other tools: authenticated by a key in a header (never a cookie), so it comes before the cookie checks below.
     if (url.pathname === "/api/v1" || url.pathname.startsWith("/api/v1/")) return handleApiV1(request, url, env);
 

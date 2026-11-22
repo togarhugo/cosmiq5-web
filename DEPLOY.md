@@ -50,7 +50,7 @@ npx wrangler d1 create cosmiq               # put database_id into wrangler.toml
 npx wrangler d1 execute cosmiq --remote --file=schema.sql   # safe to re-run: IF NOT EXISTS
 ```
 1. **Google Cloud Console** > Credentials > your OAuth client > add authorized redirect URI
-   `https://dive-comp.thmlab.org/auth/callback`.
+   `https://dive-manager.thmlab.org/auth/callback` (keep the old `https://dive-comp.thmlab.org/auth/callback` until you stop using that address).
 2. Put the client ID in `wrangler.toml` (`GOOGLE_CLIENT_ID`).
 3. Secrets:
    ```bash

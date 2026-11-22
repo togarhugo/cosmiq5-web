@@ -205,3 +205,14 @@ test("imported dives (another computer): stored with their samples, listed with 
   // the dive location API works for imported dives too
   assert.deepEqual(await (await post(env, "/api/dives/location", { items: [{ fingerprint: "0123456789ab", location: "Banda" }] }, { cookie: me })).json(), { updated: 1 });
 });
+
+test("old address: redirects to the new one only when CANONICAL_HOST is set", async () => {
+  const { default: worker } = await import("../src/worker.js");
+  const at = (host, env, path = "/api/dives?x=1", init = {}) => worker.fetch(new Request("https://" + host + path, init), env);
+  assert.notEqual((await at("old.example.org", makeEnv())).status, 307, "no redirect while the setting is empty");
+  const env = makeEnv({ CANONICAL_HOST: "new.example.org", LEGACY_HOSTS: "other.example.org, old.example.org" });
+  const r = await at("old.example.org", env); assert.equal(r.status, 307); assert.equal(r.headers.get("location"), "https://new.example.org/api/dives?x=1", "path and query are kept");
+  assert.equal((await at("old.example.org", env, "/api/dives", { method: "POST", body: "{}" })).status, 307, "the method is kept (307, not 301/302)");
+  assert.notEqual((await at("new.example.org", env, "/auth/login")).status, 307, "the new host is not redirected to itself");
+  assert.notEqual((await at("unlisted.example.org", env, "/auth/login")).status, 307, "only listed hosts are redirected");
+});
