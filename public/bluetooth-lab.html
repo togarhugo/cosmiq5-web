@@ -42,7 +42,7 @@
 
         <div class="card" id="secScan">
             <h2>2 &middot; Listen for what is advertising nearby</h2>
-            <p class="muted" style="margin:0 0 6px">Shows every Bluetooth Low Energy device the browser can hear, with its name, signal and what it announces. Switch Bluetooth on at the dive computer first, close Shearwater Cloud on your phone and computer, then press Start. <b>Look for a row with a green &ldquo;likely&rdquo; tag.</b> It needs one browser setting (explained below if it is missing).</p>
+            <p class="muted" style="margin:0 0 6px">Shows every Bluetooth Low Energy device the browser can hear, with its name, signal and what it announces. Switch Bluetooth on at the dive computer first, close Shearwater Cloud on your phone and computer, then press Start. <b>Look for a row with a green &ldquo;likely&rdquo; tag.</b> This part is <b>optional</b>: it needs one browser setting (explained below if it is missing), and section 3 below works without it.</p>
             <div class="row"><button id="scanStart" type="button">Start listening (60 s)</button><button id="scanStop" type="button" class="alt" disabled>Stop</button><label class="muted"><input type="checkbox" id="scanNamed" /> only devices with a name</label><span id="scanState" class="muted"></span></div>
             <div id="scanHelp" class="box" style="display:none"></div>
             <div style="overflow-x:auto"><table id="scanTable" aria-label="Devices heard"><thead><tr><th>Name</th><th>Signal</th><th>Heard</th><th>Announces</th><th>Manufacturer data</th></tr></thead><tbody></tbody></table></div>

@@ -231,14 +231,18 @@ const Dives = (() => {
       say2("Choose your " + model + " in the list\u2026"); conn = await window.Shearwater.connect(trace);
       L.info({ deviceName: conn.name }); say2("Connected to " + conn.name + ".");
       const res = await window.Shearwater.readDives(conn.io, {
-        known: (startedAt) => seen.has(fp(startedAt)), cancelled: () => pgCancel,
+        known: (startedAt) => seen.has(fp(startedAt)), cancelled: () => pgCancel, log: (m) => L.step(m),
+        identity: async (id) => {
+          L.info({ serial: id.serial, firmware: id.firmware, model: id.model, modelName: id.modelName });
+          if (id.model === 9 && device !== "peregrine") throw new Error(`This computer says it is a Peregrine (model number 9), but you are on the ${model} tab. Open the Shearwater Peregrine tab and try again, so its dives are not filed under the wrong computer.`);
+        },
         onProgress: (m, f) => { say2(m); bar.style.width = Math.round(f * 100) + "%"; },
         onProblem: (m) => { problems++; L.step("PROBLEM: " + m); log(model + ": could not read dive " + m, "log-err"); },
         onDive: async (d) => {
           const rec = importedRecord(d, device);
           await put(rec); seen.add(rec.fingerprint); fresh.push(rec); render();                      // saved the moment it arrives
         } });
-      L.info({ serial: res.serial, firmware: res.firmware, model: res.model, total: res.total, fresh: res.fresh, failed: res.failed });
+      L.info({ total: res.total, fresh: res.fresh, failed: res.failed });
       const up = fresh.length ? await cloudPush() : 0;
       const msg = `${model}: ${res.total} on the dive computer, ${fresh.length} new` + (problems ? `, ${problems} could not be read (see diagnostics)` : "") +
         (fresh.length ? (cloudState === "ok" ? `, ${up} uploaded` : ", saved on this phone, cloud unavailable") : "");
@@ -256,7 +260,7 @@ const Dives = (() => {
     const box = $("btLogBox"); if (!box || !window.BtLog) return;
     const list = window.BtLog.list(); $("btLogCount").textContent = list.length ? `(${list.length})` : "";
     const ul = $("btLogList"); ul.textContent = ""; if (!list.length) { const li = document.createElement("li"); li.className = "muted"; li.textContent = "No Bluetooth attempts yet."; ul.appendChild(li); }
-    for (const e of list.slice(0, 8)) { const li = document.createElement("li"); li.textContent = window.BtLog.summary(e); li.style.color = e.outcome && !e.outcome.ok && !e.outcome.cancelled ? "var(--tx-c92a2a)" : ""; ul.appendChild(li); }
+    for (const e of list.slice(0, 12)) { const li = document.createElement("li"); li.textContent = window.BtLog.summary(e); li.style.color = e.outcome && !e.outcome.ok && !e.outcome.cancelled ? "var(--tx-c92a2a)" : ""; ul.appendChild(li); }
     $("btLogText").value = window.BtLog.formatAll(list.slice(0, 10));
   }
   async function btLogAct(what) {

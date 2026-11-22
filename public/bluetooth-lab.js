@@ -28,9 +28,21 @@
     clearTimeout(repTimer); repTimer = setTimeout(refreshReport, 200);
   }
   const likely = (r) => NAME_RE.test(r.name || "") || r.uuids.has(SHEARWATER_UUID) || Object.keys(r.svc).some((k) => k.toLowerCase() === SHEARWATER_UUID);
+  /** What the report means, in words: written for someone who does not read bytes. */
+  function verdict() {
+    const v = [], rows = [...scan.rows.values()], hasBt = env.some((e) => e.label === "Web Bluetooth" && e.state === "ok");
+    if (env.length && !hasBt) v.push("This browser cannot use Bluetooth (use Chrome or Edge, or Bluefy on iPhone).");
+    if (shake && shake.serial) v.push(`REACHABLE: ${shake.name} answered the Shearwater protocol (serial ${shake.serial}, firmware ${shake.firmware}, model number ${shake.model}${shake.modelName ? " = " + shake.modelName : ", not in the list of known models"}). Bluetooth works from this browser. Next: Dive log > Download dives over Bluetooth.`);
+    else if (shake && shake.failed) v.push("The handshake failed: " + shake.failed);
+    else if (inspect.services.some((s) => s.uuid === SHEARWATER_UUID)) v.push(`The device "${inspect.name}" offers the Shearwater data service. The handshake (section 4) has not been run yet.`);
+    else if (inspect.name) v.push(`The device "${inspect.name}" was inspected but does not offer the Shearwater service.`);
+    if (scan.started) v.push(`Listening: ${rows.length} devices heard, ${rows.filter(likely).length} look like a dive computer.`);
+    else if ((env.find((e) => e.label === "Listening for advertisements") || {}).state !== "ok") v.push("Listening for advertisements was not available (optional: choosing a device in section 3 does not need it).");
+    return v.length ? v : ["Nothing has been run yet."];
+  }
   function refreshReport() {
     const only = $("onlyLikely") && $("onlyLikely").checked, rows = [...scan.rows.values()], shown = rows.filter((r) => !only || likely(r));
-    const out = ["Dive Manager Bluetooth lab report", "Created: " + new Date().toISOString(), "App version: " + (self.APP_VERSION || "?"), "", "== Browser =="];
+    const out = ["Dive Manager Bluetooth lab report", "Created: " + new Date().toISOString(), "App version: " + (self.APP_VERSION || "?"), "", "== Summary ==", ...verdict(), "", "== Browser =="];
     for (const e of env) out.push(`${e.label}: ${e.value}`);
     out.push("", "== Advertisement scan ==", scan.started ? `listened ${Math.round(((scan.stopped || Date.now()) - scan.started) / 1000)} s, ${rows.length} devices heard` + (only ? `, ${rows.length - shown.length} not listed (not dive-computer-like)` : "") : "not run");
     for (const r of shown.sort((a, b) => (b.rssi || -999) - (a.rssi || -999))) out.push(`- name="${r.name || ""}" likely=${likely(r)} rssi=${r.rssi} heard=${r.count}x announces=[${[...r.uuids].join(", ")}] mfr=${JSON.stringify(r.mfr)} serviceData=${JSON.stringify(r.svc)} txPower=${r.tx}`);
@@ -46,7 +58,7 @@
   async function checkEnv() {
     const nav = navigator, b = nav.bluetooth, add = (label, value, state) => env.push({ label, value, state });
     add("Address", location.origin + (window.isSecureContext ? "  (secure)" : "  (NOT a secure page: Bluetooth is blocked)"), window.isSecureContext ? "ok" : "bad");
-    const brands = (nav.userAgentData && nav.userAgentData.brands || []).filter((x) => !/not.a.brand/i.test(x.brand)).map((x) => x.brand + " " + x.version).join(", ");
+    const allB = (nav.userAgentData && nav.userAgentData.brands || []).filter((x) => !/not.a.brand/i.test(x.brand)), someB = allB.filter((x) => !/^chromium$/i.test(x.brand)), brands = (someB.length ? someB : allB).map((x) => x.brand + " " + x.version).join(", ");
     add("Browser", brands || nav.userAgent, "info"); add("System", (nav.userAgentData && nav.userAgentData.platform) || nav.platform || "?", "info");
     add("Web Bluetooth", b ? "available" : "NOT available in this browser", b ? "ok" : "bad");
     let avail = "unknown";
@@ -151,7 +163,8 @@
     const b = e.target.closest("button[data-act]"); if (!b) return; const c = charStore[Number(b.dataset.i)], out = c._li._out;
     try {
       if (b.dataset.act === "read") { const v = showVal(await c.readValue()); out.textContent = v; inspect.reads.push(`${CHARS[c.uuid] || c.uuid}: ${v}`); log(`Read ${c.uuid}: ${v}`); }
-      else { await c.startNotifications(); b.disabled = true; out.textContent = "listening…"; c.addEventListener("characteristicvaluechanged", (ev) => { const v = showVal(ev.target.value); out.textContent = v; log(`Notify ${c.uuid}: ${v}`); }); log("Listening to " + c.uuid); }
+      else if (c._h) { c.removeEventListener("characteristicvaluechanged", c._h); c._h = null; try { await c.stopNotifications(); } catch (e2) { /* the device may already be gone */ } b.textContent = "Listen"; out.textContent = "stopped"; log("Stopped listening to " + c.uuid); }
+      else { await c.startNotifications(); b.textContent = "Stop"; out.textContent = "listening…"; c._h = (ev) => { const v = showVal(ev.target.value); out.textContent = v; log(`Notify ${c.uuid}: ${v}`); }; c.addEventListener("characteristicvaluechanged", c._h); log("Listening to " + c.uuid); }
     } catch (err) { out.textContent = err.name + ": " + err.message; log(`${b.dataset.act} ${c.uuid}: ${err.name}: ${err.message}`, "bad"); }
   }
 
@@ -162,7 +175,7 @@
     const L = typeof BtLog !== "undefined" ? BtLog.begin({ kind: "handshake", device: "shearwater", model: "Shearwater (lab)" }) : null; L && L.step("Choose the dive computer in the list");
     try {
       conn = await SW.connect((l) => { log("  " + l); L && L.trace(l); }); st.textContent = "Connected to " + conn.name + ". Asking…"; log("Handshake: connected to " + conn.name); L && (L.info({ deviceName: conn.name }), L.step("Connected to " + conn.name));
-      const id = await SW.identify(conn.io); shake = { name: conn.name, ...id }; st.textContent = `Answered: serial ${id.serial}, firmware ${id.firmware}, model number ${id.model}. The download will work.`; st.className = "ok";
+      const id = await SW.identify(conn.io); shake = { name: conn.name, ...id }; st.textContent = `Answered: serial ${id.serial}, firmware ${id.firmware}, model number ${id.model}${id.modelName ? " (" + id.modelName + ")" : ""}. The download will work.`; st.className = "ok";
       log("Handshake OK: " + JSON.stringify(shake)); L && (L.info({ serial: id.serial, firmware: id.firmware, model: id.model }), L.end(true, "The computer answered."));
     } catch (e) {
       const m = e && e.name === "NotFoundError" ? "No device was chosen." : (e && e.message) || String(e); if (!(e && e.name === "NotFoundError")) shake = { failed: m }; st.textContent = m; st.className = e && e.name === "NotFoundError" ? "muted" : "bad"; log("Handshake failed: " + m, "bad"); L && L.end(false, m, { cancelled: !!(e && e.name === "NotFoundError") });

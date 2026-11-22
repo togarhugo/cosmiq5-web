@@ -22,6 +22,20 @@
   const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
   const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   class ProtocolError extends Error {}
+  const fmtT = (iso) => iso.slice(0, 16).replace("T", " ");
+  const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+  /** Model numbers a dive computer reports. Only what has been seen on a real computer is listed: 9 = Peregrine (a real Peregrine answered 9). */
+  const MODEL_NAMES = { 9: "Peregrine" };
+  const modelName = (n) => MODEL_NAMES[n] || "";
+  const RDBI_NAMES = { 0x8010: "serial number", 0x8011: "firmware", 0x8021: "log layout", 0x8060: "model number" };
+  const asText = (b) => { const t = new TextDecoder().decode(b).replace(/\0+$/, ""); return /^[\x20-\x7e]+$/.test(t) ? JSON.stringify(t) : hex(b); };
+  /** One request/response pair in words, for the Bluetooth download log (null = not worth a line, like the many data blocks). */
+  function describeExchange(req, r, ms) {
+    const t = ms.toFixed(0) + " ms";
+    if (req[0] === 0x22) { const id = (req[1] << 8) | req[2], name = RDBI_NAMES[id] || "identifier 0x" + id.toString(16); return r[0] === 0x62 ? `Read ${name} (0x${id.toString(16)}): ${asText(r.slice(3))} (${t})` : `Read ${name} (0x${id.toString(16)}): refused, answer ${hex(r.slice(0, 3))} (${t})`; }
+    if (req[0] === 0x35) { const addr = ((req[3] << 24) | (req[4] << 16) | (req[5] << 8) | req[6]) >>> 0, size = (req[7] << 16) | (req[8] << 8) | req[9]; return `Download request: 0x${addr.toString(16)}, up to ${size} bytes, ${req[1] === 0x10 ? "compressed" : "plain"}: ${r[0] === 0x75 ? "accepted" : "refused " + hex(r.slice(0, 3))} (${t})`; }
+    return null;
+  }
 
   // ---------- SLIP over BLE ----------
   /** Bytes -> the BLE writes to send: every write is 20 bytes at most, starting with [number of frames, frame index]. */
@@ -58,12 +72,14 @@
   async function transfer(io, payload, expect) {
     if (payload.length > MAX_PACKET) throw new ProtocolError("request too long");
     const pkt = new Uint8Array(4 + payload.length); pkt[0] = 0xff; pkt[1] = 0x01; pkt[2] = payload.length + 1; pkt[3] = 0x00; pkt.set(payload, 4);
+    const t0 = now();
     for (const f of slipFrames(pkt)) await io.write(f);
     if (expect === false) return null;
     const r = await slipRead(io);
     if (r.length < 4 || r[0] !== 0x01 || r[1] !== 0xff || r[3] !== 0x00) throw new ProtocolError("invalid packet header " + hex(r.slice(0, 6)));
     const len = r[2] - 1;
     if (len < 0 || len + 4 !== r.length) throw new ProtocolError("invalid packet length");
+    if (io.note) { const d = describeExchange(payload, r.slice(4), now() - t0); if (d) io.note(d); }
     return r.slice(4);
   }
   /** Read a data identifier (serial number, firmware, model ...). */
@@ -99,7 +115,7 @@
     if (r.length < len + 2 || len > 4) throw new ProtocolError("unexpected download response");
     let max = 0; for (let i = 0; i < len; i++) max = max * 256 + r[2 + i];
     if (max > MAX_PACKET) throw new ProtocolError("unexpected maximum packet length " + max);
-    const out = []; let done = false, got = 0, block = 1;
+    const out = []; let done = false, got = 0, block = 1; const tDl = now();
     while (got < size && !done) {
       const b = await transfer(io, Uint8Array.from([0x36, block & 255]));
       if (b.length < 2 || b[0] !== 0x76 || b[1] !== (block & 255)) throw new ProtocolError("unexpected block " + block);
@@ -110,6 +126,7 @@
       if (onBytes) onBytes(got);
     }
     const bytes = Uint8Array.from(out); if (compression) decompressXor(bytes);
+    if (io.note) { const ms = now() - tDl; io.note(`Data: ${block - 1} blocks, ${got} bytes received${compression ? " (compressed)" : ""} -> ${bytes.length} bytes, ${(ms / 1000).toFixed(2)} s`); }
     const q = await transfer(io, Uint8Array.from([0x37]));
     if (q.length !== 2 || q[0] !== 0x77 || q[1] !== 0x00) throw new ProtocolError("unexpected response to the end of download");
     return bytes;
@@ -185,31 +202,36 @@
    * Returns {serial, firmware, model, total, fresh, failed}.
    */
   async function readDives(io, opts) {
-    const say = (m, f) => opts.onProgress && opts.onProgress(m, f), stop = () => { if (opts.cancelled && opts.cancelled()) throw new ProtocolError("Cancelled by you."); };
+    const say = (m, f) => opts.onProgress && opts.onProgress(m, f), note = (m) => { if (opts.log) opts.log(m); }, stop = () => { if (opts.cancelled && opts.cancelled()) throw new ProtocolError("Cancelled by you."); };
     say("Reading the dive computer…", 0.02);
     const serial = new TextDecoder().decode(await rdbi(io, ID.SERIAL)), fw = new TextDecoder().decode(await rdbi(io, ID.FIRMWARE)).trim();
     const model = (await rdbi(io, ID.MODEL))[0], lu = await rdbi(io, ID.LOGUPLOAD);
+    note(`Identity: serial ${serial}, firmware ${fw}, model number ${model}${modelName(model) ? " (" + modelName(model) + ")" : " (not in the list of known models)"}`);
+    if (opts.identity) await opts.identity({ serial, firmware: fw, model, modelName: modelName(model) });
     if (lu.length < 5) throw new ProtocolError("unexpected log layout answer");
     let base = u32(lu, 1);
     if (base === 0xdd000000 || base === 0xc0000000 || base === 0x90000000) base = 0xc0000000; else if (base !== 0x80000000) throw new ProtocolError("unknown logbook format " + base.toString(16));
+    note(`Log layout: answer ${hex(lu)}, base address 0x${base.toString(16)}`);
     stop(); say("Reading the list of dives…", 0.05);
     const all = []; let firstTicks = null;
     for (let page = 0; page < 20; page++) {                                         // like libdivecomputer: ask again while the manifest page was full
       const m = parseManifest(await download(io, MANIFEST_ADDR, MANIFEST_SIZE, 0));
       if (page && m.dives.length && m.dives[0].ticks === firstTicks) break;           // the same page again: nothing more to read
       if (!page && m.dives.length) firstTicks = m.dives[0].ticks;
-      all.push(...m.dives); if (!m.full) break;
+      all.push(...m.dives); note(`Dive list page ${page + 1}: ${m.dives.length} dive${m.dives.length === 1 ? "" : "s"} listed${m.full ? " (page full, asking for more)" : ""}`); if (!m.full) break;
     }
     const fresh = all.filter((d) => !opts.known(d.startedAt)).reverse();             // oldest first: a stopped sync loses nothing
+    note(`${all.length} dive${all.length === 1 ? "" : "s"} on the computer, ${fresh.length} not downloaded yet${all.length ? ` (${fmtT(all[all.length - 1].startedAt)} to ${fmtT(all[0].startedAt)})` : ""}`);
     let failed = 0;
     for (let i = 0; i < fresh.length; i++) {
       stop(); const d = fresh[i];
-      say(`Downloading dive ${i + 1} of ${fresh.length} (${d.startedAt.replace("T", " ")})`, 0.1 + 0.88 * (i / fresh.length));
+      say(`Downloading dive ${i + 1} of ${fresh.length} (${fmtT(d.startedAt)})`, 0.1 + 0.88 * (i / fresh.length));
       try {
-        const dive = parseDive(await download(io, base + d.address, DIVE_SIZE, 1, () => {}));
+        const tDive = now(), raw = await download(io, base + d.address, DIVE_SIZE, 1, () => {}), dive = parseDive(raw);
+        note(`Dive ${i + 1} of ${fresh.length} (${fmtT(d.startedAt)}, address 0x${d.address.toString(16)}): ${raw.length} bytes, ${dive.samples.length} depth samples, ${dive.durationSec} s long, max ${dive.maxDepthM} m, log version ${dive.logVersion}, ${((now() - tDive) / 1000).toFixed(1)} s`);
         if (dive.ticks !== d.ticks) throw new ProtocolError("the dive downloaded does not match the list");
         await opts.onDive(dive);
-      } catch (e) { if (!(e instanceof ProtocolError)) throw e; if (/Cancelled/.test(e.message)) throw e; failed++; if (opts.onProblem) opts.onProblem(`${d.startedAt}: ${e.message}`); }
+      } catch (e) { if (!(e instanceof ProtocolError)) throw e; if (/Cancelled/.test(e.message)) throw e; failed++; note(`Dive ${i + 1} of ${fresh.length} (${fmtT(d.startedAt)}): FAILED: ${e.message}`); if (opts.onProblem) opts.onProblem(`${d.startedAt}: ${e.message}`); }
     }
     try { await transfer(io, Uint8Array.from([0x2e, 0x90, 0x20, 0x00]), false); } catch (e) { /* the device closes the session: nothing to wait for */ }
     say(`Done: ${all.length} on the dive computer, ${fresh.length - failed} new` + (failed ? `, ${failed} could not be read` : ""), 1);
@@ -242,6 +264,7 @@
     await new Promise((r) => setTimeout(r, 300)); queue.length = 0;                       // let things settle, drop anything stale (like libdivecomputer)
     const noResp = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
     const io = {
+      note(text) { if (trace) trace("NOTE " + text); },
       async write(bytes) { if (closed) throw closed; if (trace) trace("TX " + hex(bytes)); if (noResp) await ch.writeValueWithoutResponse(bytes); else await ch.writeValue(bytes); },
       read() {
         if (queue.length) return Promise.resolve(queue.shift()); if (closed) return Promise.reject(closed);
@@ -256,7 +279,7 @@
   async function identify(io) {
     const text = (b) => new TextDecoder().decode(b).replace(/\0+$/, "").trim();
     const serial = text(await rdbi(io, ID.SERIAL)), firmware = text(await rdbi(io, ID.FIRMWARE)), model = (await rdbi(io, ID.MODEL))[0];
-    return { serial, firmware, model };
+    return { serial, firmware, model, modelName: modelName(model) };
   }
 
   /**
@@ -280,6 +303,6 @@
     return { ok, text: lines.join(" \u00b7 ") };
   }
 
-  const api = { connect, probe, identify, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
+  const api = { connect, probe, identify, modelName, describeExchange, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Shearwater = api;
 })(typeof self !== "undefined" ? self : this);

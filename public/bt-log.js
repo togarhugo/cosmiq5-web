@@ -14,7 +14,7 @@
     for (;;) { const j = JSON.stringify(a); if (j.length <= MAX_CHARS || a.length <= 1) { try { s.setItem(KEY, j); } catch (e) { /* storage full or blocked: the log is only a convenience */ } return; } a = a.slice(0, a.length - 1); }
   }
   function envInfo() {
-    const n = root.navigator || {}, uad = n.userAgentData, brands = uad && uad.brands ? uad.brands.filter((b) => !/not.a.brand/i.test(b.brand)).map((b) => b.brand + " " + b.version).join(", ") : "";
+    const n = root.navigator || {}, uad = n.userAgentData, all = uad && uad.brands ? uad.brands.filter((b) => !/not.a.brand/i.test(b.brand)) : [], some = all.filter((b) => !/^chromium$/i.test(b.brand)), brands = (some.length ? some : all).map((b) => b.brand + " " + b.version).join(", ");
     return { browser: brands || String(n.userAgent || "").slice(0, 120), system: (uad && uad.platform) || n.platform || "", app: root.APP_VERSION || "", online: n.onLine !== false };
   }
   /** Start an attempt. meta = { kind: "download" | "test" | "handshake", device: "peregrine", model: "Peregrine" }. Returns the handle used to record it. */
@@ -27,7 +27,7 @@
     return {
       entry: e,
       step(text) { const t = String(text).replace(/\s+/g, " ").slice(0, STEP_CHARS), last = e.steps[e.steps.length - 1]; if (last && last[1] === t) return; e.steps.push([Date.now() - t0, t]); if (e.steps.length > MAX_STEPS) e.steps.splice(1, 1); later(); },
-      trace(line) { e.trace.push(String(line).slice(0, 120)); if (e.trace.length > HEAD + TAIL) { e.trace.splice(HEAD, 1); e.traceSkipped++; } later(); },
+      trace(line) { e.trace.push("+" + ((Date.now() - t0) / 1000).toFixed(3) + "s " + String(line).slice(0, 160)); if (e.trace.length > HEAD + TAIL) { e.trace.splice(HEAD, 1); e.traceSkipped++; } later(); },
       info(o) { Object.assign(e.info, o); later(); },
       end(ok, text, extra) { e.outcome = { ok: !!ok, text: String(text || "").slice(0, 500), ...(extra || {}) }; e.ms = Date.now() - t0; flush(); },
     };
@@ -39,10 +39,10 @@
       `Browser: ${e.env.browser} | System: ${e.env.system} | App: ${e.env.app}${e.env.online ? "" : " | offline"}`, `Duration: ${e.ms ? secs(e.ms) : "(still running or interrupted)"}`,
       `Result: ${o ? (o.ok ? "OK" : o.cancelled ? "CANCELLED" : "FAILED") + " - " + o.text : "no result (the page was closed or reloaded during the attempt)"}`];
     const i = e.info || {};
-    if (i.serial || i.firmware || i.model != null) out.push(`Identity: serial ${i.serial || "?"}, firmware ${i.firmware || "?"}, model number ${i.model == null ? "?" : i.model}`);
+    if (i.serial || i.firmware || i.model != null) out.push(`Identity: serial ${i.serial || "?"}, firmware ${i.firmware || "?"}, model number ${i.model == null ? "?" : i.model}${i.model == null ? "" : i.modelName ? " (" + i.modelName + ")" : " (not in the list of known models)"}`);
     if (i.total != null) out.push(`Counts: ${i.total} on the computer, ${i.fresh == null ? "?" : i.fresh} new, ${i.failed || 0} could not be read`);
-    out.push("Steps:"); for (const [t, s] of e.steps) out.push(`  +${(t / 1000).toFixed(2)}s  ${s}`);
-    if (e.trace.length) { out.push(`Bytes exchanged (${e.trace.length + e.traceSkipped} lines${e.traceSkipped ? ", " + e.traceSkipped + " in the middle left out" : ""}):`); e.trace.forEach((l, k) => { if (k === HEAD && e.traceSkipped) out.push("  ..."); out.push("  " + l); }); }
+    out.push("== Steps =="); for (const [t, s] of e.steps) out.push(`  +${(t / 1000).toFixed(2)}s  ${s}`);
+    if (e.trace.length) { out.push(`== Bytes exchanged (${e.trace.length + e.traceSkipped} lines${e.traceSkipped ? ", " + e.traceSkipped + " in the middle left out" : ""}; TX = sent, RX = received, NOTE = what it means) ==`); e.trace.forEach((l, k) => { if (k === HEAD && e.traceSkipped) out.push("  ..."); out.push("  " + l); }); }
     return out.join("\n");
   }
   function formatAll(list) { return list.length ? ["Dive Manager Bluetooth download log", "Created: " + new Date().toISOString(), "Attempts: " + list.length, "", ...list.map((e) => format(e) + "\n")].join("\n") : "No Bluetooth attempts recorded on this device yet."; }
