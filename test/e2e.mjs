@@ -213,7 +213,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
-    assert.equal(await row(1).locator("svg:not(.pin)").count(), 0, "no chart is drawn from another dive's bytes");
+    assert.equal(await row(1).locator("svg:not(.pin):not(.trash)").count(), 0, "no chart is drawn from another dive's bytes");
     console.log("PASS wrapped profile memory");
   } catch (e) {
     failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
@@ -1456,12 +1456,12 @@ if (process.env.REAL_DB) {
   try {
     await page.goto(base); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 2, null, { timeout: 8000 });
     const first = page.locator("#diveList details.dive").nth(1);                              // the older dive: her Perdix dive with Togar's Peregrine copy behind it
-    await first.locator("summary").click(); await page.waitForSelector(".del-ask"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap delete");
-    await page.locator(".del-ask").tap(); await page.waitForSelector(".del-confirm");
+    assert.equal(await page.locator(".del-trash").count(), 2, "every dive row has a small bin"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap it"); assert.ok(!(await first.evaluate((e) => e.open)), "the row is closed");
+    await first.locator(".del-trash").tap(); await page.waitForSelector(".del-confirm"); assert.ok(await first.evaluate((e) => e.open), "tapping the bin opens the row to ask there");
     const txt = await page.locator(".del-confirm").innerText(); assert.match(txt, /Delete dive 1\?/); assert.match(txt, /cannot be undone/); assert.match(txt, /Peregrine/, "says that the copy from another computer goes too"); assert.match(txt, /not come back when you sync or import/);
-    await page.locator(".del-no").tap(); await page.waitForSelector(".del-ask"); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
+    await page.locator(".del-no").tap(); await page.waitForFunction(() => document.querySelectorAll(".del-confirm").length === 0); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
     // delete: the connection fails first, so the dive is gone from this phone at once and the cloud is told later
-    await page.locator(".del-ask").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
+    await first.locator(".del-trash").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
     assert.deepEqual(calls[0].sort(), [all0[0].fingerprint, all0[1].fingerprint].sort(), "the dive and its hidden copy are deleted together"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(1\)/);
     await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 });
     await page.waitForFunction(() => true); await page.waitForTimeout(500); assert.equal(calls.length, 2, "the failed deletion is sent again the next time"); assert.deepEqual(deleted.sort(), [all0[0].fingerprint, all0[1].fingerprint].sort());
