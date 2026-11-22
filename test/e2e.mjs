@@ -360,7 +360,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
     assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1 img:visible").getAttribute("alt"), "Dive Manager", "the heading is the logo, named Dive Manager");
     const box = await page.locator("#acctBtn").boundingBox(), vw = page.viewportSize().width;
-    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 3, "Summary, Dive log, Device");
+    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 4, "Summary, Dive log, Certificates, Device");
     assert.equal(await page.locator("#verTop, #appFooter, #navAccount").count(), 0, "no version badge in the header/footer, no Account tab");
     assert.ok(!/v\d+\.\d+\.\d+/.test(await page.locator("header").innerText()), "no version text in the header");
     // 2. sync: the question has a 'whole month' input; a date's own entry wins over it
@@ -383,7 +383,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 4. Summary: no regulator yet -> a hint; Account sections in the requested order, with the version only inside Help
     await page.click("#navSummary"); assert.ok(await page.locator("#sumRegHint").isVisible()); assert.ok(!(await page.locator("#sumReg").isVisible()));
     await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("#acctBtn").evaluate((e) => e.classList.contains("active")));
-    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "Dive certifications", "DAN insurance", "Regulator", "API access", "Help / app version"]);
+    assert.deepEqual(await page.locator("details.acc > summary").evaluateAll((e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim())), ["Profile picture", "Change password", "DAN insurance", "Regulator", "API access", "Help / app version"]);
     await page.locator("details.acc[data-sec=help] > summary").click();
     assert.equal(await page.locator("#appVer").innerText(), "v" + (await page.evaluate(() => self.APP_VERSION))); assert.match(await page.locator("#serverVer").innerText(), /newer version \(v9\.9\.9\) is available/);
     assert.ok(await page.locator("#signOut").isVisible()); assert.equal(await page.locator("#who").textContent(), "you@example.com");
@@ -473,7 +473,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png" });
     // 1. nothing entered yet: placeholders and hints; your Google name is the fallback for the name
     await until(async () => (await diver()).name === "Google Name", "the Google name as a fallback");
-    let d = await diver(); assert.equal(d.cert, "None added yet"); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.match(d.certSub, /Add one in Account/);
+    let d = await diver(); assert.equal(d.cert, "None added yet"); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.match(d.certSub, /Add one in the Certificates tab/);
     // 2. name: the field is pre-filled with the Google name, saving stores YOUR name
     await page.click("#acctBtn"); await page.locator("details.acc[data-sec=profile] > summary").click();
     assert.equal(await page.inputValue("#fullName"), "Google Name", "suggested, not yet saved"); assert.equal(profile.fullName, "");
@@ -499,17 +499,19 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await until(async () => (await page.locator("#danList .cert").count()) === 1, "the DAN document"); assert.equal(await page.locator("#certList .cert").count(), 0, "not listed as a certification");
     assert.equal(calls.at(-1)[1].kind, "dan"); assert.match(await page.locator("#danList .cert").innerText(), /DAN insurance card[\s\S]*policy #POL-77[\s\S]*dan-card\.pdf/);
     // 5. latest certification = the newest date earned, not the newest upload
-    await page.locator("details.acc[data-sec=certs] > summary").click();
-    const addCert = async (label, num, date, name) => { const before = await page.locator("#certList .cert").count(); await page.fill("#certLabel", label); await page.fill("#certNumber", num); await page.fill("#certDate", date); await page.setInputFiles("#certFile", { name, mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
-      await until(async () => (await page.locator("#certList .cert").count()) === before + 1 && (await page.inputValue("#certLabel")) === "", "the upload to finish and the form to clear"); };
+    await page.click("#navCerts"); assert.ok(await page.locator("#certsView").isVisible(), "certificates have their own tab, not an Account section"); assert.equal(await page.locator("details.acc[data-sec=certs]").count(), 0);
+    assert.ok(!(await page.locator("#certAddBox").isVisible()), "the add form is hidden until asked for"); assert.match(await page.locator("#certList").innerText(), /No certifications yet/);
+    const addCert = async (label, num, date, name) => { const before = await page.locator("#certList .cert").count(); if (!(await page.locator("#certAddBox").isVisible())) await page.click("#certShowAdd"); await page.fill("#certLabel", label); await page.fill("#certNumber", num); await page.fill("#certDate", date); await page.setInputFiles("#certFile", { name, mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
+      await until(async () => (await page.locator("#certList .cert").count()) === before + 1 && (await page.inputValue("#certLabel")) === "", "the upload to finish and the form to clear"); assert.ok(!(await page.locator("#certAddBox").isVisible()), "the form closes after an upload"); };
     await addCert("PADI Open Water", "OW-1", "2019-05-04", "ow.pdf"); await addCert("PADI Advanced Open Water", "AOW-2", "2023-06-10", "aow.pdf");
-    await page.fill("#certLabel", "Old card, date unknown"); await page.setInputFiles("#certFile", { name: "old.pdf", mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
+    await page.click("#certShowAdd"); await page.fill("#certLabel", "Old card, date unknown"); await page.setInputFiles("#certFile", { name: "old.pdf", mimeType: "application/pdf", buffer: PDFB() }); await page.click("#certAdd");
     await until(async () => (await page.locator("#certList .cert").count()) === 3 && (await page.inputValue("#certLabel")) === "", "three certifications"); assert.equal(calls.at(-1)[1].certifiedOn, "", "date is optional");
     assert.equal(await page.locator("#danList .cert").count(), 1);
     await page.click("#navSummary"); d = await diver(); assert.equal(d.cert, "PADI Advanced Open Water"); assert.match(d.certSub, /#AOW-2 . Jun 10, 2023/, "newest date earned; the undated card uploaded last does not win");
-    await page.click("#acctBtn"); const del = page.locator("#certList .cert", { hasText: "PADI Advanced" }).locator(".cert-del"); await del.click(); await del.click(); await toastIs(/Certification deleted/);
+    await page.click("#navCerts"); const del = page.locator("#certList .cert", { hasText: "PADI Advanced" }).locator(".cert-del"); await del.click(); await del.click(); await toastIs(/Certification deleted/);
     await page.click("#navSummary"); await until(async () => (await diver()).cert === "PADI Open Water", "the latest certification to fall back to Open Water");
-    // 6. tapping the card leads to the right Account section; removing DAN resets its row
+    // 6. tapping the certification row opens the Certificates tab, the DAN row the Account section; removing DAN resets its row
+    await page.click("#navSummary"); await page.locator("#sumDiver .diver-row").first().click(); assert.ok(await page.locator("#certsView").isVisible(), "the certification row leads to the Certificates tab"); await page.click("#navSummary");
     await page.locator("#sumDanRow").click(); assert.ok(await page.locator("#accountView").isVisible()); assert.ok(await page.locator("details.acc[data-sec=dan]").evaluate((e) => e.open));
     await page.locator("#danClear").click(); await page.locator("#danClear").click(); await toastIs(/DAN details removed/);
     await page.click("#navSummary"); d = await diver(); assert.equal(d.dan, "Not added yet"); assert.match(d.danCls, /dan-none/); assert.equal(profile.dan.number, "");
@@ -536,19 +538,19 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     const cert = () => page.locator("#sumCert").innerText();
     await page.waitForFunction(() => document.getElementById("sumCert").textContent !== "None added yet", null, { timeout: 8000 });
     assert.equal(await cert(), "SSI Advance Adventurer", "without dates the last upload is picked (the wrong result the user saw)");
-    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click();
-    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked latest"); assert.match(await page.locator("#certList .cert.latest").innerText(), /Advance Adventurer/);
-    assert.equal(await page.locator("#certList .cert-latest").count(), 2, "the other two offer 'Set as my latest certification'");
+    await page.click("#navCerts");
+    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked main"); assert.match(await page.locator("#certList .certcard.main").innerText(), /Advance Adventurer/); assert.match(await page.locator("#certList .certcard").first().innerText(), /Advance Adventurer/, "the main certification is on top");
+    assert.equal(await page.locator("#certList .cert-latest").count(), 2, "the other two offer 'Make main'"); assert.match(await page.locator("#certList .cert-latest").first().innerText(), /Make main/);
     assert.equal(await page.locator("#certAuto").isVisible(), false, "no 'use newest' button while automatic");
     await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".cert-latest").click();
-    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .certcard.main")?.textContent || ""), null, { timeout: 5000 });
     assert.deepEqual(calls, ["0000000000000001"]); assert.equal(await page.locator("#certList .latest-tag").count(), 1);
-    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/);
+    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/); assert.match(await page.locator("#certList .certcard").first().innerText(), /Dive Master/, "the new main certification moves to the top");
     await page.click("#navSummary"); assert.equal(await cert(), "PADI Dive Master", "the Summary now shows the one you chose");
     await page.reload(); await page.waitForFunction(() => /Dive Master/.test(document.getElementById("sumCert").textContent), null, { timeout: 8000 });
     assert.equal(await cert(), "PADI Dive Master", "still the one you chose after a reload (saved in your account)");
-    await page.click("#acctBtn"); await page.locator("details.acc[data-sec=certs] > summary").click(); await page.click("#certAuto");
-    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".cert.latest")?.textContent || ""), null, { timeout: 5000 });
+    await page.click("#navCerts"); await page.click("#certAuto");
+    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".certcard.main")?.textContent || ""), null, { timeout: 5000 });
     assert.deepEqual(calls, ["0000000000000001", ""], "back to automatic");
     console.log("PASS latest certification");
   } catch (e) { failed++; console.log("FAIL latest certification\n ", e.message.split("\n").slice(0, 6).join(" | ")); await page.screenshot({ path: "/tmp/fail-latest.png", fullPage: true }); }
@@ -996,7 +998,7 @@ if (process.env.REAL_DB) {
       const bad = []; for (const el of document.querySelectorAll("body *")) { if (el.closest("svg, .leaflet-container, script, style")) continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue; const cs = getComputedStyle(el); if (cs.visibility === "hidden" || +cs.opacity === 0) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue; const fg = parse(cs.color), bg = bgOf(el), a = lum(fg), b = lum(bg), ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
         if (ratio < 2.9) bad.push(`${el.tagName}#${el.id}.${el.className} "${el.textContent.trim().slice(0, 25)}" ${ratio.toFixed(2)}`); } return bad; });
-    for (const [name, go] of [["Summary", () => page.click("#navSummary")], ["Dive log", () => page.click("#navLog")], ["Device", () => page.click("#navDevice")], ["Account", async () => { await page.click("#acctBtn"); for (const sec of ["profile", "password", "certs", "dan", "regulator", "help"]) await page.locator(`details.acc[data-sec=${sec}] > summary`).click(); }]]) {
+    for (const [name, go] of [["Summary", () => page.click("#navSummary")], ["Dive log", () => page.click("#navLog")], ["Certificates", () => page.click("#navCerts")], ["Device", () => page.click("#navDevice")], ["Account", async () => { await page.click("#acctBtn"); for (const sec of ["profile", "password", "dan", "regulator", "help"]) await page.locator(`details.acc[data-sec=${sec}] > summary`).click(); }]]) {
       await go(); await page.waitForTimeout(250); const bad = await lowContrast(); const ok = bad.filter((x) => !/regbadge/.test(x)); assert.deepEqual(ok, [], name + " has hard-to-read text in dark mode");
     }
     assert.deepEqual(errs, [], "page errors"); console.log("PASS light/dark switch");
@@ -1014,14 +1016,14 @@ if (process.env.REAL_DB) {
   try {
     await page.waitForFunction(() => /Dive log \(2\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
     // 1. every tab has its icon above its label, painted in the label's colour (a one-colour mask), at the same size
-    const tabs = await page.evaluate(() => ["navSummary", "navLog", "navDevice"].map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
+    const tabs = await page.evaluate(() => ["navSummary", "navLog", "navCerts", "navDevice"].map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
       return { id, icon: (ci.webkitMaskImage || ci.maskImage), w: Math.round(r.width), h: Math.round(r.height), above: r.bottom <= s.top + 1, same: ci.backgroundColor === cb.color, text: b.innerText.trim(), aria: i.getAttribute("aria-hidden") }; }));
-    assert.deepEqual(tabs.map((t) => t.id), ["navSummary", "navLog", "navDevice"]); assert.match(tabs[0].icon, /icon-summary\.png/); assert.match(tabs[1].icon, /icon-log\.png/); assert.match(tabs[2].icon, /icon-device\.png/);
+    assert.deepEqual(tabs.map((t) => t.id), ["navSummary", "navLog", "navCerts", "navDevice"]); assert.match(tabs[0].icon, /icon-summary\.png/); assert.match(tabs[1].icon, /icon-log\.png/); assert.match(tabs[2].icon, /icon-cert\.png/); assert.match(tabs[3].icon, /icon-device\.png/);
     for (const t of tabs) { assert.equal(t.w, 30); assert.equal(t.h, 30); assert.ok(t.above, t.id + ": icon above the label"); assert.ok(t.same, t.id + ": icon has the label colour"); assert.equal(t.aria, "true", "decorative icon"); }
-    assert.deepEqual(tabs.map((t) => t.text), ["Summary", "Dive log (2)", "Device"], "labels unchanged, the count is still there");
+    assert.deepEqual(tabs.map((t) => t.text), ["Summary", "Dive log (2)", "Certificates", "Device"], "labels unchanged, the count is still there");
     await page.click("#navLog"); await page.waitForFunction(() => document.getElementById("navLog").classList.contains("active")); const active = await page.evaluate(() => { const b = document.getElementById("navLog"); return getComputedStyle(b.querySelector(".ti")).backgroundColor === getComputedStyle(b).color && getComputedStyle(b).color === "rgb(255, 255, 255)"; }); assert.ok(active, "the active tab's icon is white like its label");
-    // 2. the icon files load (not a broken mask), and the tab row still fits three tabs on a phone
-    for (const f of ["icon-summary", "icon-log", "icon-device"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
+    // 2. the icon files load (not a broken mask), and the tab row still fits four tabs on a phone
+    for (const f of ["icon-summary", "icon-log", "icon-cert", "icon-device"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
     const row = await page.evaluate(() => ({ nav: document.querySelector(".nav").scrollWidth <= document.querySelector(".nav").clientWidth + 1, h: Math.round(document.getElementById("navSummary").getBoundingClientRect().height) })); assert.ok(row.nav, "no sideways scrolling in the tab row"); assert.ok(row.h >= 60 && row.h <= 76, "tab height " + row.h);
     // 3. the fonts: Geist for text (buttons and inputs too), Geist Mono for numbers; loaded from this app
     await page.locator("details.dive").first().locator("summary").click().catch(() => {}); await page.waitForTimeout(300);

@@ -373,7 +373,7 @@ const Dives = (() => {
     $("sumName").textContent = d.name || "Your name"; $("sumName").style.color = d.name ? "" : "var(--tx-868e96)";
     const c = d.latestCert;
     $("sumCert").textContent = c ? c.label : "None added yet";
-    $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in Account \u203a Dive certifications";
+    $("sumCertSub").textContent = c ? [c.number && "#" + c.number, c.certifiedOn && day(c.certifiedOn)].filter(Boolean).join(" \u00b7 ") : "Add one in the Certificates tab";
     const dan = d.dan || {}, st = U.danStatus(dan.validUntil, new Date()), row = $("sumDanRow");
     row.className = "diver-row dan-" + (dan.number ? (st.state === "none" ? "none" : st.state) : "none");
     if (!dan.number) { $("sumDan").textContent = "Not added yet"; $("sumDanValid").textContent = "Add it in Account \u203a DAN insurance"; $("sumDanValid").style.fontWeight = "400"; return; }

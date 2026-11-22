@@ -121,11 +121,41 @@ const AccountArea = (() => {
     { kind: "cert", list: "certList", label: "certLabel", number: "certNumber", date: "certDate", file: "certFile", fileName: "certFileName", add: "certAdd", msg: "certMsg", none: "No certifications yet.", numberTag: "#", deleted: "Certification deleted", uploaded: "Certification uploaded" },
     { kind: "dan", list: "danList", label: "danLabel", number: "danDocNumber", file: "danFile", fileName: "danFileName", add: "danAdd", msg: "danMsg", none: "No insurance documents yet.", numberTag: "policy #", deleted: "Document deleted", uploaded: "Insurance document uploaded", defaultLabel: "DAN insurance card" },
   ];
+  const fileCache = new Map();                                                   // id -> {url, mime, filename, label}: scans are fetched once, when their card scrolls into view
+  let previewObserver = null;
+  function certCard(f, isMain) {
+    const sub = [f.number ? "#" + esc(f.number) : "", f.certifiedOn ? esc(fmtDay(f.certifiedOn)) : ""].filter(Boolean).join(" \u00b7 ");
+    return `<article class="cert certcard${isMain ? " main" : ""}" data-id="${esc(f.id)}"><div class="cc-head"><div class="cc-title"><b>${esc(f.label)}</b>${isMain ? '<span class="latest-tag">\u2605 Main</span>' : ""}</div>${sub ? `<div class="cc-sub muted">${sub}</div>` : ""}</div>
+      <div class="cc-frame" data-id="${esc(f.id)}"><span class="muted">Loading\u2026</span></div>
+      <div class="row wrap cc-actions">${isMain ? '<span class="cc-mainbadge">\u2605 Main certification</span>' : '<button class="btn-set cert-latest" type="button">Make main</button>'}<button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-c92a2a)">Delete</button></div></article>`;
+  }
+  async function fillPreview(frame) {
+    const id = frame.dataset.id; if (!id || frame.dataset.done) return; frame.dataset.done = "1";
+    try {
+      let c = fileCache.get(id);
+      if (!c) { const { cert, blob } = await fetchFile(id); c = { url: URL.createObjectURL(blob), mime: cert.mime, filename: cert.filename, label: cert.label }; fileCache.set(id, c); }
+      frame.innerHTML = c.mime === "application/pdf" ? `<div class="cc-pdf"><span class="pdfmark">PDF</span><b>${esc(c.filename)}</b><a class="btn-set" href="${c.url}" target="_blank" rel="noopener" style="display:inline-block;width:auto">Open PDF</a></div>`
+        : `<a href="${c.url}" target="_blank" rel="noopener" aria-label="Open ${esc(c.label)} full size"><img alt="${esc(c.label)}" src="${c.url}"></a>`;
+    } catch (e) { frame.dataset.done = ""; frame.innerHTML = `<span class="muted">Could not load the file.</span>`; }
+  }
+  function watchPreviews() {
+    const frames = document.querySelectorAll("#certList .cc-frame"); if (!frames.length) return;
+    if (!("IntersectionObserver" in window)) return frames.forEach(fillPreview);
+    if (previewObserver) previewObserver.disconnect();
+    previewObserver = new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) { fillPreview(en.target); previewObserver.unobserve(en.target); } }), { rootMargin: "300px 0px" });
+    frames.forEach((fr) => { if (!fr.dataset.done) previewObserver.observe(fr); });
+  }
   function renderFiles() {
     for (const c of FILE_KINDS) {
       const box = $(c.list); if (!box) continue;
       const mine = allFiles.filter((f) => (f.kind || "cert") === c.kind).sort((a, b) => (b.certifiedOn || "").localeCompare(a.certifiedOn || "") || String(b.createdAt).localeCompare(String(a.createdAt)));
       const latest = c.kind === "cert" ? U.latestCert(allFiles, pinnedCert) : null;
+      if (c.kind === "cert") {                                                    // certificates: the main one first, then newest to oldest, each on its own card
+        mine.sort((a, b) => (latest && b.id === latest.id) - (latest && a.id === latest.id));
+        box.innerHTML = mine.length ? mine.map((f) => certCard(f, latest && latest.id === f.id)).join("") : `<div class="card muted">${c.none} Tap <b>Add a certificate</b> to upload a scan or PDF of your card.</div>`;
+        if ($("certCount")) $("certCount").textContent = mine.length ? `\u00b7 ${mine.length}` : "";
+        watchPreviews(); continue;
+      }
       box.innerHTML = mine.length ? mine.map((f) => { const isLatest = latest && latest.id === f.id; return `<div class="cert${isLatest ? " latest" : ""}" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${isLatest ? '<span class="latest-tag">\u2605 Latest</span>' : ""}${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
         <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-6c757d)">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:var(--bg-2b8a3e)">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
         : `<p class="muted" style="margin:0">${c.none}</p>`;
@@ -134,7 +164,7 @@ const AccountArea = (() => {
     diverData.pinnedCertId = pinnedCert;
     diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles, pinnedCert) || {});
     const hint = $("certLatestHint");
-    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose the latest certification yourself." : "Shown on your Summary: the newest by date. Tap \u201cSet as my latest certification\u201d on one to choose it yourself.";
+    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Summary." : "Your main certification is shown on the Summary: the newest by date. Tap \u201cMake main\u201d on another to choose it yourself.";
     if ($("certAuto")) $("certAuto").style.display = pinnedCert ? "" : "none";
     saveDiver(); Dives.render();
   }
@@ -142,13 +172,14 @@ const AccountArea = (() => {
     try { allFiles = (await api("GET", "/api/certs")).certs; renderFiles(); }
     catch (e) { for (const c of FILE_KINDS) if ($(c.list)) $(c.list).innerHTML = `<p class="muted">${e.status === 401 ? "Signed out: reload the page." : "Could not load: " + esc(e.message)}</p>`; }
   }
+  function hideCertAdd() { $("certAddBox").style.display = "none"; $("certShowAdd").style.display = ""; }
   async function fetchFile(id) { const { cert } = await api("GET", "/api/certs/" + id); return { cert, blob: new Blob([fromBase64(cert.data)], { type: cert.mime }) }; }
   async function fileAction(cfg, e) {
     const item = e.target.closest(".cert"); if (!item) return;
     const id = item.dataset.id, btn = e.target.closest("button"); if (!btn) return;
     try {
-      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; say("Latest certification updated"); return renderFiles(); }
-      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); say(cfg.deleted); loadFiles(); });
+      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; say("Main certification updated"); renderFiles(); const m = document.querySelector("#certList .certcard.main"); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); const c = fileCache.get(id); if (c) { URL.revokeObjectURL(c.url); fileCache.delete(id); } say(cfg.deleted); loadFiles(); });
       const { cert, blob } = await fetchFile(id), url = URL.createObjectURL(blob);
       if (btn.classList.contains("cert-view")) {
         if (cert.mime === "application/pdf") { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click(); }
@@ -170,7 +201,7 @@ const AccountArea = (() => {
       const f = await prepareFile(file);
       await api("POST", "/api/certs", { kind: cfg.kind, label, number: $(cfg.number).value.trim(), certifiedOn: cfg.date ? $(cfg.date).value : "", ...f });
       for (const id of [cfg.label, cfg.number, cfg.date, cfg.file]) if (id) $(id).value = "";
-      $(cfg.fileName).textContent = ""; say(cfg.uploaded); note(cfg.msg, "Uploaded."); loadFiles();
+      $(cfg.fileName).textContent = ""; say(cfg.uploaded); note(cfg.msg, "Uploaded."); if (cfg.kind === "cert") hideCertAdd(); loadFiles();
     } catch (e) { note(cfg.msg, e.message, true); }
     finally { btn.disabled = false; btn.textContent = "Upload"; }
   }
@@ -285,11 +316,13 @@ const AccountArea = (() => {
       $(cfg.file).addEventListener("change", (e) => { const f = e.target.files[0]; $(cfg.fileName).textContent = f ? f.name : ""; if (f && !$(cfg.label).value) $(cfg.label).value = cfg.defaultLabel || f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
       $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
     }
-    $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Latest certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
+    $("certShowAdd").addEventListener("click", () => { $("certAddBox").style.display = ""; $("certShowAdd").style.display = "none"; note("certMsg", ""); $("certLabel").focus(); });
+    $("certAddCancel").addEventListener("click", () => { hideCertAdd(); note("certMsg", ""); });
+    $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Main certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
     $("nameSave").addEventListener("click", saveName); $("fullName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveName(); });
     $("danSave").addEventListener("click", saveDan); $("danClear").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", clearDan));
     const sum = $("sumDiver");                                                    // the Summary card leads to the matching Account section
-    if (sum) { const go = (e) => { window.showView("account"); open(e && e.target.closest("#sumDanRow") ? "dan" : e && e.target.closest(".diver-row") ? "certs" : "profile"); }; sum.addEventListener("click", go); }
+    if (sum) { const go = (e) => { if (e && e.target.closest(".diver-row") && !e.target.closest("#sumDanRow")) return window.showView("certs"); window.showView("account"); open(e && e.target.closest("#sumDanRow") ? "dan" : "profile"); }; sum.addEventListener("click", go); }
     $("regAdd").addEventListener("click", () => openRegForm(null)); $("regEdit").addEventListener("click", () => openRegForm(regulator));
     $("regCancel").addEventListener("click", () => { $("regForm").style.display = "none"; note("regMsg", ""); renderRegulator(); });
     $("regSave").addEventListener("click", saveReg);
@@ -302,7 +335,8 @@ const AccountArea = (() => {
     const hint = $("sumRegHintLink"); if (hint) hint.addEventListener("click", (e) => { e.preventDefault(); window.showView("account"); open("regulator"); });
     const card = $("sumReg"); if (card) { const go = () => { window.showView("account"); open("regulator"); }; card.addEventListener("click", go); card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); }); }
   }
-  function show() { loadFiles(); renderRegulator(); showVersions(); }
+  function show() { renderRegulator(); showVersions(); }
+  function showCerts() { loadFiles(); }
 
-  return { init, show, open, regulator: () => regulator, diver, refresh: renderRegulator };
+  return { init, show, showCerts, open, regulator: () => regulator, diver, refresh: renderRegulator };
 })();
