@@ -603,7 +603,7 @@
         </div>
 
         <div class="nav">
-            <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
+            <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Overview</span></button>
             <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
             <button id="navImport" onclick="showView('import')"><i class="ti ti-import" aria-hidden="true"></i><span>Import</span></button>
             <button id="navCerts" onclick="showView('certs')"><i class="ti ti-cert" aria-hidden="true"></i><span>Certificates</span></button>
@@ -1057,9 +1057,9 @@
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
                 <div id="impNotePeregrine">
-                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The <span class="impModel">Peregrine</span> keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The <span class="impModel">Peregrine</span> keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Overview and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
                 </div>
-                <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
+                <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Overview and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
             </div>
             <div id="srcHideRow" style="display:none;margin:-4px 0 12px"><button id="srcHide" class="linkbtn" type="button">Hide this dive computer (it has no dives yet)</button></div>
             <div id="syncCard" class="card">
@@ -1130,7 +1130,7 @@
                             </div>
                         </div>
                     </div>
-                    <label class="label" for="fullName" style="margin-top:12px">Your name <span class="muted" style="font-weight:400">(shown on the Summary)</span></label>
+                    <label class="label" for="fullName" style="margin-top:12px">Your name <span class="muted" style="font-weight:400">(shown on the Overview)</span></label>
                     <div class="row" style="margin:0 0 4px"><input id="fullName" class="fld" maxlength="80" autocomplete="name" placeholder="e.g. Togar Hugo" style="margin:0" /><button id="nameSave" class="btn-set" type="button">Save</button></div>
                     <div id="profMsg" class="msg" role="status"></div>
                 </div>
@@ -1335,7 +1335,7 @@
                             <pre id="apiExample" class="apiexample"></pre>
                             <ul class="help" style="margin-top:8px">
                                 <li>Depth is in metres, temperature in &deg;C, times in seconds. <code>startedAt</code> is the dive computer's own clock (no time zone).</li>
-                                <li>A dive recorded by both computers appears once per computer (see <code>device</code>); the Summary in the app counts it once.</li>
+                                <li>A dive recorded by both computers appears once per computer (see <code>device</code>); the Overview in the app counts it once.</li>
                                 <li>A Cosmiq+ dive has <code>samples</code> only when its stored depth profile really belongs to it (<code>profileStatus</code>: <code>complete</code>, <code>partial</code> or <code>unavailable</code>).</li>
                                 <li><code>position</code> is where you put the place on the map, or <code>null</code>.</li>
                                 <li>Errors come as <code>{"error": "code", "message": "..."}</code> with status 400, 401, 404 or 405. Please keep it to a few requests per second.</li>

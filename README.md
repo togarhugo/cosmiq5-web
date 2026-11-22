@@ -8,11 +8,11 @@ A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the offic
 
 | | |
 |---|---|
-| **Summary** | Your name, latest certification (**you can choose which one**), **DAN membership and validity**, date of your last dive, **total dive time**, and a **regulator service card** with two reminders, by dives (default 90) and by time (default 12 months), showing the last service month. |
+| **Overview** | Your name, latest certification (**you can choose which one**), **DAN membership and validity**, date of your last dive, **total dive time**, and a **regulator service card** with two reminders, by dives (default 90) and by time (default 12 months), showing the last service month. |
 | **Dive log** | Downloads your Cosmiq+ dives over Bluetooth (only the new ones), grouped by year, month and date, with **grid** depth charts, minimum temperature, surface interval and a dive location you choose (e.g. *Komodo*). Only **your** dive computers are shown (the ones with dives, plus any you add), so each person's Dive log lists just their own: Cosmiq+, Peregrine, **Perdix** (same Shearwater Cloud import) or Garmin. A **Garmin Descent** has its own log too, filled by dropping **FIT files or a Garmin Connect ZIP** (beta). A second computer, the **Shearwater Peregrine**, has its own separate log, filled by importing a **Shearwater Cloud database export** (or a UDDF file), or, better, **directly over Bluetooth** (works on a real Peregrine; the Perdix uses the same method and has not been tried yet). |
-| **Map** | Every place you have dived is a **pin on a map** in the Summary (with the number of dives). Put a place on the map by **searching** for it or tapping / dragging the pin. Maps and search come from OpenStreetMap. |
+| **Map** | Every place you have dived is a **pin on a map** in the Overview (with the number of dives). Put a place on the map by **searching** for it or tapping / dragging the pin. Maps and search come from OpenStreetMap. |
 | **Device settings** | Backlight, units, screen timeout, clock, gas mix, PPO₂, alarms, safety factor, freedive alarms. Every change is **read back from the dive computer and confirmed**. |
-| **Certificates** | Your certification scans as a **wallet of overlapping cards**: scroll, tap one to open it, **Make main** to choose the one the Summary shows. |
+| **Certificates** | Your certification scans as a **wallet of overlapping cards**: scroll, tap one to open it, **Make main** to choose the one the Overview shows. |
 | **Import** | Its own tab, separate from the Dive log: pick your dive computer (Cosmiq+, Peregrine, Perdix, Garmin) and sync, download over Bluetooth or import a file. The **Dive log** then shows one list for all your computers, **every dive once** (a dive two computers recorded shows the Peregrine record, then Perdix, Garmin, Cosmiq+). |
 | **Share dives** | In Account: copy your own dive log into the other person's account (they dive together), with a date range and a preview; the other person can remove it. Shared dives rank after the receiver's own computers. |
 | **Account** | Profile picture and name, change password, **DAN insurance** details and documents, regulator tracker, API keys, help and app version. |
@@ -27,7 +27,7 @@ The clock of the dive computer is set to your phone's time every time you connec
 1. Open your Dive Manager address (the one you deployed, see [DEPLOY.md](DEPLOY.md)) and sign in.
 2. On **Android / Windows / Mac / Linux** use **Chrome or Edge**. On **iPhone/iPad** Safari cannot use Bluetooth: open the page in the **Bluefy** browser.
 3. Turn on the dive computer, tap **Connect & Sync**, choose the device.
-4. New dives are downloaded, you are asked where you dived, and the Summary is up to date.
+4. New dives are downloaded, you are asked where you dived, and the Overview is up to date.
 
 The full walkthrough is in the **[user manual](MANUAL.md)**.
 

@@ -184,7 +184,7 @@ const AccountArea = (() => {
     diverData.pinnedCertId = pinnedCert;
     diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles, pinnedCert) || {});
     const hint = $("certLatestHint");
-    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Summary." : "Your main certification is shown on the Summary: the newest by date. Open another card and tap \u201cMake main\u201d to choose it yourself.";
+    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Overview." : "Your main certification is shown on the Summary: the newest by date. Open another card and tap \u201cMake main\u201d to choose it yourself.";
     if ($("certAuto")) $("certAuto").style.display = pinnedCert ? "" : "none";
     saveDiver(); Dives.render();
   }
