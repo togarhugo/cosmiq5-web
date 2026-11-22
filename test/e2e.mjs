@@ -1132,4 +1132,32 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL api access\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-api.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: laptop layout (sidebar on the left from 1024px up) and the unchanged phone layout below it ----
+{
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 800 }, serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
+  await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
+  try {
+    await page.goto(base); await page.waitForTimeout(500);
+    const box = (sel) => page.locator(sel).first().boundingBox();
+    const side = await box("#side"), nav = await page.locator(".nav button").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; }));
+    assert.ok(side.x === 0 && side.width > 220 && side.width < 320 && side.height >= 799, "a full-height sidebar on the left");
+    assert.ok(nav.every((n) => n[0] < side.width && n[2] > 150) && nav[1][1] > nav[0][1] + 30 && nav[2][1] > nav[1][1] + 30, "the three tabs stack vertically inside the sidebar: " + JSON.stringify(nav));
+    const main = await box("#main"); assert.ok(main.x >= side.width - 1 && main.width > 900, "the content sits to the right and is wide");
+    assert.ok((await box("#connectBtn")).x < side.width && (await box("#acctBtn")).x < side.width && (await box(".theme-slot")).x < side.width, "connect, account and the theme switch live in the sidebar");
+    assert.match(await page.locator("#acctBtn").innerText(), /Account/, "the account button is labelled on the laptop layout");
+    await page.click("#navLog"); assert.ok(await page.locator("#logView").isVisible()); await page.click("#navDevice"); assert.ok(await page.locator("#deviceView").isVisible());
+    await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok((await box("details.acc[data-sec=profile]")).x > side.width, "account sections are in the content area");
+    const two = await page.locator("details.acc").evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().x))).size); assert.equal(two, 2, "account sections use two columns");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll on a laptop");
+    // below 1024px it is the phone layout again: tabs in a row on top, no sidebar box
+    await page.setViewportSize({ width: 820, height: 900 }); await page.waitForTimeout(200);
+    const row = await page.locator(".nav button").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().y)));
+    assert.ok(new Set(row).size === 1, "tabs in one row below 1024px"); assert.equal(await page.locator("#side").evaluate((e) => getComputedStyle(e).display), "contents"); assert.ok(!(await page.locator("#acctBtn .acct-label").isVisible()), "no text label on the round avatar");
+    assert.deepEqual(errs, []);
+    console.log("PASS laptop layout");
+  } catch (e) { failed++; console.log("FAIL laptop layout\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-laptop.png" }); }
+  await ctx.close();
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);
