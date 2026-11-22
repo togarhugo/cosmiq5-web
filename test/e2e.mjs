@@ -130,7 +130,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.equal(await page.locator("details.dive").count(), 2);
       // grouped by year: both dives are from 2025 -> one group, open by default (newest year)
       assert.equal(await page.locator("details.year").count(), 1);
-      assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*2 dives[\s\S]*max \d+\.\d m/);
+      assert.match(await page.locator("details.year > summary").innerText(), /2025[\s\S]*\b2\b[\s\S]*dives[\s\S]*\d+\.\d m/i);
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
       assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
       assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
@@ -385,7 +385,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     const byDate = Object.fromEntries(await page.locator(".datehead").evaluateAll((els) => els.map((e) => [e.querySelector(".dh-date").textContent.trim(), e.querySelector(".dh-loc").textContent.replace(/\s+/g, " ").trim()])));
     assert.deepEqual(Object.values(byDate).sort(), ["\u{1F4CD} Banda", "\u{1F4CD} Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
     // 3. month bulk in the log: keeps places already set unless 'replace' is ticked
-    assert.match(await page.locator(".monthhead").first().innerText(), /March . 2 dives . \d.* max [\d.]+ m . Komodo, Banda/);
+    assert.match(await page.locator(".monthhead").first().innerText(), /March[\s\S]*2 dives[\s\S]*max [\d.]+ m[\s\S]*Komodo, Banda/);
     await page.locator(".mh-set").tap(); await page.waitForSelector(".mh-edit input[type=text]");
     await page.fill(".mh-edit input[type=text]", "Tulamben"); await page.locator(".mh-save").tap(); await toastIs(/Every dive this month already has a place/);
     await page.locator(".mh-replace").check(); await page.locator(".mh-save").tap(); await toastIs(/Location saved for 2 dives/);

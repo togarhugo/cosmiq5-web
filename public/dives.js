@@ -676,15 +676,17 @@ const Dives = (() => {
     let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${hiddenN ? ` \u00b7 ${hiddenN} duplicate${hiddenN === 1 ? "" : "s"} from another computer left out` : ""}${sharedN ? ` \u00b7 ${sharedN} shared with you` : ""}` +
       `${full !== recs.length ? ` \u00b7 ${full} with full depth profile` + (partial ? ` \u00b7 ${partial} partial` : "") + (summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : "") : ""}</p>`;    for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
-      html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><b>${y}</b><span class="muted"> \u00b7 ${g.length} dive${g.length === 1 ? "" : "s"} \u00b7 ${fmtDur(secs)} \u00b7 max ${deepest.toFixed(1)} m</span></summary>` +
+      const tile = (v, label) => `<div><b>${v}</b><span>${label}</span></div>`;
+      html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><span class="yname">${y}</span><span class="ystats">${tile(g.length, g.length === 1 ? "dive" : "dives")}${tile(fmtDur(secs), "time")}${tile(deepest.toFixed(1) + " m", "deepest")}</span><span class="chev" aria-hidden="true">\u25B8</span></summary><div class="ybody">` +
         U.groupByMonth(g).map(({ month, recs: mrs }) => {
-          const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))];
-          const head = `<div class="monthhead" data-month="${esc(month)}"><span class="mh-name">${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}<span class="muted" style="font-weight:400"> \u00b7 ${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(mrs.reduce((a, r) => a + r.durationSec, 0))} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m${names.length ? " \u00b7 " + esc(names.join(", ")) : ""}</span></span><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button></div>`;
-          return head + U.groupByDate(mrs).map(({ date, recs: rs }) => {
+          const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))], msecs = mrs.reduce((a, r) => a + r.durationSec, 0), share = secs ? Math.max(2, Math.round(100 * msecs / secs)) : 0;
+          const head = `<div class="monthhead" data-month="${esc(month)}"><span class="mh-name">${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}</span><span class="mh-stat">${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(msecs)} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m</span>` +
+            `<span class="mh-place">${names.length ? "\ud83d\udccd " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button><span class="mh-bar" title="Share of the year's dive time"><i style="width:${share}%"></i></span></div>`;
+          return `<div class="mbox">` + head + U.groupByDate(mrs).map(({ date, recs: rs }) => {
             const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
             return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
-          }).join("");
-        }).join("") + `</details>`;
+          }).join("") + `</div>`;
+        }).join("") + `</div></details>`;
     }
     list.innerHTML = html; fillSuggestions();
     list.querySelectorAll("details.year").forEach((el) => el.addEventListener("toggle", () => {

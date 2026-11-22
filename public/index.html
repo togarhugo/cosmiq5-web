@@ -391,8 +391,10 @@
             .diver-row.dan-soon { background: var(--bg-fff4e6); border-left: 4px solid var(--bd-e67700); } .dan-soon .dan-valid, .dan-soon .diver-val { color: var(--tx-d9480f); }
             .diver-row.dan-expired { background: var(--bg-fff5f5); border-left: 4px solid var(--bd-c92a2a); } .dan-expired .dan-valid, .dan-expired .diver-val { color: var(--tx-c92a2a); }
             .regbadge.expired { background: var(--bg-c92a2a); } .regbadge.soon { background: var(--bg-e67700); }
-            .monthhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 2px; padding-bottom: 4px; border-bottom: 1px dashed var(--bd-ced4da); flex-wrap: wrap; }
-            .mh-name { font-size: 14px; font-weight: 700; } .mh-set { background: none; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
+            .monthhead { display: flex; align-items: baseline; justify-content: space-between; gap: 2px 8px; flex-wrap: wrap; margin: 0 0 4px; }
+            .mh-stat { font-size: 13px; color: var(--tx-6c757d); } .mh-place { flex: 1 1 auto; font-size: 12px; color: var(--tx-1864ab); } .mh-bar { flex: 1 1 100%; order: 9; height: 6px; border-radius: 3px; background: var(--bg-e9ecef); overflow: hidden; margin-top: 4px; } .mh-bar i { display: block; height: 100%; background: var(--bg-343a40); border-radius: 3px; }
+            .mbox { background: var(--bg-fff); border: 1px solid var(--bd-dee2e6); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; } .mbox .monthhead + .datehead { margin-top: 10px; }
+            .mh-name { font-size: 15px; font-weight: 700; } .mh-set { background: none; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
             .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; }
             .mh-edit .chk { font-size: 13px; display: flex; gap: 8px; align-items: center; min-height: 36px; } .mh-edit .chk input { width: 20px; height: 20px; min-height: 0; }
             .monthask { background: var(--bg-f1f3f5); border-radius: 8px; padding: 10px; margin: 8px 0 12px; } .monthask label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
@@ -402,10 +404,16 @@
             table.hdr { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
             table.hdr td { padding: 3px 6px; border-bottom: 1px solid var(--bd-eee); vertical-align: top; }
             table.hdr tr.unk td { background: var(--bg-fff8e1); }
-            details.year { margin-bottom: 10px; }
-            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 10px 4px; font-size: 16px; border-bottom: 2px solid var(--bd-dee2e6); margin-bottom: 8px; }
+            details.year { margin-bottom: 12px; background: var(--bg-fff); border: 1px solid var(--bd-dee2e6); border-radius: 14px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); overflow: hidden; }
+            details.year > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+            details.year[open] > summary { border-bottom: 1px solid var(--bd-dee2e6); }
+            .yname { font-size: 26px; font-weight: 700; line-height: 1; font-family: var(--mono); min-width: 72px; }
+            .ystats { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; } .ystats div { background: var(--bg-f1f3f5); border-radius: 8px; padding: 6px 4px; min-width: 0; }
+            .ystats b { display: block; font-size: 15px; white-space: nowrap; } .ystats span { font-size: 11px; color: var(--tx-6c757d); text-transform: uppercase; letter-spacing: .04em; }
+            .ybody { padding: 12px 12px 2px; background: var(--bg-f8f9fa); }
+            .chev { font-size: 14px; color: var(--tx-6c757d); transition: transform .15s; } details.year[open] .chev { transform: rotate(90deg); }
+            @media (max-width: 480px) { .yname { font-size: 22px; min-width: 56px; } .ystats b { font-size: 13px; } .ystats span { font-size: 10px; } details.year > summary { padding: 12px; gap: 8px; } }
             details.year > summary::-webkit-details-marker { display: none; }
-            details.year > summary::before { content: "\25B8"; margin-right: 6px; } details.year[open] > summary::before { content: "\25BE"; }
             .dive-num, .numtile { display: inline-block; box-sizing: border-box; min-width: 30px; padding: 2px 7px; border: 1px solid var(--bd-ced4da); border-radius: 6px; background: var(--bg-f1f3f5); color: var(--tx-212529); font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1.3; text-align: center; }
             .stats b.numtile { display: block; width: max-content; margin: 0 auto 2px; font-size: 14px; }
             #devTabs { display: flex; gap: 6px; margin-bottom: 12px; }
