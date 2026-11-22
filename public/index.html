@@ -494,16 +494,27 @@
             @media (prefers-reduced-motion: reduce) { #toast, .btn-opt.applied, #toast .spin { animation: none; transition: none; } }
 
 
-            /* ---------- certificates: a stack of cards, each with its scan/PDF shown large ---------- */
+            /* ---------- certificates: a wallet. Cards overlap showing a title strip; tap one to open it (scan large, details and actions below) ---------- */
             #certsView .card { margin-bottom: 12px; } .cert-headrow { font-size: 16px; }
-            .certstack { display: flex; flex-direction: column; gap: 16px; }
-            .certcard { background: var(--bg-fff); border-radius: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); border: 2px solid transparent; overflow: hidden; scroll-margin-top: 10px; }
-            .certcard.main { border-color: var(--bd-2b8a3e); }
-            .cc-head { padding: 14px 16px 10px; } .cc-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 17px; } .cc-sub { margin-top: 2px; font-size: 13px; }
-            .cc-frame { background: var(--bg-f1f3f5); min-height: 150px; display: flex; align-items: center; justify-content: center; border-top: 1px solid var(--bd-e9ecef); border-bottom: 1px solid var(--bd-e9ecef); }
-            .cc-frame img { display: block; width: 100%; max-height: 72vh; object-fit: contain; } .cc-frame > a { display: block; width: 100%; } .cc-pdf a.btn-set { text-decoration: none; color: var(--tx-fff); padding: 10px 18px; margin-top: 8px; }
-            .cc-pdf { padding: 26px 16px; text-align: center; color: var(--tx-495057); } .cc-pdf b { display: block; font-size: 15px; margin: 6px 0 2px; } .cc-pdf .pdfmark { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .06em; border: 2px solid currentColor; border-radius: 6px; padding: 3px 8px; }
-            .cc-actions { padding: 12px 16px 14px; margin: 0 !important; } .cc-mainbadge { font-size: 13px; font-weight: 700; color: var(--tx-2b8a3e); display: inline-flex; align-items: center; min-height: 44px; }
+            .wallet { --cw-h: 190px; --cw-peek: 96px; display: flex; flex-direction: column; padding: 4px 0 6px; }
+            .wcard { position: relative; margin-top: calc(var(--cw-peek) - var(--cw-h)); border-radius: 20px; background: var(--bg-fff); box-shadow: 0 -1px 0 rgba(255, 255, 255, .25), 0 4px 14px rgba(0, 0, 0, .22); overflow: hidden; scroll-margin-top: 12px; }
+            .wcard:first-child, .wcard.open, .wcard.open + .wcard { margin-top: 12px; } .wcard:first-child { margin-top: 0; }
+            .wface { position: relative; cursor: pointer; outline-offset: -3px; } .wcard.open .wface { cursor: default; }
+            .wimg { height: var(--cw-h); overflow: hidden; background: var(--tint, #3b5b92); transition: height .4s ease; }
+            .wimg img { display: block; width: 100%; height: 100%; object-fit: cover; } .wcard.open .wimg img { object-fit: contain; }
+            .wpdf { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #fff; } .wpdf .pdfmark { font-size: 15px; font-weight: 700; letter-spacing: .08em; border: 2px solid currentColor; border-radius: 7px; padding: 4px 10px; }
+            .wshade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(0, 0, 0, .7), rgba(0, 0, 0, 0) 58%); transition: opacity .3s; }
+            .wtitle { position: absolute; left: 16px; right: 84px; bottom: 12px; color: #fff; font-size: 20px; font-weight: 700; line-height: 1.2; text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 2px rgba(0, 0, 0, .9); transition: opacity .3s; } .wtitle small { display: block; font-size: 12px; font-weight: 500; opacity: .9; }
+            .wcard .latest-tag { position: absolute; right: 12px; bottom: 14px; background: var(--bg-2b8a3e); color: var(--tx-fff); padding: 4px 10px; font-size: 12px; transition: opacity .3s; }
+            .wcard.open .wshade, .wcard.open .wtitle, .wcard.open .latest-tag { opacity: 0; }
+            .wclose { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; min-height: 0; padding: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 16px; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .3s; } .wcard.open .wclose { opacity: 1; pointer-events: auto; }
+            .wfoot { max-height: 0; padding: 0 16px; overflow: hidden; transition: max-height .4s ease, padding .3s ease; } .wcard.open .wfoot { max-height: 340px; padding: 14px 16px 16px; }
+            .wf-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 17px; } .wf-sub { margin: 2px 0 10px; font-size: 13px; }
+            .cc-mainbadge { font-size: 13px; font-weight: 700; color: var(--tx-2b8a3e); display: inline-flex; align-items: center; min-height: 44px; }
+            .wfoot .row { align-items: center; gap: 8px; } .wfoot .row .btn-set { flex: 1 1 auto; padding: 8px 10px; min-width: 0; text-align: center; } .cc-mainbadge { min-height: 0 !important; } .wfoot a.btn-set, .wfoot a.btn-set:visited { text-decoration: none; color: #fff !important; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; font-family: inherit; font-weight: 600; }
+            .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
+            .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
+            @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
             #shell, #side, #main { display: contents; } .acct-label { display: none; }
             @media (min-width: 1024px) {
@@ -531,8 +542,7 @@
                 #sumCards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } #sumCards[style*="none"] { display: none; }
                 #sumRegHint { margin: 0; }
                 #sumMap { height: 440px; }
-                #certsView { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; align-items: start; } #certsView[style*="none"] { display: none; }
-                #certsView > .card { margin: 0; } #certHead, #certAddBox, #certMsg, #certList { grid-column: 1 / -1; } #certList { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; align-items: start; }
+                #certsView { max-width: 700px; } .wallet { --cw-h: 230px; --cw-peek: 116px; }
                 #logView { max-width: 980px; } #deviceView { max-width: 1120px; }
                 #deviceView .section.active { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; } #deviceView .section.active > .card { margin: 0; }
                 #accountView { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; max-width: 1100px; } #accountView[style*="none"] { display: none; }
@@ -1037,7 +1047,8 @@
                 </div>
             </div>
             <div id="certMsg" class="msg" role="status"></div>
-            <div id="certList" class="certstack"></div>
+            <div id="certList" class="wallet"></div>
+            <p id="certWalletHint" class="wallet-hint muted" style="display:none">Tap any card to open it, make it your main one, or share it.</p>
         </div>
 
         <div id="accountView" style="display:none">

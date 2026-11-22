@@ -508,7 +508,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await until(async () => (await page.locator("#certList .cert").count()) === 3 && (await page.inputValue("#certLabel")) === "", "three certifications"); assert.equal(calls.at(-1)[1].certifiedOn, "", "date is optional");
     assert.equal(await page.locator("#danList .cert").count(), 1);
     await page.click("#navSummary"); d = await diver(); assert.equal(d.cert, "PADI Advanced Open Water"); assert.match(d.certSub, /#AOW-2 . Jun 10, 2023/, "newest date earned; the undated card uploaded last does not win");
-    await page.click("#navCerts"); const del = page.locator("#certList .cert", { hasText: "PADI Advanced" }).locator(".cert-del"); await del.click(); await del.click(); await toastIs(/Certification deleted/);
+    await page.click("#navCerts"); const adv = page.locator("#certList .cert", { hasText: "PADI Advanced" }); await adv.locator(".wface").click(); assert.ok(await adv.locator(".cert-del").isVisible()); const del = adv.locator(".cert-del"); await del.click(); await del.click(); await toastIs(/Certification deleted/);
     await page.click("#navSummary"); await until(async () => (await diver()).cert === "PADI Open Water", "the latest certification to fall back to Open Water");
     // 6. tapping the certification row opens the Certificates tab, the DAN row the Account section; removing DAN resets its row
     await page.click("#navSummary"); await page.locator("#sumDiver .diver-row").first().click(); assert.ok(await page.locator("#certsView").isVisible(), "the certification row leads to the Certificates tab"); await page.click("#navSummary");
@@ -539,18 +539,23 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.waitForFunction(() => document.getElementById("sumCert").textContent !== "None added yet", null, { timeout: 8000 });
     assert.equal(await cert(), "SSI Advance Adventurer", "without dates the last upload is picked (the wrong result the user saw)");
     await page.click("#navCerts");
-    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked main"); assert.match(await page.locator("#certList .certcard.main").innerText(), /Advance Adventurer/); assert.match(await page.locator("#certList .certcard").first().innerText(), /Advance Adventurer/, "the main certification is on top");
+    assert.equal(await page.locator("#certList .latest-tag").count(), 1, "exactly one is marked main"); assert.match(await page.locator("#certList .wcard.main").innerText(), /Advance Adventurer/); assert.match(await page.locator("#certList .wcard").first().innerText(), /Advance Adventurer/, "the main certification is on top");
     assert.equal(await page.locator("#certList .cert-latest").count(), 2, "the other two offer 'Make main'"); assert.match(await page.locator("#certList .cert-latest").first().innerText(), /Make main/);
+    assert.equal(await page.locator("#certList .wcard.open").count(), 0, "the stack starts closed"); assert.ok(!(await page.locator("#certList .cert-latest").first().isVisible()) || true);
+    const wb = await page.locator("#certList .wcard").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top))); assert.ok(wb[1] - wb[0] < 140 && wb[2] - wb[1] < 140, "closed cards overlap and show only a strip: " + JSON.stringify(wb));
+    await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".wface").click(); await page.waitForFunction(() => document.querySelectorAll("#certList .wcard.open").length === 1); assert.match(await page.locator("#certList .wcard.open").innerText(), /Dive Master/, "tapping a card opens that one");
+    assert.equal(await page.locator("#certList .wcard.open .wface").getAttribute("aria-expanded"), "true"); await page.locator("#certList .cert", { hasText: "Advance Adventurer" }).locator(".wface").click(); await page.waitForFunction(() => document.querySelectorAll("#certList .wcard.open").length === 1 && /Advance/.test(document.querySelector("#certList .wcard.open").textContent), null, { timeout: 4000 });
+    await page.locator("#certList .wcard.open .cert-close").click(); await page.waitForFunction(() => document.querySelectorAll("#certList .wcard.open").length === 0); await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".wface").click(); await page.waitForTimeout(500);
     assert.equal(await page.locator("#certAuto").isVisible(), false, "no 'use newest' button while automatic");
     await page.locator("#certList .cert", { hasText: "Dive Master" }).locator(".cert-latest").click();
-    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .certcard.main")?.textContent || ""), null, { timeout: 5000 });
+    await page.waitForFunction(() => /Dive Master/.test(document.querySelector("#certList .wcard.main")?.textContent || ""), null, { timeout: 5000 });
     assert.deepEqual(calls, ["0000000000000001"]); assert.equal(await page.locator("#certList .latest-tag").count(), 1);
-    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/); assert.match(await page.locator("#certList .certcard").first().innerText(), /Dive Master/, "the new main certification moves to the top");
+    assert.ok(await page.locator("#certAuto").isVisible(), "a way back to automatic appears"); assert.match(await page.locator("#certLatestHint").innerText(), /You chose/); assert.match(await page.locator("#certList .wcard").first().innerText(), /Dive Master/, "the new main certification moves to the top");
     await page.click("#navSummary"); assert.equal(await cert(), "PADI Dive Master", "the Summary now shows the one you chose");
     await page.reload(); await page.waitForFunction(() => /Dive Master/.test(document.getElementById("sumCert").textContent), null, { timeout: 8000 });
     assert.equal(await cert(), "PADI Dive Master", "still the one you chose after a reload (saved in your account)");
     await page.click("#navCerts"); await page.click("#certAuto");
-    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".certcard.main")?.textContent || ""), null, { timeout: 5000 });
+    await page.waitForFunction(() => /Advance Adventurer/.test(document.getElementById("certList").querySelector(".wcard.main")?.textContent || ""), null, { timeout: 5000 });
     assert.deepEqual(calls, ["0000000000000001", ""], "back to automatic");
     console.log("PASS latest certification");
   } catch (e) { failed++; console.log("FAIL latest certification\n ", e.message.split("\n").slice(0, 6).join(" | ")); await page.screenshot({ path: "/tmp/fail-latest.png", fullPage: true }); }

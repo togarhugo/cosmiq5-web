@@ -121,30 +121,48 @@ const AccountArea = (() => {
     { kind: "cert", list: "certList", label: "certLabel", number: "certNumber", date: "certDate", file: "certFile", fileName: "certFileName", add: "certAdd", msg: "certMsg", none: "No certifications yet.", numberTag: "#", deleted: "Certification deleted", uploaded: "Certification uploaded" },
     { kind: "dan", list: "danList", label: "danLabel", number: "danDocNumber", file: "danFile", fileName: "danFileName", add: "danAdd", msg: "danMsg", none: "No insurance documents yet.", numberTag: "policy #", deleted: "Document deleted", uploaded: "Insurance document uploaded", defaultLabel: "DAN insurance card" },
   ];
-  const fileCache = new Map();                                                   // id -> {url, mime, filename, label}: scans are fetched once, when their card scrolls into view
-  let previewObserver = null;
-  function certCard(f, isMain) {
+  const fileCache = new Map();                                                   // id -> {url, mime, filename, label}: scans are fetched once and kept for the session
+  let openCert = "";                                                             // the card that is expanded ("" = the stack is closed)
+  const tint = (label) => { let n = 0; for (const ch of String(label)) n = (n * 31 + ch.charCodeAt(0)) >>> 0; return `hsl(${n % 360} 48% 34%)`; };
+  function certCard(f, isMain, i, n) {
     const sub = [f.number ? "#" + esc(f.number) : "", f.certifiedOn ? esc(fmtDay(f.certifiedOn)) : ""].filter(Boolean).join(" \u00b7 ");
-    return `<article class="cert certcard${isMain ? " main" : ""}" data-id="${esc(f.id)}"><div class="cc-head"><div class="cc-title"><b>${esc(f.label)}</b>${isMain ? '<span class="latest-tag">\u2605 Main</span>' : ""}</div>${sub ? `<div class="cc-sub muted">${sub}</div>` : ""}</div>
-      <div class="cc-frame" data-id="${esc(f.id)}"><span class="muted">Loading\u2026</span></div>
-      <div class="row wrap cc-actions">${isMain ? '<span class="cc-mainbadge">\u2605 Main certification</span>' : '<button class="btn-set cert-latest" type="button">Make main</button>'}<button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-c92a2a)">Delete</button></div></article>`;
+    const open = openCert === f.id;
+    return `<article class="cert wcard${isMain ? " main" : ""}${open ? " open" : ""}" data-id="${esc(f.id)}" style="z-index:${n - i}">
+      <div class="wface" role="button" tabindex="0" aria-expanded="${open}" aria-label="${esc(f.label)}"><div class="wimg" style="--tint:${tint(f.label)}"></div><div class="wshade"></div>
+        <div class="wtitle">${esc(f.label)}${f.certifiedOn ? `<small>${esc(fmtDay(f.certifiedOn))}</small>` : ""}</div>${isMain ? '<span class="latest-tag">\u2605 Main</span>' : ""}
+        <button class="wclose cert-close" type="button" aria-label="Close">\u2715</button></div>
+      <div class="wfoot"><div class="wf-title"><b>${esc(f.label)}</b>${isMain ? '<span class="cc-mainbadge">\u2605 Main certification</span>' : ""}</div><div class="wf-sub muted">${sub || "No number or date added"}</div>
+        <div class="row wrap" style="margin:0">${isMain ? "" : '<button class="btn-set cert-latest" type="button">Make main</button>'}<a class="btn-set cert-full" href="#" target="_blank" rel="noopener" style="background:var(--bg-6c757d)">${f.mime === "application/pdf" ? "Open PDF" : "Full size"}</a><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-c92a2a)">Delete</button></div></div></article>`;
   }
-  async function fillPreview(frame) {
-    const id = frame.dataset.id; if (!id || frame.dataset.done) return; frame.dataset.done = "1";
+  /** Natural height of the open card's scan at the current width (capped to the screen), so it can grow smoothly. */
+  function sizeOpenCard() {
+    for (const card of document.querySelectorAll("#certList .wcard")) {
+      const img = card.querySelector(".wimg"); if (!img) continue;
+      if (card.dataset.id === openCert) { const r = Number(card.dataset.ratio) || 0.7; img.style.height = Math.min(Math.round(img.clientWidth * r), Math.round(window.innerHeight * 0.8)) + "px"; } else img.style.height = "";
+    }
+  }
+  async function fillFace(card) {
+    const id = card.dataset.id; if (!id || card.dataset.done) return; card.dataset.done = "1";
     try {
       let c = fileCache.get(id);
       if (!c) { const { cert, blob } = await fetchFile(id); c = { url: URL.createObjectURL(blob), mime: cert.mime, filename: cert.filename, label: cert.label }; fileCache.set(id, c); }
-      frame.innerHTML = c.mime === "application/pdf" ? `<div class="cc-pdf"><span class="pdfmark">PDF</span><b>${esc(c.filename)}</b><a class="btn-set" href="${c.url}" target="_blank" rel="noopener" style="display:inline-block;width:auto">Open PDF</a></div>`
-        : `<a href="${c.url}" target="_blank" rel="noopener" aria-label="Open ${esc(c.label)} full size"><img alt="${esc(c.label)}" src="${c.url}"></a>`;
-    } catch (e) { frame.dataset.done = ""; frame.innerHTML = `<span class="muted">Could not load the file.</span>`; }
+      const box = card.querySelector(".wimg"), full = card.querySelector(".cert-full"); full.href = c.url;
+      if (c.mime === "application/pdf") { card.dataset.ratio = "0.62"; box.innerHTML = `<div class="wpdf"><span class="pdfmark">PDF</span></div>`; sizeOpenCard(); }
+      else { const im = new Image(); im.alt = c.label; im.onload = () => { card.dataset.ratio = String(im.naturalHeight / im.naturalWidth); sizeOpenCard(); }; im.src = c.url; box.innerHTML = ""; box.appendChild(im); }
+    } catch (e) { card.dataset.done = ""; }
   }
-  function watchPreviews() {
-    const frames = document.querySelectorAll("#certList .cc-frame"); if (!frames.length) return;
-    if (!("IntersectionObserver" in window)) return frames.forEach(fillPreview);
-    if (previewObserver) previewObserver.disconnect();
-    previewObserver = new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) { fillPreview(en.target); previewObserver.unobserve(en.target); } }), { rootMargin: "300px 0px" });
-    frames.forEach((fr) => { if (!fr.dataset.done) previewObserver.observe(fr); });
+  async function loadFaces() {                                                   // a few at a time, so the whole stack fills in without a burst of requests
+    const cards = [...document.querySelectorAll("#certList .wcard")].filter((c) => !c.dataset.done);
+    for (let i = 0; i < cards.length; i += 3) await Promise.all(cards.slice(i, i + 3).map(fillFace));
   }
+  function toggleCert(id, want) {
+    openCert = want === false || (want === undefined && openCert === id) ? "" : id;
+    document.querySelectorAll("#certList .wcard").forEach((c) => { const o = c.dataset.id === openCert; c.classList.toggle("open", o); c.querySelector(".wface").setAttribute("aria-expanded", o); });
+    sizeOpenCard();
+    const c = openCert && document.querySelector(`#certList .wcard[data-id="${openCert}"]`);
+    if (c && c.scrollIntoView) setTimeout(() => c.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
+  window.addEventListener("resize", () => { if (openCert) sizeOpenCard(); });
   function renderFiles() {
     for (const c of FILE_KINDS) {
       const box = $(c.list); if (!box) continue;
@@ -152,9 +170,11 @@ const AccountArea = (() => {
       const latest = c.kind === "cert" ? U.latestCert(allFiles, pinnedCert) : null;
       if (c.kind === "cert") {                                                    // certificates: the main one first, then newest to oldest, each on its own card
         mine.sort((a, b) => (latest && b.id === latest.id) - (latest && a.id === latest.id));
-        box.innerHTML = mine.length ? mine.map((f) => certCard(f, latest && latest.id === f.id)).join("") : `<div class="card muted">${c.none} Tap <b>Add a certificate</b> to upload a scan or PDF of your card.</div>`;
+        if (openCert && !mine.some((f) => f.id === openCert)) openCert = "";
+        box.innerHTML = mine.length ? mine.map((f, i) => certCard(f, latest && latest.id === f.id, i, mine.length)).join("") : `<div class="card muted">${c.none} Tap <b>Add a certificate</b> to upload a scan or PDF of your card.</div>`;
         if ($("certCount")) $("certCount").textContent = mine.length ? `\u00b7 ${mine.length}` : "";
-        watchPreviews(); continue;
+        if ($("certWalletHint")) $("certWalletHint").style.display = mine.length ? "" : "none";
+        loadFaces(); sizeOpenCard(); continue;
       }
       box.innerHTML = mine.length ? mine.map((f) => { const isLatest = latest && latest.id === f.id; return `<div class="cert${isLatest ? " latest" : ""}" data-id="${esc(f.id)}"><div class="cert-top"><b>${esc(f.label)}</b>${isLatest ? '<span class="latest-tag">\u2605 Latest</span>' : ""}${f.number ? `<span class="muted">${c.numberTag}${esc(f.number)}</span>` : ""}${f.certifiedOn ? `<span class="muted">\u00b7 ${esc(fmtDay(f.certifiedOn))}</span>` : ""}<span class="muted">${esc(f.filename)} \u00b7 ${fmtSize(f.size)}</span></div>
         <div class="row wrap" style="margin:8px 0 0"><button class="btn-set cert-view" type="button">${f.mime === "application/pdf" ? "Open" : "View"}</button><button class="btn-set cert-save" type="button" style="background:var(--bg-6c757d)">Save</button>${navigator.canShare ? '<button class="btn-set cert-share" type="button" style="background:var(--bg-6c757d)">Share</button>' : ""}<button class="btn-set cert-del" type="button" style="background:var(--bg-6c757d)">Delete</button></div>${c.kind === "cert" && !isLatest ? '<div class="row" style="margin:8px 0 0"><button class="btn-set cert-latest" type="button" style="background:var(--bg-2b8a3e)">Set as my latest certification</button></div>' : ""}<div class="cert-preview"></div></div>`; }).join("")
@@ -164,7 +184,7 @@ const AccountArea = (() => {
     diverData.pinnedCertId = pinnedCert;
     diverData.latestCert = (({ label, number, certifiedOn, createdAt } = {}) => (label ? { label, number, certifiedOn, createdAt } : null))(U.latestCert(allFiles, pinnedCert) || {});
     const hint = $("certLatestHint");
-    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Summary." : "Your main certification is shown on the Summary: the newest by date. Tap \u201cMake main\u201d on another to choose it yourself.";
+    if (hint) hint.textContent = !allFiles.some((f) => (f.kind || "cert") === "cert") ? "" : pinnedCert ? "You chose your main certification yourself. It is the one shown on your Summary." : "Your main certification is shown on the Summary: the newest by date. Open another card and tap \u201cMake main\u201d to choose it yourself.";
     if ($("certAuto")) $("certAuto").style.display = pinnedCert ? "" : "none";
     saveDiver(); Dives.render();
   }
@@ -176,10 +196,16 @@ const AccountArea = (() => {
   async function fetchFile(id) { const { cert } = await api("GET", "/api/certs/" + id); return { cert, blob: new Blob([fromBase64(cert.data)], { type: cert.mime }) }; }
   async function fileAction(cfg, e) {
     const item = e.target.closest(".cert"); if (!item) return;
-    const id = item.dataset.id, btn = e.target.closest("button"); if (!btn) return;
+    const id = item.dataset.id, btn = e.target.closest("button");
+    if (cfg.kind === "cert") {
+      if (e.target.closest("a")) return;                                          // "Full size" / "Open PDF" are plain links
+      if (btn && btn.classList.contains("cert-close")) return toggleCert(id, false);
+      if (!btn && e.target.closest(".wface")) return toggleCert(id, openCert === id ? false : true);
+    }
+    if (!btn) return;
     try {
-      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; say("Main certification updated"); renderFiles(); const m = document.querySelector("#certList .certcard.main"); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); const c = fileCache.get(id); if (c) { URL.revokeObjectURL(c.url); fileCache.delete(id); } say(cfg.deleted); loadFiles(); });
+      if (btn.classList.contains("cert-latest")) { await api("PUT", "/api/profile/latest-cert", { id }); pinnedCert = id; openCert = id; say("Main certification updated"); renderFiles(); const m = document.querySelector("#certList .wcard.main"); if (m && m.scrollIntoView) setTimeout(() => m.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+      if (btn.classList.contains("cert-del")) return confirmTap(btn, "Tap again to delete", async () => { await api("DELETE", "/api/certs/" + id); const c = fileCache.get(id); if (c) { URL.revokeObjectURL(c.url); fileCache.delete(id); } if (openCert === id) openCert = ""; say(cfg.deleted); loadFiles(); });
       const { cert, blob } = await fetchFile(id), url = URL.createObjectURL(blob);
       if (btn.classList.contains("cert-view")) {
         if (cert.mime === "application/pdf") { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click(); }
@@ -316,6 +342,7 @@ const AccountArea = (() => {
       $(cfg.file).addEventListener("change", (e) => { const f = e.target.files[0]; $(cfg.fileName).textContent = f ? f.name : ""; if (f && !$(cfg.label).value) $(cfg.label).value = cfg.defaultLabel || f.name.replace(/\.[^.]*$/, "").replace(/[_-]+/g, " ").slice(0, 80); });
       $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
     }
+    $("certList").addEventListener("keydown", (e) => { const f = e.target.closest && e.target.closest(".wface"); if (f && e.target === f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); const id = f.closest(".wcard").dataset.id; toggleCert(id, openCert === id ? false : true); } });
     $("certShowAdd").addEventListener("click", () => { $("certAddBox").style.display = ""; $("certShowAdd").style.display = "none"; note("certMsg", ""); $("certLabel").focus(); });
     $("certAddCancel").addEventListener("click", () => { hideCertAdd(); note("certMsg", ""); });
     $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Main certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
