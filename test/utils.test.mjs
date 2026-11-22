@@ -287,3 +287,57 @@ test("api access: the account page has the menu, the script and the endpoint inf
   assert.ok(fs.readFileSync(new URL("sw.js", root), "utf8").includes('"api-keys.js"')); assert.ok(fs.existsSync(new URL("../migrations/0007_api_keys.sql", root)));
   assert.match(fs.readFileSync(new URL("../schema.sql", root), "utf8"), /CREATE TABLE IF NOT EXISTS api_keys[\s\S]*key_hash\s+TEXT NOT NULL UNIQUE/);
 });
+
+test("regulator reminders: by dives AND by time; either one turns it orange / red; limits can be switched off", () => {
+  const dive = (i, mode) => ({ fingerprint: "f" + i, startedAt: `2026-05-${String(1 + (i % 28)).padStart(2, "0")}T${String(7 + (i % 12)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00`, durationSec: 3000, mode: mode || "scuba" });
+  const n = (k, mode) => Array.from({ length: k }, (_, i) => dive(i, mode)), T = (y, m, d) => new Date(y, m - 1, d || 15);
+  // months since the service: whole calendar months, 0 in the same month
+  assert.equal(U.monthsSince("2026-03", T(2026, 3, 31)), 0); assert.equal(U.monthsSince("2026-03", T(2026, 4, 1)), 1); assert.equal(U.monthsSince("2026-03", T(2026, 11, 22)), 8); assert.equal(U.monthsSince("2025-12", T(2026, 1, 1)), 1); assert.equal(U.monthsSince("2025-03", T(2027, 3, 1)), 24);
+  // an existing regulator (no limits, no service month): exactly the old rules, 90 dives with the warning from 70, and no time reminder
+  const old = { baseline: 0, since: "" };
+  for (const [k, lvl] of [[0, "ok"], [69, "ok"], [70, "orange"], [89, "orange"], [90, "red"], [120, "red"]]) { const s = U.regulatorStatus(old, n(k), T(2026, 11)); assert.equal(s.level, lvl, k + " dives"); assert.equal(s.diveLevel, lvl); assert.equal(s.limitDives, 90); assert.equal(s.limitMonths, 12); assert.equal(s.monthLevel, "unknown"); assert.equal(s.months, null); }
+  assert.equal(U.regulatorStatus(old, n(74), T(2026, 11)).divesLeft, 16); assert.equal(U.regulatorStatus(old, n(100), T(2026, 11)).divesLeft, 0, "never negative");
+  assert.equal(U.regulatorLevel(69), "ok"); assert.equal(U.regulatorLevel(70), "orange"); assert.equal(U.regulatorLevel(90), "red"); assert.deepEqual([0, 69, 70, 90].map(U.regulatorLevel), ["ok", "ok", "orange", "red"], "safe to pass to map(): extra arguments are ignored");
+  // by time: orange from 2 months before the limit, red at the limit
+  const reg = { baseline: 0, since: "", serviced: "2026-03", limitDives: 90, limitMonths: 12 };
+  for (const [today, months, lvl] of [[T(2026, 3), 0, "ok"], [T(2026, 11), 8, "ok"], [T(2026, 12), 9, "ok"], [T(2027, 1), 10, "orange"], [T(2027, 2), 11, "orange"], [T(2027, 3, 1), 12, "red"], [T(2028, 1), 22, "red"]]) {
+    const s = U.regulatorStatus(reg, n(5), today); assert.equal(s.months, months); assert.equal(s.monthLevel, lvl, months + " months"); assert.equal(s.level, lvl, "only time is high: the regulator follows it"); assert.equal(s.diveLevel, "ok");
+    assert.equal(s.dueBy, lvl === "ok" ? null : "time"); assert.equal(s.monthsLeft, Math.max(0, 12 - months));
+  }
+  // by dives only high; both high; the worse one wins
+  assert.equal(U.regulatorStatus(reg, n(75), T(2026, 6)).dueBy, "dives"); assert.equal(U.regulatorStatus(reg, n(75), T(2027, 1)).dueBy, "dives+time", "both orange");
+  const mixed = U.regulatorStatus(reg, n(95), T(2027, 1)); assert.deepEqual([mixed.diveLevel, mixed.monthLevel, mixed.level, mixed.dueBy], ["red", "orange", "red", "dives"], "red beats orange");
+  assert.equal(U.regulatorStatus(reg, n(10), T(2027, 3, 1)).level, "red", "few dives but a year has passed: still due");
+  // freedives do not count; a baseline does
+  assert.equal(U.regulatorStatus({ ...reg, baseline: 60 }, n(15).concat(n(40, "freedive").map((d) => ({ ...d, fingerprint: "fd" + d.fingerprint }))), T(2026, 6)).dives, 75);
+  // limits off: 0 switches a reminder off
+  const noTime = U.regulatorStatus({ ...reg, limitMonths: 0 }, n(5), T(2030, 1)); assert.deepEqual([noTime.monthLevel, noTime.monthsLeft, noTime.level], ["off", null, "ok"], "time off: years pass, still ok");
+  const noDives = U.regulatorStatus({ ...reg, limitDives: 0 }, n(500), T(2026, 6)); assert.deepEqual([noDives.diveLevel, noDives.divesLeft, noDives.level], ["off", null, "ok"], "dives off: 500 dives, still ok");
+  // small limits warn earlier in proportion; custom limits
+  assert.deepEqual([30, 39, 40, 100, 200].map((l) => U.regulatorStatus({ ...reg, limitDives: l }, [], T(2026, 3)).diveWarnAt), [22, 29, 20, 80, 180], "20 dives before the limit; for limits under 40, 75 %");
+  assert.deepEqual([3, 5, 6, 12, 24].map((l) => U.regulatorStatus({ ...reg, limitMonths: l }, [], T(2026, 3)).monthWarnAt), [2, 4, 4, 10, 22], "2 months before the limit; for limits under 6, one month");
+  assert.equal(U.regulatorStatus({ ...reg, limitDives: 150 }, n(100), T(2026, 6)).level, "ok", "a 150-dive limit: 100 dives is fine"); assert.equal(U.regulatorStatus({ ...reg, limitDives: 150 }, n(130), T(2026, 6)).level, "orange");
+});
+
+test("regulator messages: what is due, what is soon, how much is left", () => {
+  const dive = (i) => ({ fingerprint: "m" + i, startedAt: `2026-05-01T${String(i % 24).padStart(2, "0")}:${String(Math.floor(i / 24)).padStart(2, "0")}:00`, durationSec: 3000, mode: "scuba" }), n = (k) => Array.from({ length: k }, (_, i) => dive(i));
+  const reg = { baseline: 0, since: "", serviced: "2026-03", limitDives: 90, limitMonths: 12 }, msg = (r, k, today) => U.regulatorMessage(U.regulatorStatus(r, n(k), today), "en-US");
+  assert.equal(msg(reg, 40, new Date(2026, 5, 15)), "Next service in 50 dives or 9 months"); assert.equal(msg(reg, 74, new Date(2026, 10, 15)), "Service soon: 16 dives to go"); assert.equal(msg(reg, 20, new Date(2027, 0, 15)), "Service soon: 2 months to go");
+  assert.equal(msg(reg, 80, new Date(2027, 0, 15)), "Service soon: 10 dives or 2 months to go"); assert.equal(msg(reg, 89, new Date(2026, 5, 15)), "Service soon: 1 dive to go");
+  assert.equal(msg(reg, 90, new Date(2026, 5, 15)), "Service now: 90 dives (limit 90)"); assert.equal(msg(reg, 20, new Date(2027, 2, 15)), "Service now: 12 months since Mar 2026 (limit 12)"); assert.equal(msg(reg, 95, new Date(2027, 3, 15)), "Service now: 95 dives (limit 90) and 13 months since Mar 2026 (limit 12)");
+  assert.equal(msg({ ...reg, limitMonths: 0 }, 40, new Date(2026, 5, 15)), "Next service in 50 dives"); assert.equal(msg({ ...reg, limitDives: 0 }, 40, new Date(2026, 5, 15)), "Next service in 9 months");
+  assert.equal(msg({ baseline: 0, since: "" }, 40, new Date(2026, 5, 15)), "Next service in 50 dives", "no service month yet: only the dive reminder");
+  assert.equal(msg({ baseline: 0, since: "", limitDives: 0 }, 40, new Date(2026, 5, 15)), "Add the last service date to get a time reminder", "time reminder only, but no service month");
+  assert.equal(U.monthLabel("2026-03", "en-US"), "Mar 2026");
+});
+
+test("regulator reset: counter back to 0, the service month recorded, history kept (newest first, at most 20)", () => {
+  const dive = (i) => ({ fingerprint: "r" + i, startedAt: `2026-05-${String(1 + i).padStart(2, "0")}T09:00:00`, durationSec: 3000, mode: "scuba" }), recs = Array.from({ length: 12 }, (_, i) => dive(i));
+  const reg = { name: "R", type: "", baseline: 70, since: "2026-04-01T00:00:00", serviced: "2025-03", limitDives: 90, limitMonths: 12, history: [{ m: "2025-03", dives: 88, at: "2025-03-20" }] }, today = new Date(2026, 5, 3);
+  const legacy = U.regulatorReset(reg, recs); assert.equal(legacy.baseline, 0); assert.equal(legacy.since, "2026-05-12T09:00:00"); assert.equal(legacy.serviced, "2025-03", "without a service month nothing else changes"); assert.deepEqual(legacy.history, reg.history);
+  const r = U.regulatorReset(reg, recs, { serviced: "2026-05", today }); assert.deepEqual([r.baseline, r.since, r.serviced], [0, "2026-05-12T09:00:00", "2026-05"]);
+  assert.deepEqual(r.history, [{ m: "2026-05", dives: 82, at: "2026-06-03" }, { m: "2025-03", dives: 88, at: "2025-03-20" }], "the dives it had done (70 + 12) go into the history, newest first"); assert.equal(reg.history.length, 1, "the old object is not changed");
+  let h = reg; for (let i = 0; i < 25; i++) h = U.regulatorReset(h, recs, { serviced: "2026-05", today }); assert.equal(h.history.length, 20, "at most 20 services are kept");
+  assert.equal(U.regulatorReset({ name: "N", type: "", baseline: 3, since: "" }, recs, { serviced: "2026-05", today }).history.length, 1, "a regulator without a history starts one");
+  assert.equal(U.regulatorStatus(r, recs, new Date(2026, 5, 3)).months, 1); assert.equal(U.regulatorStatus(r, recs, new Date(2026, 5, 3)).dives, 0, "after the reset: 0 dives, 1 month since the service month");
+});

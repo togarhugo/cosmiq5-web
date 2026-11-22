@@ -355,7 +355,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50); } throw new Error("timed out waiting for " + what); };
   const toastIs = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 8000 });
   const chips = () => page.locator(".dh-loc").allInnerTexts().then((a) => a.map((t) => t.replace(/\s+/g, " ").trim()));
-  const card = () => page.locator("#sumReg").evaluate((e) => ({ cls: e.className, role: e.getAttribute("role"), border: getComputedStyle(e).borderLeftColor, big: getComputedStyle(e.querySelector(".sum-big")).color, count: e.querySelector("#sumRegCount").textContent, msg: e.querySelector("#sumRegMsg").textContent, bar: e.querySelector("#sumRegBar").style.width }));
+  const card = () => page.locator("#sumReg").evaluate((e) => ({ cls: e.className, role: e.getAttribute("role"), border: getComputedStyle(e).borderLeftColor, big: getComputedStyle(e.querySelector(".sum-big")).color, count: e.querySelector("#sumRegCount").textContent, msg: e.querySelector("#sumRegMsg").textContent, bar: e.querySelector("#sumRegDivesBar").style.width }));
   try {
     // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
     assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1 img:visible").getAttribute("alt"), "Dive Manager", "the heading is the logo, named Dive Manager");
@@ -392,26 +392,44 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.locator("#regAdd").tap(); await page.fill("#regName", "Apeks XTX50"); await page.fill("#regType", "Balanced piston"); await page.fill("#regBase", "68");
     await page.locator("#regSave").tap(); await toastIs(/Regulator saved/);
     assert.equal(await page.locator("#regShownCount").innerText(), "68"); assert.match(await page.locator("#regBadge").innerText(), /68 dives/);
-    assert.deepEqual({ ...regPuts.at(-1), since: typeof regPuts.at(-1).since }, { name: "Apeks XTX50", type: "Balanced piston", baseline: 68, since: "string" }, "stored with the starting count");
+    assert.deepEqual({ ...regPuts.at(-1), since: typeof regPuts.at(-1).since }, { name: "Apeks XTX50", type: "Balanced piston", baseline: 68, since: "string", serviced: "", limitDives: 90, limitMonths: 12, history: [] }, "stored with the starting count and the default limits (90 dives, 12 months)");
     await page.click("#navSummary"); await until(async () => (await card()).count === "68", "the Summary card");
-    let c = await card(); assert.equal(c.cls, "card sum reg-ok"); assert.equal(c.border, "rgb(43, 138, 62)"); assert.match(c.msg, /Service is due at 70 dives \(2 to go\)/);
+    let c = await card(); assert.equal(c.cls, "card sum reg-ok"); assert.equal(c.border, "rgb(43, 138, 62)"); assert.match(c.msg, /Next service in 22 dives/); assert.ok(!(await page.locator("#sumRegMonthsWrap").isVisible()), "no months shown until a service date is set");
     const edit = async (n) => { await page.click("#acctBtn"); await page.locator("#regEdit").tap(); await page.fill("#regBase", String(n)); await page.locator("#regSave").tap(); await toastIs(/Regulator saved/); await page.click("#navSummary"); await until(async () => (await card()).count === String(n), "count " + n); return card(); };
     c = await edit(69); assert.equal(c.cls, "card sum reg-ok", "69 is still green");
-    c = await edit(70); assert.equal(c.cls, "card sum reg-orange", "70 turns orange"); assert.equal(c.border, "rgb(230, 119, 0)"); assert.equal(c.big, "rgb(217, 72, 15)"); assert.equal(c.role, "alert"); assert.match(c.msg, /Service soon: 20 dives to the 90-dive limit/);
+    c = await edit(70); assert.equal(c.cls, "card sum reg-orange", "70 turns orange"); assert.equal(c.border, "rgb(230, 119, 0)"); assert.equal(c.big, "rgb(217, 72, 15)"); assert.equal(c.role, "alert"); assert.match(c.msg, /Service soon: 20 dives to go/);
     c = await edit(89); assert.equal(c.cls, "card sum reg-orange", "89 is still orange");
-    c = await edit(90); assert.equal(c.cls, "card sum reg-red", "90 turns red"); assert.equal(c.border, "rgb(201, 42, 42)"); assert.equal(c.big, "rgb(201, 42, 42)"); assert.match(c.msg, /Service now/); assert.equal(c.bar, "100%");
+    c = await edit(90); assert.equal(c.cls, "card sum reg-red", "90 turns red"); assert.equal(c.border, "rgb(201, 42, 42)"); assert.equal(c.big, "rgb(201, 42, 42)"); assert.match(c.msg, /Service now: 90 dives \(limit 90\)/); assert.equal(c.bar, "100%");
     assert.match(await page.locator("#regBadge").evaluate((e) => e.className), /red/, "badge in the Account list is red too");
-    // 6. reset to 0 (needs a second tap), then every new dive adds one
+    // 6. reset to 0: asks for the month and year of the service first, keeps it in the history and shows it on the Summary
     await page.click("#acctBtn"); await page.locator("#regReset").tap();
-    assert.match(await page.locator("#regReset").innerText(), /Tap again/); assert.equal(await page.locator("#regShownCount").innerText(), "90", "the first tap does not reset");
-    await page.locator("#regReset").tap(); await toastIs(/reset to 0/);
-    assert.equal(await page.locator("#regShownCount").innerText(), "0"); assert.deepEqual(regPuts.at(-1), { name: "Apeks XTX50", type: "Balanced piston", baseline: 0, since: "2025-03-15T08:05:00" }, "since = the latest dive logged so far");
+    assert.ok(await page.locator("#regResetForm").isVisible(), "the reset opens a month/year form"); assert.equal(await page.locator("#regShownCount").innerText(), "90", "opening the form does not reset");
+    assert.equal(await page.locator("#regRstMonth").inputValue(), "03"); assert.equal(await page.locator("#regRstYear").inputValue(), "2025", "defaults to this month");
+    assert.equal(await page.locator("#regRstYear option").first().innerText(), "2025", "no future years to pick");
+    await page.locator("#regRstCancel").tap(); assert.ok(!(await page.locator("#regResetForm").isVisible()), "cancel closes it without resetting"); assert.equal(await page.locator("#regShownCount").innerText(), "90");
+    await page.locator("#regReset").tap(); await page.selectOption("#regRstMonth", "01"); await page.locator("#regRstSave").tap(); await toastIs(/reset to 0/);
+    assert.equal(await page.locator("#regShownCount").innerText(), "0"); const last = regPuts.at(-1);
+    assert.deepEqual({ ...last, history: undefined }, { name: "Apeks XTX50", type: "Balanced piston", baseline: 0, since: "2025-03-15T08:05:00", serviced: "2025-01", limitDives: 90, limitMonths: 12, history: undefined }, "since = the latest dive logged so far, serviced = the chosen month");
+    assert.deepEqual(last.history.map((h) => [h.m, h.dives]), [["2025-01", 90]], "the history remembers the service and how many dives it had");
+    assert.match(await page.locator("#regShownLast").innerText(), /Last service: Jan(uary)? 2025/); assert.equal(await page.locator("#regShownMonths").innerText(), "2");
+    assert.match(await page.locator("#regHistory summary").innerText(), /Service history \(1\)/); await page.locator("#regHistory summary").tap(); assert.match(await page.locator("#regHistoryList").innerText(), /Jan(uary)? 2025\s+90 dives on it/);
     await page.click("#navSummary"); await until(async () => (await card()).cls === "card sum reg-ok" && (await card()).count === "0", "green at 0");
+    assert.equal(await page.locator("#sumRegMonths").innerText(), "2", "the Summary shows the months since the service too"); assert.match(await page.locator("#sumRegLast").innerText(), /Last service: Jan(uary)? 2025 \(2 months ago\)/);
+    assert.equal(await page.locator("#sumRegTimeTxt").innerText(), "2 / 12 mo"); assert.equal(await page.locator("#sumRegDivesTxt").innerText(), "0 / 90");
+    // 6b. the time reminder alone: few dives, but the last service was 14 months ago -> red; orange 2 months before the limit; each limit can be switched off
+    const editSvc = async (y, mo, ld, lm) => { await page.click("#acctBtn"); await page.locator("#regEdit").tap(); await page.selectOption("#regSvcYear", String(y)); await page.selectOption("#regSvcMonth", mo); await page.fill("#regLimDives", String(ld)); await page.fill("#regLimMonths", String(lm)); await page.locator("#regSave").tap(); await toastIs(/Regulator saved/); await page.click("#navSummary"); await page.waitForTimeout(150); return card(); };
+    c = await editSvc(2024, "05", 90, 12); assert.equal(c.cls, "card sum reg-orange", "10 months of 12 is orange"); assert.match(c.msg, /Service soon: 2 months to go/);
+    c = await editSvc(2024, "01", 90, 12); assert.equal(c.cls, "card sum reg-red", "14 months is red even with 0 dives"); assert.match(c.msg, /Service now: 14 months since Jan(uary)? 2024 \(limit 12\)/); assert.equal(await page.locator("#sumRegDivesLine").getAttribute("class"), "regline lv-ok", "the dive bar stays green");
+    c = await editSvc(2024, "01", 90, 0); assert.equal(c.cls, "card sum reg-ok", "months reminder off -> only dives count"); assert.ok(!(await page.locator("#sumRegTimeLine").isVisible()), "the time bar disappears when it is off");
+    await page.click("#acctBtn"); await page.locator("#regEdit").tap(); await page.fill("#regLimDives", "0"); await page.fill("#regLimMonths", "0"); await page.locator("#regSave").tap(); assert.match(await page.locator("#regMsg").innerText(), /Keep at least one reminder/); await page.locator("#regCancel").tap();
+    c = await editSvc(2024, "01", 90, 12); assert.equal(c.cls, "card sum reg-red");
+    await page.click("#acctBtn"); await page.locator("#regReset").tap(); await page.selectOption("#regRstYear", "2025"); await page.selectOption("#regRstMonth", "03"); await page.locator("#regRstSave").tap(); await toastIs(/reset to 0/);
+    assert.deepEqual(regPuts.at(-1).history.map((h) => h.m), ["2025-03", "2025-01"], "newest service first"); await page.click("#navSummary");
     await page.evaluate(() => window.__dives.push(window.__d3));                    // a new dive appears on the dive computer
     await page.click("#navLog"); await page.click("#diveSyncBtn");
     await page.waitForFunction(() => /Dive sync done: 3 on device, 1 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     await page.click("#navSummary"); await until(async () => (await card()).count === "1", "the new dive to count");
-    assert.match((await card()).msg, /\(69 to go\)/);
+    assert.match((await card()).msg, /Next service in 89 dives or 12 months/);
     // 7. remove
     await page.click("#acctBtn"); await page.locator("#regRemove").tap(); await page.locator("#regRemove").tap(); await toastIs(/Regulator removed/);
     await page.click("#navSummary"); await until(async () => !(await page.locator("#sumReg").isVisible()) && (await page.locator("#sumRegHint").isVisible()), "card gone, hint back");

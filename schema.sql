@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS regulators (
   type       TEXT NOT NULL DEFAULT '',
   baseline   INTEGER NOT NULL DEFAULT 0,        -- dives already on it when it was added / before the last reset
   since      TEXT NOT NULL DEFAULT '',          -- only dives that START after this device-local time count ('' = all)
+  serviced   TEXT NOT NULL DEFAULT '',          -- 'YYYY-MM' of the last service, '' = not set
+  limit_dives  INTEGER NOT NULL DEFAULT 90,     -- service every N dives; 0 = no dive reminder
+  limit_months INTEGER NOT NULL DEFAULT 12,     -- service every N months; 0 = no time reminder
+  history    TEXT NOT NULL DEFAULT '[]',        -- JSON: [{m, dives, at}] of past services, newest first, at most 20
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS certs (

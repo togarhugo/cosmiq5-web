@@ -176,36 +176,72 @@ const AccountArea = (() => {
   }
 
   // ---------- regulator ----------
+  const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }));
+  /** Fills a pair of month/year selects. `blank` adds a "not set" choice. Years run from 15 years back to this year. */
+  function fillMonthPicker(mId, yId, value, blank) {
+    const now = new Date(), m = $(mId), y = $(yId), cur = value ? value.split("-") : null;
+    const opt = (v, t) => `<option value="${v}">${t}</option>`;
+    m.innerHTML = (blank ? opt("", "Month") : "") + MONTHS.map((n, i) => opt(String(i + 1).padStart(2, "0"), n)).join("");
+    y.innerHTML = (blank ? opt("", "Year") : "") + Array.from({ length: 16 }, (_, i) => now.getFullYear() - i).map((v) => opt(v, v)).join("");
+    if (cur) { m.value = cur[1]; if (![...y.options].some((o) => o.value === cur[0])) y.insertAdjacentHTML("beforeend", opt(cur[0], cur[0])); y.value = cur[0]; }
+    else if (!blank) { m.value = String(now.getMonth() + 1).padStart(2, "0"); y.value = String(now.getFullYear()); }
+  }
+  /** "YYYY-MM" from a picker, "" when left blank, null when only half filled or in the future. */
+  function readMonthPicker(mId, yId) {
+    const m = $(mId).value, y = $(yId).value; if (!m && !y) return ""; if (!m || !y) return null;
+    const v = y + "-" + m, now = new Date(); return v > now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") ? null : v;
+  }
   async function renderRegulator() {
-    const recs = await Dives.all(), reg = regulator, form = $("regForm");
+    const recs = await Dives.all(), reg = regulator, form = $("regForm"), rform = $("regResetForm");
     $("regStatus").style.display = reg && form.style.display === "none" ? "" : "none";
     $("regAdd").style.display = !reg && form.style.display === "none" ? "" : "none";
     const badge = $("regBadge");
     if (reg) {
-      const n = U.regulatorCount(reg, recs), lvl = U.regulatorLevel(n);
-      $("regShownName").textContent = reg.name; $("regShownType").textContent = reg.type ? "· " + reg.type : ""; $("regShownCount").textContent = n;
-      badge.textContent = n + (n === 1 ? " dive" : " dives"); badge.className = "regbadge " + (lvl === "ok" ? "" : lvl); badge.style.display = "";
-    } else badge.style.display = "none";
+      const st = U.regulatorStatus(reg, recs, new Date());
+      $("regShownName").textContent = reg.name; $("regShownType").textContent = reg.type ? "\u00b7 " + reg.type : ""; $("regShownCount").textContent = st.dives;
+      $("regShownMonthsWrap").style.display = st.months == null ? "none" : ""; if (st.months != null) { $("regShownMonths").textContent = st.months; $("regShownMonthsUnit").textContent = st.months === 1 ? "month" : "months"; }
+      $("regShownLast").textContent = reg.serviced ? `Last service: ${U.monthLabel(reg.serviced)}` : "Last service: not set";
+      $("regShownEvery").textContent = "Service every " + [st.limitDives ? st.limitDives + " dives" : "", st.limitMonths ? st.limitMonths + " months" : ""].filter(Boolean).join(" or ");
+      const msg = $("regShownMsg"); msg.textContent = U.regulatorMessage(st); msg.className = "reg-msg " + (st.level === "red" ? "lv-red" : st.level === "orange" ? "lv-orange" : "");
+      const worst = st.level === "unknown" ? "" : st.level;
+      badge.textContent = st.dives + (st.dives === 1 ? " dive" : " dives") + (st.months != null ? " \u00b7 " + st.months + " mo" : ""); badge.className = "regbadge " + (worst === "ok" ? "" : worst); badge.style.display = "";
+      const hist = reg.history || [];
+      $("regHistory").style.display = hist.length ? "" : "none"; $("regHistoryCount").textContent = hist.length ? "(" + hist.length + ")" : "";
+      $("regHistoryList").innerHTML = hist.map((h) => `<li><span>${U.monthLabel(h.m)}</span><span>${h.dives} ${h.dives === 1 ? "dive" : "dives"} on it</span></li>`).join("");
+    } else { badge.style.display = "none"; rform.style.display = "none"; }
     Dives.render();                                                       // refreshes the Summary card too
   }
   const setReg = (r) => { regulator = r; store.set("regulator", r); };
   function openRegForm(reg) {
     $("regName").value = reg ? reg.name : ""; $("regType").value = reg ? reg.type : ""; $("regBase").value = reg ? reg.baseline : 0;
+    fillMonthPicker("regSvcMonth", "regSvcYear", reg ? reg.serviced : "", true);
+    $("regLimDives").value = reg && reg.limitDives != null ? reg.limitDives : 90; $("regLimMonths").value = reg && reg.limitMonths != null ? reg.limitMonths : 12;
     $("regForm").style.display = ""; $("regStatus").style.display = "none"; $("regAdd").style.display = "none"; $("regName").focus();
   }
   async function saveReg() {
-    const name = $("regName").value.trim(), base = Number($("regBase").value);
+    const name = $("regName").value.trim(), base = Number($("regBase").value), ld = Number($("regLimDives").value), lm = Number($("regLimMonths").value);
+    const serviced = readMonthPicker("regSvcMonth", "regSvcYear");
     if (!name) return note("regMsg", "Enter the regulator's name.", true);
     if (!Number.isInteger(base) || base < 0 || base > 99999) return note("regMsg", "Dives already on it must be a whole number, 0 or more.", true);
+    if (serviced === null) return note("regMsg", "Pick both a month and a year for the last service, and not a month in the future.", true);
+    if (!Number.isInteger(ld) || (ld !== 0 && (ld < 10 || ld > 1000))) return note("regMsg", "Service every: dives must be 0 (off) or between 10 and 1000.", true);
+    if (!Number.isInteger(lm) || (lm !== 0 && (lm < 3 || lm > 60))) return note("regMsg", "Service every: months must be 0 (off) or between 3 and 60.", true);
+    if (!ld && !lm) return note("regMsg", "Keep at least one reminder: by dives or by months.", true);
     try {
       const recs = await Dives.all();
-      const next = { name, type: $("regType").value.trim(), baseline: base, since: regulator ? regulator.since : U.regulatorReset({}, recs).since };    // a new regulator counts dives after today's last logged one
+      const next = { name, type: $("regType").value.trim(), baseline: base, since: regulator ? regulator.since : U.regulatorReset({}, recs).since,    // a new regulator counts dives after today's last logged one
+        serviced, limitDives: ld, limitMonths: lm, history: regulator ? regulator.history || [] : [] };
       await api("PUT", "/api/regulator", next); setReg(next); $("regForm").style.display = "none"; note("regMsg", ""); say("Regulator saved"); renderRegulator();
     } catch (e) { note("regMsg", e.message, true); }
   }
+  function openResetForm() { fillMonthPicker("regRstMonth", "regRstYear", "", false); $("regResetForm").style.display = ""; $("regRstMonth").focus(); }
   async function resetReg() {
-    try { const next = U.regulatorReset(regulator, await Dives.all()); await api("PUT", "/api/regulator", next); setReg(next); say("Regulator counter reset to 0"); renderRegulator(); }
-    catch (e) { note("regMsg", e.message, true); }
+    const serviced = readMonthPicker("regRstMonth", "regRstYear");
+    if (!serviced) return note("regMsg", "Pick the month and year of the service (not in the future).", true);
+    try {
+      const next = U.regulatorReset(regulator, await Dives.all(), { serviced });
+      await api("PUT", "/api/regulator", next); setReg(next); $("regResetForm").style.display = "none"; note("regMsg", ""); say("Regulator counter reset to 0"); renderRegulator();
+    } catch (e) { note("regMsg", e.message, true); }
   }
   async function removeReg() {
     try { await api("DELETE", "/api/regulator"); setReg(null); say("Regulator removed"); renderRegulator(); } catch (e) { note("regMsg", e.message, true); }
@@ -258,7 +294,8 @@ const AccountArea = (() => {
     $("regCancel").addEventListener("click", () => { $("regForm").style.display = "none"; note("regMsg", ""); renderRegulator(); });
     $("regSave").addEventListener("click", saveReg);
     $("regUseLogged").addEventListener("click", async () => { const n = U.uniqueDives(await Dives.all()).filter((r) => r.mode !== "freedive").length; $("regBase").value = n; note("regMsg", `Filled in with your ${n} logged scuba/gauge dives.`); });
-    $("regReset").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to reset to 0", resetReg));
+    $("regReset").addEventListener("click", () => { if ($("regResetForm").style.display === "none") openResetForm(); else $("regResetForm").style.display = "none"; note("regMsg", ""); });
+    $("regRstSave").addEventListener("click", resetReg); $("regRstCancel").addEventListener("click", () => { $("regResetForm").style.display = "none"; note("regMsg", ""); });
     $("regRemove").addEventListener("click", (e) => confirmTap(e.currentTarget, "Tap again to remove", removeReg));
     $("updateBtn").addEventListener("click", checkUpdate);
     $("helpDiag").addEventListener("click", async () => note("helpMsg", await Dives.copyDiagnostics()));

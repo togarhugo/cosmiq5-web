@@ -367,15 +367,22 @@
             .cert img.preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--bd-dee2e6); }
             .ver-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; } ul.help { padding-left: 18px; font-size: 13px; color: var(--tx-495057); line-height: 1.45; } ul.help li { margin-bottom: 6px; }
             .reg-title { font-size: 15px; } .reg-count { font-size: 30px; font-weight: 700; margin: 2px 0; }
+            .regevery { display: flex; align-items: center; gap: 8px; } .regevery .rel { width: 62px; } .regevery .fld { width: 78px; margin: 0; text-align: center; }
+            .reghist { margin-top: 10px; } .reghist > summary { cursor: pointer; font-size: 13px; font-weight: 600; } .reghist ul { list-style: none; margin: 6px 0 0; padding: 0; } .reghist li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px solid var(--bd-e9ecef); font-size: 13px; } .reghist li span:last-child { color: var(--tx-868e96); }
             .regbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: var(--bg-2b8a3e); color: var(--tx-fff); }
             .regbadge.orange { background: var(--bg-e67700); } .regbadge.red { background: var(--bg-c92a2a); }
-            .regbar { position: relative; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; margin: 10px 0 6px; overflow: visible; }
-            .regbar #sumRegBar { height: 100%; border-radius: 4px; background: var(--bg-2b8a3e); width: 0; transition: width .3s; }
-            .regbar i { position: absolute; left: 77.78%; top: -3px; width: 2px; height: 14px; background: rgba(0,0,0,.35); }
-            .reg-msg { font-size: 13px; font-weight: 600; }
+            .regbars { margin: 10px 0 2px; } .regline { display: flex; align-items: center; gap: 10px; margin: 8px 0; } .regline.lv-off { display: none; }
+            .reglbl { width: 40px; flex: none; font-size: 12px; font-weight: 600; color: var(--tx-868e96); }
+            .regbar { position: relative; flex: 1; height: 8px; background: var(--bg-e9ecef); border-radius: 4px; overflow: visible; }
+            .regbar .fill { height: 100%; border-radius: 4px; background: var(--bg-2b8a3e); width: 0; transition: width .3s; }
+            .regbar i { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--tx-868e96); opacity: .6; }
+            .regtxt { flex: none; min-width: 70px; text-align: right; font-size: 12px; font-family: var(--mono); color: var(--tx-495057); }
+            .regline.lv-orange .fill { background: var(--bg-e67700); } .regline.lv-red .fill { background: var(--bg-c92a2a); } .regline.lv-orange .regtxt { color: var(--tx-d9480f); font-weight: 600; } .regline.lv-red .regtxt { color: var(--tx-c92a2a); font-weight: 700; }
+            .regline.lv-unknown .regbar { opacity: .5; } .sum-sub { font-size: 20px; font-weight: 600; opacity: .85; }
+            .reg-msg { font-size: 13px; font-weight: 600; } .reg-msg.lv-orange { color: var(--tx-d9480f); } .reg-msg.lv-red { color: var(--tx-c92a2a); }
             .sum.reg-ok { border-left: 5px solid var(--bd-2b8a3e); } .sum.reg-ok .reg-msg { color: var(--tx-2b8a3e); }
-            .sum.reg-orange { border-left: 5px solid var(--bd-e67700); background: var(--bg-fff4e6); } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: var(--tx-d9480f); } .sum.reg-orange #sumRegBar { background: var(--bg-e67700); }
-            .sum.reg-red { border-left: 5px solid var(--bd-c92a2a); background: var(--bg-fff5f5); } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: var(--tx-c92a2a); } .sum.reg-red #sumRegBar { background: var(--bg-c92a2a); }
+            .sum.reg-orange { border-left: 5px solid var(--bd-e67700); background: var(--bg-fff4e6); } .sum.reg-orange .sum-big, .sum.reg-orange .reg-msg { color: var(--tx-d9480f); }
+            .sum.reg-red { border-left: 5px solid var(--bd-c92a2a); background: var(--bg-fff5f5); } .sum.reg-red .sum-big, .sum.reg-red .reg-msg { color: var(--tx-c92a2a); }
             .diver-name { font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
             .diver-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin-top: 8px; background: var(--bg-f8f9fa); }
             .diver-row .ico { flex: 0 0 34px; width: 34px; display: flex; justify-content: center; padding-top: 2px; } .diver-row .ico svg, .diver-row .ico img { display: block; } .diver-row .ico svg.flag { margin-top: 4px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); } .diver-row .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; }
@@ -534,9 +541,13 @@
             </div>
             <div id="sumReg" class="card sum reg-ok" style="display:none" role="button" tabindex="0">
                 <div class="sum-label">Regulator service</div>
-                <div class="sum-big"><span id="sumRegCount">0</span> dives</div>
+                <div class="sum-big"><span id="sumRegCount">0</span> dives<span id="sumRegMonthsWrap" class="sum-sub"> &middot; <span id="sumRegMonths">0</span> <span id="sumRegMonthsUnit">months</span></span></div>
                 <div id="sumRegName" class="muted"></div>
-                <div class="regbar" aria-hidden="true"><div id="sumRegBar"></div><i></i></div>
+                <div class="regbars">
+                    <div id="sumRegDivesLine" class="regline"><span class="reglbl">Dives</span><div class="regbar" aria-hidden="true"><div id="sumRegDivesBar" class="fill"></div><i id="sumRegDivesTick"></i></div><span id="sumRegDivesTxt" class="regtxt"></span></div>
+                    <div id="sumRegTimeLine" class="regline"><span class="reglbl">Time</span><div class="regbar" aria-hidden="true"><div id="sumRegTimeBar" class="fill"></div><i id="sumRegTimeTick"></i></div><span id="sumRegTimeTxt" class="regtxt"></span></div>
+                </div>
+                <div id="sumRegLast" class="muted"></div>
                 <div id="sumRegMsg" class="reg-msg"></div>
             </div>
             <div id="sumRegHint" class="muted" style="display:none;text-align:center;margin:0 0 12px"><a href="#" id="sumRegHintLink">Track your regulator's service</a></div>
@@ -1088,15 +1099,28 @@
             <details class="card acc" data-sec="regulator">
                 <summary>Regulator <span id="regBadge" class="regbadge" style="display:none"></span></summary>
                 <div class="acc-body">
-                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) so you know when to service it: orange from 70 dives, red from 90.</p>
+                    <p class="muted" style="margin:0 0 10px">Counts your scuba dives on this regulator (freedives don't use one) and the months since its last service. You are reminded by whichever comes first: the number of dives or the time.</p>
                     <div id="regStatus" style="display:none">
                         <div class="reg-title"><b id="regShownName"></b> <span id="regShownType" class="muted"></span></div>
-                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span></div>
+                        <div class="reg-count"><span id="regShownCount">0</span> <span class="muted">dives</span><span id="regShownMonthsWrap"> <span class="muted">&middot;</span> <span id="regShownMonths">0</span> <span id="regShownMonthsUnit" class="muted">months</span></span></div>
+                        <div id="regShownLast" class="muted"></div>
+                        <div id="regShownEvery" class="muted"></div>
+                        <div id="regShownMsg" class="reg-msg" style="margin-top:4px"></div>
                         <div class="row wrap" style="margin:8px 0 0">
                             <button id="regReset" class="btn-set" type="button">Reset to 0</button>
                             <button id="regEdit" class="btn-set" type="button" style="background:var(--bg-6c757d)">Edit</button>
                             <button id="regRemove" class="btn-set" type="button" style="background:var(--bg-6c757d)">Remove</button>
                         </div>
+                        <div id="regResetForm" class="subcard" style="display:none">
+                            <div class="label" style="margin-top:0">Serviced in</div>
+                            <div class="row" style="margin:0 0 4px"><select id="regRstMonth" class="fld" aria-label="Month serviced" style="margin:0"></select><select id="regRstYear" class="fld" aria-label="Year serviced" style="margin:0"></select></div>
+                            <div class="muted" style="margin:0 0 8px">Month and year are enough. The counter goes back to 0 and the date is kept in the service history.</div>
+                            <div class="row wrap" style="margin:0">
+                                <button id="regRstSave" class="btn-set" type="button">Reset counter</button>
+                                <button id="regRstCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
+                            </div>
+                        </div>
+                        <details id="regHistory" class="reghist" style="display:none"><summary>Service history <span id="regHistoryCount" class="muted"></span></summary><ul id="regHistoryList"></ul></details>
                     </div>
                     <div id="regForm" class="subcard" style="display:none">
                         <label class="label" for="regName">Regulator name</label>
@@ -1107,6 +1131,12 @@
                         <label class="label" for="regBase">Dives already on it</label>
                         <div class="row" style="margin-bottom:6px"><input id="regBase" class="fld" type="number" min="0" max="99999" value="0" inputmode="numeric" style="margin:0" />
                             <button id="regUseLogged" class="btn-set" type="button" style="background:var(--bg-6c757d);white-space:nowrap">Use my logged dives</button></div>
+                        <div class="label">Last serviced <span class="muted">(optional)</span></div>
+                        <div class="row" style="margin:0 0 6px"><select id="regSvcMonth" class="fld" aria-label="Month of last service" style="margin:0"></select><select id="regSvcYear" class="fld" aria-label="Year of last service" style="margin:0"></select></div>
+                        <div class="label">Service reminder</div>
+                        <div class="regevery"><span class="rel">Every</span><input id="regLimDives" class="fld" type="number" min="0" max="1000" value="90" inputmode="numeric" aria-label="Service every this many dives" /><span>dives</span></div>
+                        <div class="regevery" style="margin-top:6px"><span class="rel">or every</span><input id="regLimMonths" class="fld" type="number" min="0" max="60" value="12" inputmode="numeric" aria-label="Service every this many months" /><span>months</span></div>
+                        <div class="muted" style="margin:4px 0 8px">Whichever comes first. Put 0 to switch one off. Orange 20 dives (or 2 months) before the limit, red at the limit.</div>
                         <div class="row wrap" style="margin:0">
                             <button id="regSave" class="btn-set" type="button">Save regulator</button>
                             <button id="regCancel" class="btn-set" type="button" style="background:var(--bg-6c757d)">Cancel</button>
