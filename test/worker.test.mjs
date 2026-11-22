@@ -216,3 +216,14 @@ test("old address: redirects to the new one only when CANONICAL_HOST is set", as
   assert.notEqual((await at("new.example.org", env, "/auth/login")).status, 307, "the new host is not redirected to itself");
   assert.notEqual((await at("unlisted.example.org", env, "/auth/login")).status, 307, "only listed hosts are redirected");
 });
+
+test("Garmin dives are stored like other imported dives (scuba, gauge, freedive), come back with their device, and the API can filter on them", async () => {
+  const env = makeEnv(); const { cookie } = await googleSession(env);
+  const extra = JSON.stringify({ n: 57, t: 26, iv: 1, s: [[0, 0, 28], [300, 25.3, 27], [600, 0, 26]] });
+  const g = (o) => ({ fingerprint: "a1b2c3d4e5f6", device: "garmin", startedAt: "2025-02-04T09:30:00", mode: "scuba", durationSec: 600, maxDepthM: 25.3, o2Percent: 32, headerHex: "", profileHex: "", extra, ...o });
+  const send = (body) => post(env, "/api/dives", body, { cookie });
+  assert.equal((await (await send({ dives: [g(), g({ fingerprint: "a1b2c3d4e5f7", mode: "gauge", o2Percent: null }), g({ fingerprint: "a1b2c3d4e5f8", mode: "freedive", o2Percent: null })] })).json()).stored, 3);
+  const rows = (await (await call(env, "/api/dives", { headers: { cookie } })).json()).dives;
+  assert.deepEqual(rows.map((r) => [r.device, r.mode]).sort(), [["garmin", "freedive"], ["garmin", "gauge"], ["garmin", "scuba"]]);
+  assert.equal((await send({ dives: [g({ fingerprint: "a1b2c3d4e5f9", device: "suunto" })] })).status, 400, "other devices are still refused");
+});

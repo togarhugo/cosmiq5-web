@@ -129,7 +129,7 @@ test("api v1: dives list: both computers, decoded fields, kind, map position, on
 
 test("api v1: dives list: filters, order, pagination (cursor walks every dive exactly once), validation", async () => {
   const { env, k } = await seeded();
-  assert.deepEqual((await list(env, k, "?device=peregrine")).dives.map((d) => d.id), [id12(2), id12(1)]); assert.equal((await list(env, k, "?device=cosmiq")).count, 3);
+  assert.deepEqual((await list(env, k, "?device=peregrine")).dives.map((d) => d.id), [id12(2), id12(1)]); assert.equal((await list(env, k, "?device=cosmiq")).count, 3); assert.equal((await list(env, k, "?device=garmin")).count, 0, "garmin is a valid filter, there are none yet"); assert.equal((await call(env, "/api/v1/dives?device=suunto", { headers: { authorization: "Bearer " + k } })).status, 400);
   assert.deepEqual((await list(env, k, "?kind=freedive")).dives.map((d) => d.mode), ["freedive", "freedive"], "freedives from both computers"); assert.equal((await list(env, k, "?kind=scuba")).count, 3, "scuba includes gauge");
   assert.deepEqual((await list(env, k, "?from=2025-03-15&to=2025-03-16")).dives.map((d) => d.startedAt.slice(0, 10)), ["2025-03-16", "2025-03-15"], "from and to are whole days, both included"); assert.equal((await list(env, k, "?from=2025-03-21")).count, 0);
   assert.deepEqual((await list(env, k, "?location=TULAMBEN")).dives.map((d) => d.location).sort(), ["Tulamben", "tulamben"], "location: any capitalisation"); assert.equal((await list(env, k, "?location=" + encodeURIComponent("' OR 1=1 --"))).count, 0, "quotes are just text");

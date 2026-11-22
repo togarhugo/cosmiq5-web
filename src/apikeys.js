@@ -148,7 +148,7 @@ export async function handleApiV1(request, url, env) {
     const cap = include ? MAX_PAGE_WITH_DATA : MAX_PAGE, lim = q.has("limit") ? Number(q.get("limit")) : Math.min(DEFAULT_PAGE, cap);
     if (!Number.isInteger(lim) || lim < 1 || lim > cap) return fail(400, "bad_request", `limit must be a whole number from 1 to ${cap}` + (include ? " when include is used." : "."));
     const where = ["user_email = ?"], bind = [email];
-    const device = q.get("device"); if (device) { if (device !== "cosmiq" && device !== "peregrine") return fail(400, "bad_request", "device must be cosmiq or peregrine."); where.push("device = ?"); bind.push(device); }
+    const device = q.get("device"); if (device) { if (device !== "cosmiq" && device !== "peregrine" && device !== "garmin") return fail(400, "bad_request", "device must be cosmiq, peregrine or garmin."); where.push("device = ?"); bind.push(device); }
     const kind = q.get("kind"); if (kind) { if (kind !== "scuba" && kind !== "freedive") return fail(400, "bad_request", "kind must be scuba or freedive."); where.push(kind === "freedive" ? "mode = 'freedive'" : "(mode IS NULL OR mode != 'freedive')"); }
     for (const [name, op] of [["from", ">="], ["to", "<="]]) { const v = q.get(name); if (v) { if (!dateOk(v)) return fail(400, "bad_request", `${name} must be a date like 2025-03-14.`); where.push(`substr(started_at, 1, 10) ${op} ?`); bind.push(v); } }
     const loc = q.get("location"); if (loc) { if (loc.length > 60) return fail(400, "bad_request", "location is too long."); where.push("lower(location) = lower(?)"); bind.push(loc); }

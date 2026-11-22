@@ -20,7 +20,7 @@ function cleanLocation(v) {
   const t = v.replace(/\s+/g, " ").trim();
   return t.length > 60 ? false : t || null;
 }
-const IMPORTED_DEVICES = ["peregrine"];              // dive computers whose logs are imported from a file (the Cosmiq arrives over Bluetooth)
+const IMPORTED_DEVICES = ["peregrine", "garmin"];              // dive computers whose logs are imported from a file (the Cosmiq arrives over Bluetooth)
 const STARTED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
 const MAX_EXTRA_CHARS = 120_000;                     // decoded samples of one imported dive, as JSON text
 const num = (v, max) => v === undefined || v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max);

@@ -977,20 +977,35 @@
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
-                <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
-                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                <div id="impPeregrine">
+                    <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
+                    <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
                     <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
                     <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
                     <li>Drag the file into the box below (or tap the box to choose it). A <b>UDDF</b> export works too.</li>
-                </ol>
+                    </ol>
+                </div>
+                <div id="impGarmin" style="display:none">
+                    <p class="muted" style="margin:0 0 10px">Garmin does not let other apps read your dives directly, so you bring the dive files over. Dives are in <b>FIT</b> files (<code>.fit</code>), alone or inside a ZIP:</p>
+                    <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                        <li><b>One dive:</b> on the Garmin Connect <b>website</b>, open the dive, choose the gear menu &rsaquo; <b>Export Original</b>. You get a ZIP with the <code>.fit</code> inside.</li>
+                        <li><b>All your dives:</b> in your Garmin account go to <b>Data Management &rsaquo; Export Your Data</b>. Garmin emails you a big ZIP (it can take some hours or days). Drop that ZIP here: runs, sleep and other activities in it are skipped.</li>
+                        <li><b>From the watch:</b> connect it to a computer with its cable and copy the files from <code>Garmin/Activity</code> (some models need the free OpenMTP app on a Mac).</li>
+                        <li>Drag the file or ZIP into the box below (or tap the box to choose it).</li>
+                    </ol>
+                </div>
                 <label id="dropZone" for="impFile" tabindex="0" role="button" aria-label="Drop a Shearwater Cloud file here, or tap to choose one">
                     <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <b>Drop your Shearwater Cloud file here</b>
-                    <span>or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF</span>
+                    <b id="dropTitle">Drop your Shearwater Cloud file here</b>
+                    <span id="dropKinds">or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF</span>
                 </label>
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
+                <div id="impNotePeregrine">
                 <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
+                </div>
+                <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
+                <div id="impBt">
                 <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
                     <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
                     <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
@@ -998,6 +1013,7 @@
                     <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
                     <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
                 </details>
+                </div>
             </div>
             <div id="syncCard" class="card">
                 <h3>Sync</h3>
@@ -1241,7 +1257,7 @@
                                 <tr><td><code>cursor</code></td><td>The <code>nextCursor</code> of the previous page: asks for the next page.</td></tr>
                                 <tr><td><code>order</code></td><td><code>desc</code> (default) or <code>asc</code>.</td></tr>
                                 <tr><td><code>from</code>, <code>to</code></td><td>Days, like <code>2025-03-14</code>, both included.</td></tr>
-                                <tr><td><code>device</code></td><td><code>cosmiq</code> or <code>peregrine</code>.</td></tr>
+                                <tr><td><code>device</code></td><td><code>cosmiq</code>, <code>peregrine</code> or <code>garmin</code>.</td></tr>
                                 <tr><td><code>kind</code></td><td><code>scuba</code> (includes gauge mode) or <code>freedive</code>.</td></tr>
                                 <tr><td><code>location</code></td><td>A place name, any capital letters.</td></tr>
                                 <tr><td><code>uploadedSince</code></td><td>Only dives added after this time, like <code>2025-04-01T10:00:00Z</code>: to fetch just what is new.</td></tr>
@@ -1328,6 +1344,7 @@
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
+        <script src="garmin-fit.js"></script>
         <script src="shearwater.js"></script>
         <script src="sqlite-lite.js"></script>
         <script src="shearwater-cloud.js"></script>

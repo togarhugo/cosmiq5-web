@@ -164,14 +164,19 @@ const Dives = (() => {
     const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
     busy = true; say2("Reading\u2026");
-    const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0; const problems = [];
+    const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0, gNotDive = 0, gUtc = 0; const problems = [];
     try {
       for (const f of files) {
         if (f.size > 400_000_000) { problems.push(`${f.name}: too large (${Math.round(f.size / 1e6)} MB, limit 400 MB)`); continue; }
         try {
-          const bytes = new Uint8Array(await f.arrayBuffer()), kind = window.ShearwaterCloud.sniff(bytes);
+          const bytes = new Uint8Array(await f.arrayBuffer()), kind = deviceId === "garmin" ? "garmin" : window.ShearwaterCloud.sniff(bytes);
           let dives, note = "";
-          if (kind === "text") { const res = window.DiveImport.parseUddf(new TextDecoder().decode(bytes), deviceId); dives = res.dives; skipped += res.skipped; note = res.info; }
+          if (kind === "garmin") {
+            const res = await window.GarminFit.read(bytes, { onProgress: (n, t) => say2(`Reading file ${n} of ${t}\u2026`) });
+            dives = res.dives; note = `${res.files} FIT file${res.files === 1 ? "" : "s"}, ${res.notDive} not a dive`;
+            gNotDive += res.notDive; gUtc += res.utcFallback;
+            for (const m of res.problems.slice(0, 3)) problems.push(`${f.name}: ${m}`);
+          } else if (kind === "text") { const res = window.DiveImport.parseUddf(new TextDecoder().decode(bytes), deviceId); dives = res.dives; skipped += res.skipped; note = res.info; }
           else {
             const res = await window.ShearwaterCloud.readExport(bytes, (d, t) => say2(`Reading dive ${d} of ${t}\u2026`));
             dives = res.dives; skipped += res.skipped.deleted + res.skipped.format; note = `${res.total} dive${res.total === 1 ? "" : "s"} in the database`;
@@ -190,6 +195,8 @@ const Dives = (() => {
       const up = fresh.length ? await cloudPush() : 0;
       const parts = [`${fresh.length} new dive${fresh.length === 1 ? "" : "s"} imported`];
       if (already) parts.push(`${already} already there`); if (skipped) parts.push(`${skipped} skipped (deleted or incomplete)`);
+      if (gNotDive) parts.push(`${gNotDive} other activit${gNotDive === 1 ? "y" : "ies"} skipped (not dives)`);
+      if (gUtc) parts.push(`${gUtc} dive${gUtc === 1 ? "" : "s"} had no time zone in the file, so the time shown is UTC`);
       if (fresh.length) parts.push(cloudState === "ok" ? `${up} uploaded` : "saved on this phone, cloud unavailable");
       say2(parts.join(", ") + "." + (problems.length ? " " + problems.join(" ") : ""), !fresh.length && !!problems.length);
       if (fresh.length) say(`${fresh.length} dive${fresh.length === 1 ? "" : "s"} imported`);
@@ -319,7 +326,7 @@ const Dives = (() => {
       <div><b>${avg}</b><span>avg depth</span></div>
       <div><b>${gapBefore == null ? "\u2013" : fmtGap(gapBefore)}</b><span>since last dive</span></div>
       <div><b>${rec.intervalSec || 10} s</b><span>sample every</span></div></div>
-      <p class="muted">Imported from a file exported from the ${esc(deviceName(rec.device))} app: ${sm.length} depth sample${sm.length === 1 ? "" : "s"}. The numbers are the ones in that file.</p>`;
+      <p class="muted">Imported from a file from the ${esc(deviceName(rec.device))}: ${sm.length} depth sample${sm.length === 1 ? "" : "s"}. The numbers are the ones in that file.</p>`;
   }
 
   function detail(rec, res, gapBefore, num) {
@@ -362,7 +369,7 @@ const Dives = (() => {
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     const kc = $("sumLastKind"); kc.className = "kindchip kind-" + sm.last.kind; kc.textContent = KIND_LABEL[sm.last.kind];
     $("sumKinds").innerHTML = U.KINDS.filter((k) => k === "scuba" || sm.byKind[k].count).map((k) => `<div class="kindrow"><span class="kindchip kind-${k}">${KIND_LABEL[k]}</span><b>${U.durText(sm.byKind[k].sec)}</b><span class="muted">${sm.byKind[k].count} dive${sm.byKind[k].count === 1 ? "" : "s"}</span></div>`).join("");
-    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on both computers, counted once (Cosmiq+ used)` : "");
+    $("sumCount").textContent = `across ${sm.count} dive${sm.count === 1 ? "" : "s"}` + (sm.duplicates ? ` \u00b7 ${sm.duplicates} recorded on ${new Set(recs.map(U.deviceOf)).size > 2 ? "more than one" : "both"} computers, counted once (${new Set(recs.map(U.deviceOf)).size > 2 ? "the first computer's record" : "Cosmiq+"} used)` : "");
   }
   /** Top of the Summary: your name, latest certification, DAN membership and how long it is valid (green / orange within 60 days / red when expired). */
   function renderDiverCard() {
@@ -457,7 +464,16 @@ const Dives = (() => {
       return `<button type="button" role="tab" aria-selected="${x.id === shown}" class="${x.id === shown ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
     const sync = $("syncCard"), imp = $("importCard");
     if (sync) sync.style.display = shown === "cosmiq" ? "" : "none";
-    if (imp) { imp.style.display = shown === "cosmiq" ? "none" : ""; }
+    if (imp) {
+      imp.style.display = shown === "cosmiq" ? "none" : "";
+      const garmin = shown === "garmin", show = (id, on) => { const el = $(id); if (el) el.style.display = on ? "" : "none"; };
+      show("impPeregrine", !garmin); show("impNotePeregrine", !garmin); show("impBt", !garmin); show("impGarmin", garmin); show("impNoteGarmin", garmin);
+      const set = (id, t) => { const el = $(id); if (el) el.textContent = t; };
+      set("impTitle", garmin ? "Garmin Descent" : "Shearwater Peregrine");
+      set("dropTitle", garmin ? "Drop your Garmin dive files here" : "Drop your Shearwater Cloud file here");
+      const kinds = $("dropKinds"); if (kinds) kinds.innerHTML = garmin ? "or tap to choose them &middot; <code>.fit</code> or <code>.zip</code>" : "or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF";
+      const zone = $("dropZone"); if (zone) zone.setAttribute("aria-label", garmin ? "Drop Garmin dive files here, or tap to choose them" : "Drop a Shearwater Cloud file here, or tap to choose one");
+    }
     curDevice = shown; return shown;
   }
   function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
@@ -527,7 +543,7 @@ const Dives = (() => {
     $("diveCount").textContent = everything.length ? `(${everything.length})` : "";
     renderSummary(everything); renderDiverCard(); renderRegulatorCard(everything); updateBanner(everything); wireList(list);
     if (typeof PlacesUI !== "undefined") PlacesUI.render(everything);                  // map pins + places still to put on the map
-    const dups = U.duplicateMap(everything);                                            // dives both computers recorded: only the Cosmiq+ one is counted
+    const dups = U.duplicateMap(everything), byFp = new Map(everything.map((x) => [x.fingerprint, x])), keptName = (fp) => { const k = byFp.get(dups.get(fp)); return k ? (U.DEVICES.find((x) => x.id === U.deviceOf(k)) || { short: "the other computer" }).short : "Cosmiq+"; };                                            // dives both computers recorded: only the Cosmiq+ one is counted
     const dev = renderDeviceTabs(everything), recs = everything.filter((r) => U.deviceOf(r) === dev), numbers = U.diveNumbers(recs);
     const last = loadLast(), ls = $("lastSync");
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "var(--tx-c92a2a)" : ""; }
@@ -554,7 +570,7 @@ const Dives = (() => {
       const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
         ${numBox(num)}<span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
-        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${dups.has(r.fingerprint) ? '<span class="badge also" title="Recorded by both computers: the Cosmiq+ dive is the one counted in the Summary">also on Cosmiq+</span>' : ""}
+        <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${dups.has(r.fingerprint) ? `<span class="badge also" title="Recorded by two computers: the ${esc(keptName(r.fingerprint))} dive is the one counted in the Summary">also on ${esc(keptName(r.fingerprint))}</span>` : ""}
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };

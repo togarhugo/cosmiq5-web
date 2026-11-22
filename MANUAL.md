@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.19.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.20.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -124,6 +124,17 @@ On a computer you can also **drag the file onto the card** instead of using the 
 Importing again later (a newer export) only adds the dives you do not have yet. Dives you **deleted** in Shearwater Cloud are skipped. The dive numbers are the ones of your Shearwater Cloud logbook. Your files stay on your device: they are read in the browser, and only the dives are saved to your account.
 
 If a message says a file could not be read, it names the reason. If the app cannot read your export at all, send me the message: I built this reader from other people's descriptions of Shearwater's file layout and tested it on files I made myself, not on a real Shearwater Cloud export.
+
+### Garmin Descent: import dive files
+Garmin does **not** let other apps read your dives straight from the watch or from your Garmin account (their programmes are for approved companies, and signing in with your Garmin password would be fragile and unsafe), so you bring the files over. The **Garmin Descent** tab in the Dive log has its own box:
+1. Get your dives as **FIT** files (`.fit`):
+   * **One dive:** on the Garmin Connect **website**, open the dive, gear menu → **Export Original**. You get a ZIP with the `.fit` inside.
+   * **All your dives:** Garmin account → **Data Management → Export Your Data**. Garmin emails a big ZIP (hours to days). Drop the ZIP as it is: runs, sleep and other activities in it are skipped and counted.
+   * **From the watch:** cable to a computer, copy the files from `Garmin/Activity` (some models need the free OpenMTP app on a Mac).
+2. **Drag the file or ZIP into the box** (or tap it to choose). Several files at once are fine.
+3. Each dive appears in the Garmin Descent log with the **watch's own dive number**, depth, duration, minimum temperature, the gas (O₂ %) and the depth chart. Scuba, **gauge** and **apnea (freedive)** sessions are told apart.
+Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Summary and the regulator counter, using the first computer's record.
+The time shown is the watch's clock (the file stores a UTC time and the watch's offset). If a file has no offset the app says so and shows UTC. This import reads Garmin's published file format and is **beta**: it was built and tested with files made to that format and has not yet been compared with every watch, so check your first import against the watch. A freedive session is imported as one dive per file.
 
 ### Shearwater Peregrine: Bluetooth (experimental)
 Under **Bluetooth download (experimental)** the app can also read the Peregrine directly. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released: on the first real try the phone's list did not show the Peregrine. Use the file import above; the Bluetooth route is left in for further testing. It only reads: nothing is written to the Peregrine.
