@@ -227,3 +227,11 @@ test("Garmin dives are stored like other imported dives (scuba, gauge, freedive)
   assert.deepEqual(rows.map((r) => [r.device, r.mode]).sort(), [["garmin", "freedive"], ["garmin", "gauge"], ["garmin", "scuba"]]);
   assert.equal((await send({ dives: [g({ fingerprint: "a1b2c3d4e5f9", device: "suunto" })] })).status, 400, "other devices are still refused");
 });
+
+test("the Bluetooth lab page is private like the rest of the app, and is served as a page with its script", async () => {
+  const env = makeEnv(); const { cookie } = await googleSession(env);
+  const anon = await call(env, "/bluetooth-lab.html", html); assert.notEqual(anon.status, 200, "not served without signing in");
+  const page = await call(env, "/bluetooth-lab.html", { headers: { cookie, accept: "text/html" } });
+  assert.equal(page.status, 200); assert.match(page.headers.get("content-type"), /text\/html/); const body = await page.text(); assert.match(body, /Bluetooth lab/); assert.match(body, /bluetooth-lab\.js/);
+  const js = await call(env, "/bluetooth-lab.js", { headers: { cookie } }); assert.equal(js.status, 200); assert.match(js.headers.get("content-type"), /javascript/); assert.match(await js.text(), /requestLEScan/);
+});

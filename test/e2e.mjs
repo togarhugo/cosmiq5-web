@@ -1299,4 +1299,67 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL dive computers per person\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-sources.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: the Bluetooth lab (sandbox): browser checks, advertisement listing, GATT inspection, Shearwater handshake, report ----
+{
+  const sim = peregrine({ dives: [] });
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.exposeFunction("__pgWrite", async (arr) => { await sim.io.write(Uint8Array.from(arr)); return sim.drain().map((a) => Array.from(a)); });
+  await page.addInitScript((noScan) => {
+    Object.defineProperty(navigator, "platform", { configurable: true, get: () => "MacIntel" }); Object.defineProperty(navigator, "userAgentData", { configurable: true, value: { platform: "macOS", brands: [{ brand: "Google Chrome", version: "140" }] } });
+    const b = new EventTarget(); window.__b = b; const SW = "fe25c237-0ece-443c-b0aa-e02033e7029d", full = (n) => "0000" + n.toString(16).padStart(4, "0") + "-0000-1000-8000-00805f9b34fb";
+    b.getAvailability = async () => true; if (!noScan) b.requestLEScan = async () => ({ stop() { window.__scanStopped = true; } });
+    window.__adv = (o) => { const e = new Event("advertisementreceived"); Object.assign(e, { device: { id: o.id, name: o.name }, name: o.name, rssi: o.rssi, uuids: o.uuids || [], manufacturerData: new Map(o.mfr ? [[o.mfr[0], new DataView(Uint8Array.from(o.mfr[1]).buffer)]] : []), serviceData: new Map(), txPower: null }); b.dispatchEvent(e); };
+    let onChange = null;
+    const sch = { uuid: "27b7570b-359e-45a3-91bb-cf7e70049bd2", properties: { notify: true, writeWithoutResponse: true }, addEventListener(t, f) { if (t === "characteristicvaluechanged") onChange = f; }, async startNotifications() {},
+      async writeValueWithoutResponse(v) { const notes = await window.__pgWrite(Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))); setTimeout(() => notes.forEach((n) => onChange({ target: { value: new DataView(Uint8Array.from(n).buffer) } })), 0); } };
+    const nameChar = { uuid: full(0x2a00), properties: { read: true }, readValue: async () => new DataView(new TextEncoder().encode("Peregrine").buffer) };
+    const notifier = { uuid: "aaaa0000-0000-1000-8000-00805f9b34fb", properties: { notify: true, read: true }, addEventListener() {}, async startNotifications() { window.__listening = true; }, readValue: async () => new DataView(Uint8Array.from([1, 2, 255]).buffer) };
+    const gap = { uuid: full(0x1800), getCharacteristics: async () => [nameChar] }, shear = { uuid: SW, getCharacteristics: async () => [sch, notifier] };
+    const dev = { id: "dev1", name: "Peregrine", addEventListener() {}, gatt: { connect: async () => server, disconnect() { window.__disconnected = (window.__disconnected || 0) + 1; } } };
+    const server = { getPrimaryServices: async () => [gap, shear], getPrimaryService: async (u) => { if (u !== SW) throw new Error("no"); return shear; } };
+    Object.defineProperty(navigator, "bluetooth", { configurable: true, value: Object.assign(b, { requestDevice: async (o) => { window.__asked = o; if (window.__cancel) { const e = new Error("cancelled"); e.name = "NotFoundError"; throw e; } return dev; } }) });
+  }, false);
+  try {
+    await page.goto(base + "bluetooth-lab.html"); await page.waitForFunction(() => window.__labReady === true, null, { timeout: 8000 });
+    // 1. browser checks, with the Mac permission hint
+    const env = await page.locator("#envTable").innerText(); assert.match(env, /Web Bluetooth\s+available/); assert.match(env, /Listening for advertisements\s+supported/); assert.match(env, /Bluetooth adapter\s+a Bluetooth adapter is available/);
+    const hints = await page.locator("#envHints").innerText(); assert.match(hints, /System Settings/, "a Mac is told about the browser's Bluetooth permission"); assert.match(hints, /one app at a time/); assert.match(hints, /Auto Connect/);
+    // 2. listening: a Peregrine row is marked and first; other devices are listed; names from devices are text, never HTML
+    await page.click("#scanStart"); await page.waitForFunction(() => !document.getElementById("scanStart").disabled === false);
+    await page.evaluate(() => { __adv({ id: "a", name: "JBL Flip 5", rssi: -50 }); __adv({ id: "b", name: "Peregrine", rssi: -63, uuids: ["fe25c237-0ece-443c-b0aa-e02033e7029d"], mfr: [0x1234, [1, 2, 3]] }); __adv({ id: "c", name: "", rssi: -80 }); __adv({ id: "d", name: "<b>bold</b><img src=x onerror=window.__xss=1>", rssi: -70 }); __adv({ id: "b", name: "Peregrine", rssi: -61, uuids: ["fe25c237-0ece-443c-b0aa-e02033e7029d"] }); });
+    await page.waitForFunction(() => document.querySelectorAll("#scanTable tbody tr").length === 4, null, { timeout: 3000 });
+    const rows = await page.locator("#scanTable tbody tr").evaluateAll((trs) => trs.map((t) => t.innerText.replace(/\s+/g, " ").trim()));
+    assert.match(rows[0], /^Peregrine\s*likely -61 dBm 2\u00d7 Shearwater data service 0x1234: 01 02 03/, "the dive computer is first, with its signal, count, service and manufacturer data: " + rows[0]);
+    assert.equal(await page.locator("#scanTable tbody tr.likely").count(), 1); assert.ok(rows.some((r) => r.startsWith("(no name)")), "unnamed devices are listed too");
+    assert.equal(await page.locator("#scanTable b, #scanTable img").count(), 0, "a device name is shown as text"); assert.equal(await page.evaluate(() => window.__xss), undefined); assert.ok(rows.some((r) => r.includes("<b>bold</b>")));
+    await page.check("#scanNamed"); assert.equal(await page.locator("#scanTable tbody tr").count(), 3, "only named devices"); await page.uncheck("#scanNamed");
+    await page.click("#scanStop"); assert.equal(await page.evaluate(() => window.__scanStopped), true); assert.match(await page.locator("#scanState").innerText(), /stopped, 4 devices heard/);
+    // 3. inspect: services with names, the Shearwater tag, harmless values read at once, Read / Listen buttons work, nothing is written
+    await page.fill("#extraUuid", "not a uuid"); await page.click("#inspectBtn"); assert.match(await page.locator("#inspectState").innerText(), /not a UUID/); await page.fill("#extraUuid", "6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+    await page.click("#inspectBtn"); await page.waitForFunction(() => document.querySelectorAll("#tree > li").length === 2, null, { timeout: 5000 });
+    const asked = await page.evaluate(() => window.__asked); assert.equal(asked.acceptAllDevices, true); assert.ok(asked.optionalServices.includes("fe25c237-0ece-443c-b0aa-e02033e7029d") && asked.optionalServices.includes("6e400001-b5a3-f393-e0a9-e50e24dcca9e") && asked.optionalServices.length > 80, "asks for the Shearwater service, your extra one and the standard ones");
+    const tree = await page.locator("#tree").innerText(); assert.match(tree, /Generic Access/); assert.match(tree, /Shearwater data service[\s\S]*Shearwater/); assert.match(tree, /device name/); assert.match(tree, /50 65 72 65 67 72 69 6e 65\s+"Peregrine"/, "the device name was read on its own");
+    await page.locator('#tree button[data-act="read"]').last().click(); await page.waitForFunction(() => /01 02 ff/.test(document.getElementById("tree").textContent)); await page.locator('#tree button[data-act="notify"]').last().click(); assert.equal(await page.evaluate(() => window.__listening), true);
+    assert.equal(sim.log.length, 0, "browsing sends nothing to the dive computer"); await page.click("#inspectDisc"); assert.ok((await page.evaluate(() => window.__disconnected)) >= 1);
+    // 4. the Shearwater handshake: three read-only questions, answered by the simulated Peregrine
+    await page.click("#shakeBtn"); await page.waitForFunction(() => /The download will work/.test(document.getElementById("shakeState").textContent), null, { timeout: 15000 });
+    assert.match(await page.locator("#shakeState").innerText(), /serial \S+, firmware \S+, model number \d+/); assert.deepEqual(sim.log.filter((l) => /^22/.test(l)).length > 0, true, "it asked read-data-by-identifier questions"); assert.ok(!sim.log.some((l) => /^35/.test(l)), "and downloaded no dive");
+    await page.evaluate(() => { window.__cancel = true; }); await page.click("#shakeBtn"); await page.waitForFunction(() => /No device was chosen/.test(document.getElementById("shakeState").textContent)); await page.evaluate(() => { window.__cancel = false; });
+    // 5. report: everything, with other people's devices left out by default
+    const rep = await page.locator("#report").inputValue();
+    for (const must of ["== Browser ==", "Web Bluetooth: available", "== Advertisement scan ==", "name=\"Peregrine\" likely=true", "0x1234", "== Inspected device ==", "service fe25c237", "Shearwater data service", "== Shearwater handshake ==", "\"serial\"", "Handshake OK"]) assert.ok(rep.includes(must), "report has: " + must + " :: " + rep.slice(rep.indexOf("== Shearwater handshake"), rep.indexOf("== Shearwater handshake") + 300).replace(/\n/g, " / "));
+    assert.ok(!rep.includes("JBL Flip"), "other devices' names are not in the report by default"); assert.match(rep, /3 not listed/);
+    await page.uncheck("#onlyLikely"); assert.ok((await page.locator("#report").inputValue()).includes("JBL Flip"), "the checkbox puts them back");
+    await page.click("#repClear"); assert.ok(!(await page.locator("#report").inputValue()).includes("Handshake OK")); assert.equal(await page.locator("#log").innerText(), "");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
+    // without Chrome's experimental setting: the page explains it and the other sections still work
+    const p2 = await ctx.newPage(); const e2 = []; p2.on("pageerror", (e) => e2.push(e.message)); await p2.addInitScript(() => { Object.defineProperty(navigator, "platform", { configurable: true, get: () => "Win32" }); Object.defineProperty(navigator, "userAgentData", { configurable: true, value: { platform: "Windows", brands: [] } }); const b = new EventTarget(); b.getAvailability = async () => false; Object.defineProperty(navigator, "bluetooth", { configurable: true, value: b }); });
+    await p2.goto(base + "bluetooth-lab.html"); await p2.waitForFunction(() => window.__labReady === true); assert.match(await p2.locator("#envTable").innerText(), /NO Bluetooth adapter found or it is switched off/); assert.match(await p2.locator("#envTable").innerText(), /switched off \(needs a Chrome setting/); assert.ok(!/System Settings/.test(await p2.locator("#envHints").innerText()), "no Mac hint on Windows");
+    await p2.click("#scanStart"); assert.match(await p2.locator("#scanHelp").innerText(), /enable-experimental-web-platform-features/); assert.deepEqual(e2, []);
+    // the app links to the lab from the Bluetooth section
+    await page.goto(base); await page.click("#navLog"); await openSource(page, "Peregrine"); await page.locator("#importCard details summary").click(); assert.equal(await page.locator("#labLink").getAttribute("href"), "bluetooth-lab.html");
+    console.log("PASS bluetooth lab");
+  } catch (e) { failed++; console.log("FAIL bluetooth lab\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-lab.png", fullPage: true }); }
+  await ctx.close();
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

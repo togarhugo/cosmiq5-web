@@ -252,6 +252,13 @@
     return { io, name: dev.name || "Shearwater", close() { try { dev.gatt.disconnect(); } catch (e) {} } };
   }
 
+  /** Who is on the other end: serial, firmware and model number. Three read-only requests, the same ones every download starts with. */
+  async function identify(io) {
+    const text = (b) => new TextDecoder().decode(b).replace(/\0+$/, "").trim();
+    const serial = text(await rdbi(io, ID.SERIAL)), firmware = text(await rdbi(io, ID.FIRMWARE)), model = (await rdbi(io, ID.MODEL))[0];
+    return { serial, firmware, model };
+  }
+
   /**
    * A test that shows what the browser can see, without downloading anything: pick the computer, connect, and report which services it
    * offers and whether the Shearwater data channel is there. Returns a short text (also fine to paste to someone helping).
@@ -273,6 +280,6 @@
     return { ok, text: lines.join(" \u00b7 ") };
   }
 
-  const api = { connect, probe, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
+  const api = { connect, probe, identify, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Shearwater = api;
 })(typeof self !== "undefined" ? self : this);

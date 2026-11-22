@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta name="color-scheme" content="light dark" />
+        <script src="/auth/theme.js"></script>
+        <script src="version.js"></script>
+        <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+        <title>Bluetooth lab</title>
+        <link rel="stylesheet" href="/auth/fonts.css" />
+        <link rel="stylesheet" href="/auth/theme.css" />
+        <style>
+            :root { --bg: #f8f9fa; --text: #212529; --font: "Geist", -apple-system, sans-serif; --mono: "Geist Mono", ui-monospace, Menlo, Consolas, monospace; }
+            * { box-sizing: border-box; }
+            body { font-family: var(--font); background: var(--bg); color: var(--text); margin: 0 auto; padding: 16px; max-width: 980px; }
+            h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 0 0 8px; } .sub { color: var(--tx-6c757d); margin: 0 0 14px; font-size: 14px; }
+            .card { background: var(--bg-fff); border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); }
+            .muted { color: var(--tx-6c757d); font-size: 13px; } a { color: var(--tx-1864ab); }
+            button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 10px 16px; min-height: 44px; background: var(--blue, #007bff); color: #fff; cursor: pointer; }
+            button.alt { background: var(--bg-6c757d); } button:disabled { opacity: .5; cursor: default; } .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--bd-e9ecef); vertical-align: top; word-break: break-word; } th { font-size: 12px; color: var(--tx-6c757d); border-top: 0; word-break: normal; white-space: nowrap; }
+            code, .mono { font-family: var(--mono); font-size: 12px; }
+            .ok { color: var(--tx-2b8a3e); font-weight: 600; } .bad { color: var(--tx-c92a2a); font-weight: 600; } .warn { color: var(--tx-d9480f); font-weight: 600; }
+            .likely { background: var(--bg-ebfbee); } .tag { font-size: 11px; font-weight: 700; background: var(--bg-2b8a3e); color: #fff; border-radius: 10px; padding: 2px 8px; }
+            .box { background: var(--bg-f1f3f5); border-radius: 8px; padding: 10px 12px; font-size: 13px; } .box ul { margin: 6px 0 0; padding-left: 20px; }
+            textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--bd-ced4da); border-radius: 8px; padding: 10px; background: var(--bg-fff); color: var(--text); }
+            input[type=text] { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; background: var(--bg-fff); color: var(--text); min-width: 280px; max-width: 100%; }
+            ul.tree { list-style: none; margin: 6px 0 0; padding: 0; } ul.tree li { padding: 6px 0; border-top: 1px solid var(--bd-e9ecef); } ul.tree ul { list-style: none; margin: 6px 0 0 14px; padding: 0; }
+            #log { max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; background: var(--bg-f1f3f5); border-radius: 8px; padding: 10px; }
+        </style>
+    </head>
+    <body>
+        <h1>Bluetooth lab</h1>
+        <p class="sub"><a href="/">&larr; Back to Dive Manager</a> &middot; A sandbox for finding out how a dive computer talks Bluetooth. It only <b>reads</b>: it never changes anything on the computer. Use Chrome or Edge (Android, Windows, Mac, Linux) or Bluefy on iPhone.</p>
+
+        <div class="card" id="secEnv">
+            <h2>1 &middot; Can this browser use Bluetooth?</h2>
+            <table id="envTable" aria-label="Browser checks"></table>
+            <div id="envHints" class="box" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" id="secScan">
+            <h2>2 &middot; Listen for what is advertising nearby</h2>
+            <p class="muted" style="margin:0 0 6px">Shows every Bluetooth Low Energy device the browser can hear, with its name, signal and what it announces. Switch Bluetooth on at the dive computer first, close Shearwater Cloud on your phone and computer, then press Start. <b>Look for a row with a green &ldquo;likely&rdquo; tag.</b> It needs one browser setting (explained below if it is missing).</p>
+            <div class="row"><button id="scanStart" type="button">Start listening (60 s)</button><button id="scanStop" type="button" class="alt" disabled>Stop</button><label class="muted"><input type="checkbox" id="scanNamed" /> only devices with a name</label><span id="scanState" class="muted"></span></div>
+            <div id="scanHelp" class="box" style="display:none"></div>
+            <div style="overflow-x:auto"><table id="scanTable" aria-label="Devices heard"><thead><tr><th>Name</th><th>Signal</th><th>Heard</th><th>Announces</th><th>Manufacturer data</th></tr></thead><tbody></tbody></table></div>
+            <p id="scanNone" class="muted" style="display:none">Nothing heard yet.</p>
+        </div>
+
+        <div class="card" id="secInspect">
+            <h2>3 &middot; Pick a device and look inside it</h2>
+            <p class="muted" style="margin:0 0 6px">Connects and lists the services and characteristics the device offers (the Bluetooth &ldquo;menu&rdquo; an app talks to). Reads the harmless ones (name, model, battery). Nothing is written.</p>
+            <div class="row"><input id="extraUuid" type="text" placeholder="optional: another service UUID to look for" aria-label="Another service UUID" autocomplete="off" /><button id="inspectBtn" type="button">Choose a device&hellip;</button><button id="inspectDisc" type="button" class="alt" disabled>Disconnect</button></div>
+            <div id="inspectState" class="muted"></div>
+            <ul id="tree" class="tree"></ul>
+        </div>
+
+        <div class="card" id="secShake">
+            <h2>4 &middot; Shearwater handshake (read-only)</h2>
+            <p class="muted" style="margin:0 0 6px">Chooses a Shearwater computer and asks it three questions: serial number, firmware and model. These are the same requests every download starts with. If this works, the download will work.</p>
+            <div class="row"><button id="shakeBtn" type="button">Try the handshake&hellip;</button><span id="shakeState" class="muted"></span></div>
+        </div>
+
+        <div class="card" id="secReport">
+            <h2>5 &middot; Report</h2>
+            <p class="muted" style="margin:0 0 6px">Everything above in one text, to copy or save and send to whoever is helping. <b>Look it over first:</b> it can contain the dive computer's serial number and the names of other Bluetooth devices around you.</p>
+            <label class="muted"><input type="checkbox" id="onlyLikely" checked /> in the report, list only devices that look like a dive computer (others are only counted)</label>
+            <div class="row"><button id="repCopy" type="button">Copy report</button><button id="repSave" type="button" class="alt">Save as a file</button><button id="repClear" type="button" class="alt">Clear</button><span id="repState" class="muted"></span></div>
+            <textarea id="report" readonly aria-label="Report"></textarea>
+            <h2 style="margin-top:12px">Log</h2><div id="log" role="log"></div>
+        </div>
+
+        <script src="shearwater.js"></script>
+        <script src="bluetooth-lab.js"></script>
+    </body>
+</html>
