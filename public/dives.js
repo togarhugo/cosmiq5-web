@@ -663,8 +663,6 @@ const Dives = (() => {
     const saved = loadYears(), open = openNow || new Set(saved || [years[0]]);
     const openMonthsNow = list.querySelector("details.mbox") ? new Set([...list.querySelectorAll("details.mbox[open]")].map((e) => e.dataset.month)) : null, savedMonths = loadOpen(MONTHS_KEY), openMonths = openMonthsNow || new Set(savedMonths || [recs[0].startedAt.slice(0, 7)]);   // the newest month starts open
 
-    const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
-    const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
     const rowHtml = (r) => {
       const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
@@ -673,9 +671,7 @@ const Dives = (() => {
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };
-    const hiddenN = [...extras.values()].reduce((n, x) => n + x.length, 0), sharedN = recs.filter((r) => r.sharedFrom).length;
-    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${hiddenN ? ` \u00b7 ${hiddenN} duplicate${hiddenN === 1 ? "" : "s"} from another computer left out` : ""}${sharedN ? ` \u00b7 ${sharedN} shared with you` : ""}` +
-      `${full !== recs.length ? ` \u00b7 ${full} with full depth profile` + (partial ? ` \u00b7 ${partial} partial` : "") + (summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : "") : ""}</p>`;    for (const y of years) {
+    let html = "";    for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       const tile = (v, label) => `<div><b>${v}</b><span>${label}</span></div>`;
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><span class="yname">${y}</span><span class="ystats">${tile(g.length, g.length === 1 ? "dive" : "dives")}${tile(fmtDur(secs), "time")}${tile(deepest.toFixed(1) + " m", "deepest")}</span><span class="chev" aria-hidden="true">\u25B8</span></summary><div class="ybody">` +

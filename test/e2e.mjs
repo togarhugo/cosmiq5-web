@@ -134,7 +134,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
       assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
       assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
-      assert.match(await page.locator("#diveList > p").first().innerText(), /^2 dives$/);      await page.locator("details.dive").last().locator("summary").click();
+      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
       const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
@@ -205,7 +205,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.click("#connectBtn");
     await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     assert.equal(await page.locator("details.dive").count(), 3);
-    assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
+    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
     const row = (n) => page.locator("details.dive", { has: page.locator(".dive-num", { hasText: new RegExp("^" + n + "$") }) });
     assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
     assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
@@ -615,7 +615,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/, "per-computer counts stay in the Import tab"); await openSource(page, "Cosmiq"); await page.waitForFunction(() => /Cosmiq\+ Gen 5/.test(document.querySelector("#devTabs button.active")?.textContent || ""), null, { timeout: 5000 }); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
     // ONE dive log: every dive once. 5 records, 1 of them the same dive as another -> 4 rows; the Peregrine record is the one shown (it is preferred over the Cosmiq+)
     await openSource(page, "Peregrine"); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 4, null, { timeout: 5000 });
-    assert.match(await page.locator("#navLog").innerText(), /Dive log \(4\)/, "the nav counts every dive once"); assert.match(await page.locator("#diveList > p").first().innerText(), /^4 dives . 1 duplicate from another computer left out$/);
+    assert.match(await page.locator("#navLog").innerText(), /Dive log \(4\)/, "the nav counts every dive once"); assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
     const rows = await diveRows(page);
     assert.equal(rows[0].num, "4"); assert.deepEqual(rows.map((r) => r.chips[0]).sort(), ["Cosmiq+", "Peregrine", "Peregrine", "Peregrine"], "three Peregrine rows and the Cosmiq+ dive that only it recorded: " + JSON.stringify(rows)); assert.equal(rows.filter((r) => r.chips[0] === "Cosmiq+").length, 1); assert.equal(rows.filter((r) => r.also).length, 1, "only the dive recorded twice says so");
     const merged = page.locator("#diveList details.dive", { has: page.locator(".badge.also") }); assert.equal(await merged.count(), 1, "one dive was recorded twice"); assert.match(await merged.locator("summary").innerText(), /Peregrine/); assert.match(await merged.locator(".badge.also").innerText(), /also on Cosmiq\+/); assert.equal(await merged.locator(".dive-num").innerText(), "1", "logbook number: your oldest dive is 1");
@@ -1417,7 +1417,7 @@ if (process.env.REAL_DB) {
     // her own Perdix is the record shown for the dive Togar also recorded (his Peregrine copy and her Garmin hide behind it); the dive only he has stays, marked as from him
     const rows = await diveRows(page);
     assert.deepEqual(rows[1].chips, ["Perdix"]); assert.equal(rows[1].also, "also on Garmin, Peregrine", "the dive on three computers: one row, hers shown"); assert.deepEqual(rows[0].chips, ["Peregrine", "from Togar"], "the dive only he has stays, marked as from him");
-    assert.match(await page.locator("#diveList > p").first().innerText(), /^2 dives . 2 duplicates from another computer left out . 1 shared with you$/); assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
     // the Import tab lists only HER computers: his Peregrine, which only exists as copies, is not one of them
     await page.click("#navImport"); assert.deepEqual((await page.locator("#devTabs button").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Shearwater Perdix \u00b7 1", "Garmin Descent \u00b7 1"], "shared dives do not add dive computers");
     await page.click("#navSummary"); await page.waitForFunction(() => /across 2 dives/.test(document.getElementById("sumCount").textContent), null, { timeout: 5000 });
