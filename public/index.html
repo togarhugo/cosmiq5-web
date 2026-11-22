@@ -1073,6 +1073,8 @@
                     <button id="diagSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save diagnostics</button>
                 </div>
                 <div id="diagMsg" class="muted"></div>
+                <details class="logwrap" style="margin-top:10px"><summary>Connection log <span class="muted">(what the app says while it talks to the Cosmiq+)</span></summary>
+                <div id="log">Waiting for connection...</div></details>
             </div>
             <div id="impGoLog" class="card" style="display:none"><span id="impGoLogText"></span> <button id="impGoLogBtn" class="btn-set" type="button" style="margin-left:8px">Open the dive log</button></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
@@ -1383,8 +1385,6 @@
             <a id="signOut" class="btn-main" href="/auth/logout" style="background:var(--bg-6c757d);text-align:center;text-decoration:none;display:block;margin-top:6px">Sign out</a>
         </div>
 
-        <details class="logwrap"><summary>Activity log</summary>
-        <div id="log">Waiting for connection...</div></details>
         </main>
         </div>
 
