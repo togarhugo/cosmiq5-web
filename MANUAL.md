@@ -5,7 +5,7 @@
 ## Contents
 1. [Getting started](#1-getting-started)
 2. [Finding your way around](#2-finding-your-way-around)
-3. [Summary](#3-summary)
+3. [Overview](#3-overview)
 4. [Connecting and syncing](#4-connecting-and-syncing)
 5. [Dive log and Import](#5-dive-log-and-import)
 6. [Dive locations](#6-dive-locations)
@@ -26,7 +26,7 @@
 | Android phone, Windows, Mac, Linux | **Chrome** or **Edge** |
 | iPhone / iPad | **Bluefy** (App Store). Safari and Chrome on iOS cannot use Bluetooth. |
 
-Any browser can **view** your saved dive log and Summary. Only the browsers above can **connect** to the dive computer.
+Any browser can **view** your saved dive log and Overview. Only the browsers above can **connect** to the dive computer.
 
 ### Signing in
 The first screen offers two ways in:
@@ -50,20 +50,20 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 ## 2. Finding your way around
 
 * **Your profile icon** opens **Account** (picture, password, DAN, regulator, API keys, help). On a phone it is at the top right; on a laptop it is **Account** at the bottom of the left sidebar.
-* **Four tabs**: **Summary**, **Dive log** (with your dive count), **Certificates** and **Device** (settings). On a phone they sit in a row under the title. On a laptop (window 1024 px or wider) they are a **sidebar on the left** with Connect & Sync, the connection status, the light/dark switch and Account; the content is wider (two columns on Summary, Device and Account).
+* **Five tabs**: **Overview**, **Dive log** (with your dive count), **Import**, **Certificates** and **Device** (settings). On a phone they sit in a row under the title. On a laptop (window 1024 px or wider) they are a **sidebar on the left** with Connect & Sync, the connection status, the light/dark switch and Account; the content is wider (two columns on Overview, Device and Account).
 * The big blue **Connect & Sync** button is always at the top.
 * While syncing, a **progress banner with Cancel** appears on every tab.
 * A small green/amber/red **message at the bottom** confirms what just happened.
 
-* **Tab icons:** each tab has an icon above its name (a gauge for Summary, a notebook for Dive log, a watch for Device). They take the colour of the tab text, so they follow the light / dark theme.
+* **Tab icons:** each tab has an icon above its name (a dashboard for Overview, a book for Dive log, a tray with an arrow for Import, an ID card for Certificates, a watch for Device). They take the colour of the tab text, so they follow the light / dark theme.
 * **Fonts:** the app uses **Geist** for text and **Geist Mono** for numbers such as dive numbers, depths and times. Both fonts are part of the app (nothing is loaded from another website) and are under the SIL Open Font License.
 * **Light / dark switch** at the top left of every page (also on the sign-in pages): **left = light, right = dark**. Until you use it, the app follows your phone's own light or dark setting; once you choose, your choice is remembered on that device. The map background and the dive charts follow the theme too.
 
 ---
 
-## 3. Summary
+## 3. Overview
 
-The Summary opens first and shows, from top to bottom:
+The Overview opens first and shows, from top to bottom:
 
 1. **You**: your name, your **latest certification**, and your **DAN membership** with how long it is valid.
    * Latest certification = the one you made main with **Make main** (Certificates tab). If you never chose one, it is the one with the **newest date earned**; certifications without a date only count if none of them has a date. Tip: add the date to each certification, or just pick the right one yourself.
@@ -98,7 +98,7 @@ Good to know:
 Two separate tabs: the **Dive log** only lists your dives; **Import** is where dives come in.
 
 ### Dive log: one list, every dive once
-* **One list for all your dive computers.** A dive that two computers recorded (you wore both) appears **once**, with the record of the computer ranked first in this list: **Peregrine, Perdix, Garmin, Cosmiq+**. So for you: a Peregrine dive is shown instead of the Cosmiq+ copy; for someone with a Perdix and a Garmin the Perdix record is shown. The row says which computer it is (a small chip) and which others recorded it (*also on Cosmiq+*); the header says how many duplicates were left out. The same rule decides the Summary, the regulator counter and the map.
+* **One list for all your dive computers.** A dive that two computers recorded (you wore both) appears **once**, with the record of the computer ranked first in this list: **Peregrine, Perdix, Garmin, Cosmiq+**. So for you: a Peregrine dive is shown instead of the Cosmiq+ copy; for someone with a Perdix and a Garmin the Perdix record is shown. The row says which computer it is (a small chip) and which others recorded it (*also on Cosmiq+*); the header says how many duplicates were left out. The same rule decides the Overview, the regulator counter and the map.
 * **Places are kept.** A place entered on a hidden record is shown on the record that is displayed, and a place you enter applies to both.
 * **Numbers.** The number in the box is your logbook number: 1 is your oldest dive. A computer's own number is in the dive's details.
 * **Dives from another person** (see *Share dives* in Account) appear in the same list with a chip *from <name>*. A dive both of you recorded shows **your own computer's** record, never the shared copy.
@@ -154,7 +154,7 @@ Garmin does **not** let other apps read your dives straight from the watch or fr
    * **From the watch:** cable to a computer, copy the files from `Garmin/Activity`. The Descent Mk1 shows as a drive; the Mk2, Mk2i and Mk3 do not on a Mac (use the free OpenMTP or Android File Transfer there; Windows copies them directly).
 2. **Drag the file or ZIP into the box** (or tap it to choose). Several files at once are fine.
 3. Each dive appears in the Garmin Descent log with the **watch's own dive number**, depth, duration, minimum temperature, the gas (O₂ %) and the depth chart. Scuba, **gauge** and **apnea (freedive)** sessions are told apart.
-Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Summary and the regulator counter, using the first computer's record.
+Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Overview and the regulator counter, using the first computer's record.
 The time shown is the watch's clock (the file stores a UTC time and the watch's offset). If a file has no offset the app says so and shows UTC. This import reads Garmin's published file format and is **beta**: it was built and tested with files made to that format and has not yet been compared with every watch, so check your first import against the watch. A freedive session is imported as one dive per file.
 
 ### Shearwater Bluetooth download (Peregrine, Perdix 2): the main way
@@ -207,11 +207,11 @@ Every dive location you type (for example *Tulamben*) is a **place**. A place ge
 
 **Scuba or freedive on the map.** Once you have freedives, a switch above the map shows **All / Scuba / Freedive** (with the number of places for each). Pins are **blue** for scuba, **green** for freedive and **split blue / green** where you did both (the split only says "both"; it is not to scale). The number on a pin is its dive count for what you are showing. Tap a pin for a line per kind: dives and dive time. The choice is remembered; with no freedives the switch is hidden.
 
-**The Summary map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*. Once every place is on the map, that list is hidden to keep the page clean: tap **Edit places** under the map to show it (and **Done editing places** to hide it again).
+**The Overview map** ("Where you have dived") shows a **red pin for every place** you have been to, with the number of dives on it. Tap a pin to see the number of dives and the months you dived there, and **Move pin** to correct it. Under the map, **All places** lists every place with *Set on map / Move* and *Remove pin*. Once every place is on the map, that list is hidden to keep the page clean: tap **Edit places** under the map to show it (and **Done editing places** to hide it again).
 
-**The location box searches the map while you type.** In every box where you enter a dive location (the question after a sync, a date, a month, one dive), type at least three letters: a list of matching places from the map appears right under the box, with the region next to each name (for example *Bunaken · North Sulawesi, Indonesia*). Tap one (or use the arrow keys and Enter): the box takes that name and turns **green**, and when you save, the place is **added to your map with that exact position** and shows on the Summary at once. The message says which places were added. You can still type any name you like: a place you did not pick from the list goes to the map search described below. Edit the text after picking and it counts as a different place again.
+**The location box searches the map while you type.** In every box where you enter a dive location (the question after a sync, a date, a month, one dive), type at least three letters: a list of matching places from the map appears right under the box, with the region next to each name (for example *Bunaken · North Sulawesi, Indonesia*). Tap one (or use the arrow keys and Enter): the box takes that name and turns **green**, and when you save, the place is **added to your map with that exact position** and shows on the Overview at once. The message says which places were added. You can still type any name you like: a place you did not pick from the list goes to the map search described below. Edit the text after picking and it counts as a different place again.
 * The lookup waits half a second after your last key, so fast typing makes one request. It needs internet; without it you simply type as before.
-* Not wanted? Tap **Turn off** at the bottom of the list, or untick *Suggest places from the map while I type a location* under **All places** on the Summary (tap **Edit places** first if the list is hidden).
+* Not wanted? Tap **Turn off** at the bottom of the list, or untick *Suggest places from the map while I type a location* under **All places** on the Overview (tap **Edit places** first if the list is hidden).
 * The text you type (3 letters or more) is sent to **Photon** (photon.komoot.io, a free service that searches OpenStreetMap data and is made for suggestions while typing). Nothing else is sent. It is a shared free service: if it is busy the list shows a message and you carry on typing.
 
 **Entering a location opens the map.** When you save a location in the dive log that is **not on the map yet** (after a sync, for a date, for a month, or for one dive), the map search opens for it straight away, with the name already searched. Tap the right result (or tap the map), then **Save pin**. Several new places are done one after another; **Skip this one** / **Skip all** leave them for later. A location that is already on the map never asks again. If you would rather do it later, untick **Open the map when I enter a new location** at the bottom of the map screen: the orange buttons and the bar in the dive log remain.
@@ -254,7 +254,7 @@ The clock cannot be read back, so its message is *"Clock set to HH:MM:SS (phone 
 Tap your **profile icon**. Sections open and close with a tap.
 
 ### Profile picture
-**Upload picture**: pick a photo, it is cropped to a square and stored in your account. **Remove** deletes it. Below it, **Your name** (shown on the Summary; your Google name is suggested, tap **Save** to keep a name of your own).
+**Upload picture**: pick a photo, it is cropped to a square and stored in your account. **Remove** deletes it. Below it, **Your name** (shown on the Overview; your Google name is suggested, tap **Save** to keep a name of your own).
 
 ### Change password
 * **Email login off**: *Set up email login* (see [section 1](#turning-on-email-sign-in-first-time)).
@@ -269,7 +269,7 @@ The **Certificates** tab keeps a scan or photo of each certification card for di
 1. Tap **Add a certificate**. Enter a **name** (e.g. *PADI Advanced Open Water*), optionally the **certificate number** and the **date certified**.
 2. **Choose file** (PDF, JPEG, PNG or WebP) → **Upload**. Photos are shrunk automatically; a PDF must be **under 1 MB** (otherwise use a photo).
 3. An opened card has **Make main**, **Full size** (**Open PDF** for a PDF), **Save**, **Share** (where your browser supports it) and **Delete** (tap twice). A PDF cannot be drawn inside a card on a phone, so it shows as a coloured card with a PDF mark; a photo of the card looks best.
-Up to 12 files. The **main** certification is on top with a green ★ Main tag and is the one the Summary shows: open another card and tap **Make main** to choose it. **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic. Tapping the certification on the Summary opens this tab.
+Up to 12 files. The **main** certification is on top with a green ★ Main tag and is the one the Overview shows: open another card and tap **Make main** to choose it. **Use the newest by date instead** goes back to automatic. If you delete the one you chose, it goes back to automatic. Tapping the certification on the Overview opens this tab.
 
 ### DAN insurance
 * **DAN member number** (required), **plan** (optional, e.g. *DAN Master*) and **valid until**. Tap **Save DAN details**. A badge next to the section title shows *Valid*, *N days left* or *Expired*.
@@ -324,7 +324,7 @@ The menu itself shows your own address and a ready-to-copy example. In short:
 
 **Good to know**
 * Depth is in metres, temperature in °C, durations in seconds. `startedAt` is the dive computer's own clock (no time zone).
-* A dive recorded by **both** computers appears **once per computer** (see `device`); the app's Summary counts it once, the API leaves that choice to your tool.
+* A dive recorded by **both** computers appears **once per computer** (see `device`); the app's Overview counts it once, the API leaves that choice to your tool.
 * A **Cosmiq+** dive has `samples` only when the depth profile stored for it really belongs to it (`profileStatus`: `complete`, `partial` or `unavailable`). The app can recover some older profiles that the Cosmiq+ itself overwrote; the API does not, so a few old dives have `unavailable` there.
 * Treat a key like a password: do not post it online. If it leaks, **Revoke** it. If you remove your email from the list of allowed users, all your keys stop.
 * Please keep it to a few requests per second: the app runs on free hosting.
@@ -340,7 +340,7 @@ The menu itself shows your own address and a ready-to-copy example. In short:
 * **Time since last dive** is counted from the end of the previous dive to the start of this one.
 * **Profile memory is a ring.** The Cosmiq+ keeps depth profiles in a fixed-size memory (about the last 128 dives) and overwrites the oldest. Dive Manager matches every profile to the dive it really belongs to, recovers dives the device itself cannot read under their own number, and marks overwritten ones *summary only*. **Sync after every trip**: each new dive overwrites an old profile on the device.
 * **Peregrine dives** come from the Shearwater Cloud file (or Bluetooth) you imported: values and depth samples are exactly what Shearwater Cloud wrote (the dive number is the Peregrine's own when the file has it, otherwise the order of your imported dives). From a Shearwater Cloud database the values are decoded from the dive computer's own records (depth, duration, temperature, first gas, depth samples) and the dive number is your Shearwater Cloud logbook number; from UDDF they are what Shearwater Cloud wrote.
-* **Two computers, one dive:** if you wore both and both logged the same dive, the Summary totals, the last dive and the regulator counter count it **once and use the Cosmiq+ record**. Both stay visible in their own log; the Peregrine copy is marked *also on Cosmiq+*, and the Summary says how many were counted once.
+* **Two computers, one dive:** if you wore both and both logged the same dive, the Overview totals, the last dive and the regulator counter count it **once and use the Cosmiq+ record**. Both stay visible in their own log; the Peregrine copy is marked *also on Cosmiq+*, and the Overview says how many were counted once.
   * The same dive is recognised when the two records **overlap in time** (the computers' clocks are often a few minutes apart) or when the clocks are **exactly one or two hours apart** (time zone or daylight saving) and the dive has the same length and depth. A dive on the Peregrine only is added.
   * Limits: this is matching by time, length and depth, so two real dives of the same size exactly 1-2 hours apart while one clock is also off by that much could be confused. Very short Peregrine records (under a minute, at the surface) are counted as dives like any other.
 * **The Cosmiq+ dive log has no GPS** or location information; locations are what you type.
