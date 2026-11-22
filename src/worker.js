@@ -113,7 +113,20 @@ export default {
       const { results } = await env.DB.prepare(
         "SELECT fingerprint, shared_from AS sharedFrom, device_mac AS deviceMac, started_at AS startedAt, mode, duration_sec AS durationSec, max_depth_m AS maxDepthM, o2_percent AS o2Percent, header_hex AS headerHex, profile_hex AS profileHex, location, device, extra FROM dives WHERE user_email = ? ORDER BY started_at DESC LIMIT 2000"
       ).bind(email).all();
-      return json({ dives: results });
+      const gone = await env.DB.prepare("SELECT fingerprint FROM deleted_dives WHERE user_email = ?").bind(email).all();
+      return json({ dives: results, deleted: gone.results.map((r) => r.fingerprint) });
+    }
+
+    // Delete dives from the signed-in user's own log. Only the fingerprints are remembered, so a sync, an import or a copy never brings them back.
+    if (url.pathname === "/api/dives/delete" && request.method === "POST") {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
+      const fps = Array.isArray(body.fingerprints) ? [...new Set(body.fingerprints)] : [];
+      if (!fps.length || fps.length > 100) return json({ error: "send 1 to 100 dives" }, 400);
+      if (!fps.every((f) => typeof f === "string" && /^[0-9a-f]{12}$/.test(f))) return json({ error: "invalid dive" }, 400);
+      const del = env.DB.prepare("DELETE FROM dives WHERE user_email = ? AND fingerprint = ?"), mark = env.DB.prepare("INSERT OR IGNORE INTO deleted_dives (user_email, fingerprint) VALUES (?, ?)");
+      const res = await env.DB.batch([...fps.map((f) => del.bind(email, f)), ...fps.map((f) => mark.bind(email, f))]);
+      return json({ deleted: res.slice(0, fps.length).reduce((n, r) => n + (r.meta.changes || 0), 0), remembered: fps.length });
     }
 
     if (url.pathname === "/api/dives" && request.method === "POST") {
@@ -124,11 +137,12 @@ export default {
       if (dives.length > 50) return json({ error: "max 50 dives per request" }, 413);
       if (!dives.every(validDive) || !dives.every((d) => cleanLocation(d.location) !== false)) return json({ error: "invalid dive record" }, 400);
       const stmt = env.DB.prepare(
-        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra) " +
+        "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM deleted_dives WHERE user_email = ? AND fingerprint = ?)"             // a dive that was deleted stays deleted
       );
       const res = await env.DB.batch(dives.map((d) => stmt.bind(email, d.fingerprint, d.deviceMac ?? null, d.startedAt,
         d.mode ?? null, d.durationSec ?? null, d.maxDepthM ?? null, d.o2Percent ?? null, d.headerHex || "", d.profileHex || "", cleanLocation(d.location),
-        d.device || "cosmiq", d.device && d.device !== "cosmiq" ? d.extra : null)));
+        d.device || "cosmiq", d.device && d.device !== "cosmiq" ? d.extra : null, email, d.fingerprint)));
       return json({ stored: res.reduce((n, r) => n + (r.meta.changes || 0), 0), received: dives.length });
     }
 

@@ -22,7 +22,8 @@ const Dives = (() => {
   const tx = async (mode, fn) => { const db = await openDb(); return new Promise((res, rej) => {
     const t = db.transaction(STORE, mode), s = t.objectStore(STORE); const out = fn(s);
     t.oncomplete = () => res(out.result); t.onerror = () => rej(t.error); }); };
-  const all = () => tx("readonly", (s) => s.getAll());
+  const allRaw = () => tx("readonly", (s) => s.getAll());                                  // includes the stubs of deleted dives (fingerprint only)
+  const all = async () => (await allRaw()).filter((r) => !r.deleted);
   /** Remove the dives another person shared with you from this device too (the account's copies were deleted on the server). */
   async function forgetShared(from) { const gone = (await all()).filter((r) => r.sharedFrom === from); for (const r of gone) await tx("readwrite", (s) => s.delete(r.fingerprint)); return gone.length; }
   const put = (rec) => tx("readwrite", (s) => s.put(rec));
@@ -57,16 +58,19 @@ const Dives = (() => {
     try {
       const r = await fetch("/api/dives", { credentials: "same-origin", redirect: "error" });
       if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
-      const { dives } = await r.json();
-      const local = new Map((await all()).map((d) => [d.fingerprint, d]));
+      const { dives, deleted } = await r.json();
+      const local = new Map((await allRaw()).map((d) => [d.fingerprint, d]));
+      for (const fp of deleted || []) { const mine = local.get(fp); if (!mine || !mine.deleted) { await put({ fingerprint: fp, deleted: true, delSynced: true }); local.set(fp, { deleted: true }); } }   // deleted on another device
       for (const d of dives) {
         const mine = local.get(d.fingerprint);
+        if (mine && mine.deleted) continue;                                                  // deleted here: stays deleted even if the cloud still holds it for a moment
         if (!mine) await put(d.device && d.device !== "cosmiq" ? fromCloudImport(d) : { ...toRecord(d), uploaded: true });
         else if (!mine.locDirty && (mine.location || "") !== (d.location || "")) await put({ ...mine, location: d.location || undefined });   // edited on another device
       }
       cloudState = "ok";
     } catch (e) { cloudState = failState(e); }
     await pushLocations();                                                            // retry edits that could not be sent earlier
+    await pushDeletes();
     render();
   }
 
@@ -110,6 +114,27 @@ const Dives = (() => {
     } catch (e) { cloudState = failState(e); }
     return dirty.length;
   }
+  /** Tell the cloud about dives deleted here (a deletion made offline is sent the next time). */
+  async function pushDeletes() {
+    const stubs = (await allRaw()).filter((r) => r.deleted && !r.delSynced);
+    if (!stubs.length) return 0;
+    try {
+      for (let i = 0; i < stubs.length; i += 100) {
+        const batch = stubs.slice(i, i + 100);
+        const r = await fetch("/api/dives/delete", { method: "POST", credentials: "same-origin", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ fingerprints: batch.map((d) => d.fingerprint) }) });
+        if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
+        for (const d of batch) await put({ ...d, delSynced: true });
+      }
+      cloudState = "ok";
+    } catch (e) { cloudState = failState(e); }
+    return stubs.length;
+  }
+  /** Delete dives (the one shown and the copies other computers recorded of it). Only the fingerprints are kept, so a sync or an import does not bring them back. */
+  async function deleteDives(fps) {
+    for (const fp of fps) await put({ fingerprint: fp, deleted: true, delSynced: false });
+    await pushDeletes(); render();
+    return cloudState === "ok";
+  }
   async function cloudPush() {
     const pending = (await all()).filter((d) => !d.uploaded);
     let stored = 0;
@@ -137,7 +162,7 @@ const Dives = (() => {
     busy = true; setBusy(true); showBanner(true); { const g = $("impGoLog"); if (g) g.style.display = "none"; }
     let saved = 0, info = {}; const savedRecs = [];
     try {
-      const known = new Set((await all()).map((d) => d.fingerprint));
+      const known = new Set((await allRaw()).map((d) => d.fingerprint));
       let lastRender = 0;
       const res = await P.readDives(io, known, (m, p) => progress(m, p), async (raw, r) => {
         const rec = toRecord(raw, r.mac); await put(rec); savedRecs.push(rec); saved++;       // saved the moment it arrives
@@ -171,7 +196,7 @@ const Dives = (() => {
     const out = $("impMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : "var(--tx-2b8a3e)"; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
     busy = true; say2("Reading\u2026"); { const g = $("impGoLog"); if (g) g.style.display = "none"; }
-    const fresh = [], seen = new Set((await all()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0, gNotDive = 0, gUtc = 0; const problems = [];
+    const fresh = [], seen = new Set((await allRaw()).map((d) => d.fingerprint)); let already = 0, skipped = 0, found = 0, gNotDive = 0, gUtc = 0; const problems = [];
     try {
       for (const f of files) {
         if (f.size > 400_000_000) { problems.push(`${f.name}: too large (${Math.round(f.size / 1e6)} MB, limit 400 MB)`); continue; }
@@ -232,7 +257,7 @@ const Dives = (() => {
     if (busy) { say2("Wait for the running sync to finish first.", true); L.end(false, "Another sync was running."); return; }
     busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0"; { const g = $("impGoLog"); if (g) g.style.display = "none"; }
     const fp = (startedAt) => window.DiveImport.fingerprint(device + "|" + startedAt.slice(0, 16));
-    const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0, ended = false;
+    const seen = new Set((await allRaw()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0, ended = false;
     const trace = (l) => { if (typeof diag === "function") diag("PG " + l); L.trace(l); };
     try {
       say2("Choose your " + model + " in the list\u2026"); conn = await window.Shearwater.connect(trace);
@@ -408,7 +433,7 @@ const Dives = (() => {
     $("sumCards").style.display = sm.count ? "" : "none";
     if (!sm.count) return;
     $("sumLastDate").textContent = fmtDayLong(sm.last.date);
-    $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
+    $("sumLastSub").innerHTML = [esc(U.agoText(sm.last.daysAgo)), sm.last.location && U.PIN + " " + esc(sm.last.location)].filter(Boolean).join(" \u00b7 ");
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     const kc = $("sumLastKind"); kc.className = "kindchip kind-" + sm.last.kind; kc.textContent = KIND_LABEL[sm.last.kind];
     $("sumKinds").innerHTML = U.KINDS.filter((k) => k === "scuba" || sm.byKind[k].count).map((k) => `<div class="kindrow"><span class="kindchip kind-${k}">${KIND_LABEL[k]}</span><b>${U.durText(sm.byKind[k].sec)}</b><span class="muted">${sm.byKind[k].count} dive${sm.byKind[k].count === 1 ? "" : "s"}</span></div>`).join("");
@@ -449,7 +474,7 @@ const Dives = (() => {
   }
 
   // ---------- locations: the question after a sync, the banner, date headers, per-dive field ----------
-  const locEditor = (rec) => `<div class="loc1"><span aria-hidden="true">\ud83d\udccd</span><input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
+  const locEditor = (rec) => `<div class="loc1">${U.PIN}<input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
   async function fillSuggestions() { const known = U.knownLocations(await all()); $("locList").innerHTML = known.map((k) => `<option value="${esc(k)}">`).join(""); return known; }
 
   /** Ask for the area of each date among `targets`. One row per date; "same as above" copies the row before it. */
@@ -593,6 +618,20 @@ const Dives = (() => {
         span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:var(--bg-6c757d)" aria-label="Cancel">\u2715</button>`;
         head.replaceWith(span); span.querySelector("input").focus(); return;
       }
+      const dask = e.target.closest(".del-ask");
+      if (dask) {                                                                // ask before deleting: the dive is gone for good
+        const row = dask.closest(".del-row"), n = row.dataset.fps.split(",").length - 1;
+        row.innerHTML = `<div class="del-confirm" role="alertdialog" aria-label="Confirm delete"><b>Delete dive${row.dataset.num ? " " + esc(row.dataset.num) : ""}?</b>` +
+          `<p>${esc(row.dataset.what)}</p><p>${n ? `The copy${n === 1 ? "" : "ies"} of this dive from another computer (${esc(row.dataset.copies)}) ${n === 1 ? "is" : "are"} deleted too. ` : ""}This cannot be undone, and the dive will not come back when you sync or import again. Copies on other people's accounts are not touched.</p>` +
+          `<div class="row" style="margin:0"><button class="btn-set del-yes" type="button">Delete dive</button><button class="btn-set del-no" type="button" style="background:var(--bg-6c757d)">Keep it</button></div></div>`;
+        row.querySelector(".del-no").focus(); return;
+      }
+      if (e.target.closest(".del-no")) { const row = e.target.closest(".del-row"); row.innerHTML = `<button class="del-ask" type="button">Delete this dive\u2026</button>`; return; }
+      const dyes = e.target.closest(".del-yes");
+      if (dyes) {
+        const row = dyes.closest(".del-row"), fps = row.dataset.fps.split(","); dyes.disabled = true;
+        const ok = await deleteDives(fps); say(ok ? (fps.length === 1 ? "Dive deleted" : `Dive deleted (and ${fps.length - 1} cop${fps.length === 2 ? "y" : "ies"} from other computers)`) : "Dive deleted on this device; it will be removed from your account when the connection is back", ok ? "ok" : "warn"); return;
+      }
       const mset = e.target.closest(".mh-set");
       if (mset) {                                                                // bulk: one place for every dive of the month
         await fillSuggestions();
@@ -663,8 +702,6 @@ const Dives = (() => {
     const saved = loadYears(), open = openNow || new Set(saved || [years[0]]);
     const openMonthsNow = list.querySelector("details.mbox") ? new Set([...list.querySelectorAll("details.mbox[open]")].map((e) => e.dataset.month)) : null, savedMonths = loadOpen(MONTHS_KEY), openMonths = openMonthsNow || new Set(savedMonths || [recs[0].startedAt.slice(0, 7)]);   // the newest month starts open
 
-    const full = recs.filter((r) => resolved[r.fingerprint].status === "ok").length;
-    const summaryOnly = recs.filter((r) => ["overwritten", "empty"].includes(resolved[r.fingerprint].status)).length, partial = recs.length - full - summaryOnly;
     const rowHtml = (r) => {
       const st = resolved[r.fingerprint].status, num = numbers.get(r.fingerprint);
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
@@ -673,19 +710,17 @@ const Dives = (() => {
         <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
         <div class="dive-body"></div></details>`;
     };
-    const hiddenN = [...extras.values()].reduce((n, x) => n + x.length, 0), sharedN = recs.filter((r) => r.sharedFrom).length;
-    let html = `<p class="muted" style="margin:0 0 8px">${recs.length} dive${recs.length === 1 ? "" : "s"}${hiddenN ? ` \u00b7 ${hiddenN} duplicate${hiddenN === 1 ? "" : "s"} from another computer left out` : ""}${sharedN ? ` \u00b7 ${sharedN} shared with you` : ""}` +
-      `${full !== recs.length ? ` \u00b7 ${full} with full depth profile` + (partial ? ` \u00b7 ${partial} partial` : "") + (summaryOnly ? ` \u00b7 ${summaryOnly} summary only` : "") : ""}</p>`;    for (const y of years) {
+    let html = "";    for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
       const tile = (v, label) => `<div><b>${v}</b><span>${label}</span></div>`;
       html += `<details class="year" data-year="${y}"${open.has(y) ? " open" : ""}><summary><span class="yname">${y}</span><span class="ystats">${tile(g.length, g.length === 1 ? "dive" : "dives")}${tile(fmtDur(secs), "time")}${tile(deepest.toFixed(1) + " m", "deepest")}</span><span class="chev" aria-hidden="true">\u25B8</span></summary><div class="ybody">` +
         U.groupByMonth(g).map(({ month, recs: mrs }) => {
           const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))], msecs = mrs.reduce((a, r) => a + r.durationSec, 0);
           const head = `<summary class="monthhead" data-month="${esc(month)}"><span class="mh-name"><span class="mh-chev" aria-hidden="true">\u25B8</span>${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}</span><span class="mh-stat">${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(msecs)} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m</span>` +
-            `<span class="mh-place">${names.length ? "\ud83d\udccd " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span></summary>`;
+            `<span class="mh-place">${names.length ? U.PIN + " " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span></summary>`;
           return `<details class="mbox" data-month="${esc(month)}"${openMonths.has(month) ? " open" : ""}>` + head + `<div class="mbody"><div class="mh-actions"><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button></div>` + U.groupByDate(mrs).map(({ date, recs: rs }) => {
             const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
-            return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
+            return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>${U.PIN} ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
           }).join("") + `</div></details>`;
         }).join("") + `</div></details>`;
     }
@@ -701,6 +736,9 @@ const Dives = (() => {
       const rec = recs.find((r) => r.fingerprint === el.dataset.fp);
       try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null, numbers.get(rec.fingerprint)); el.dataset.done = 1; }
       catch (e) { el.querySelector(".dive-body").textContent = "Cannot parse this dive: " + e.message; }
+      const copies = (extras.get(rec.fingerprint) || []).map((x) => x.fingerprint), names = (extras.get(rec.fingerprint) || []).map((x) => (U.DEVICES.find((d) => d.id === U.deviceOf(x)) || { short: U.deviceOf(x) }).short);
+      const row = document.createElement("div"); row.className = "del-row"; row.dataset.fps = [rec.fingerprint, ...copies].join(","); row.dataset.what = `${fmtDate(rec.startedAt)} \u00b7 ${rec.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(rec.durationSec)}`; row.dataset.num = numbers.get(rec.fingerprint) || ""; row.dataset.copies = [...new Set(names)].join(", ");
+      row.innerHTML = `<button class="del-ask" type="button">Delete this dive\u2026</button>`; el.querySelector(".dive-body").appendChild(row);
     }));
     list.querySelectorAll("details.dive").forEach((el) => { if (openDives.has(el.dataset.fp)) el.open = true; });     // keep what you had open
   }
@@ -732,5 +770,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { claimDevice, forgetShared, syncFromDevice, syncPeregrine, probeShearwater, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { claimDevice, forgetShared, syncFromDevice, syncPeregrine, probeShearwater, importFiles, deleteDives, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();

@@ -344,6 +344,7 @@
             #locList { display: none; }
             .datehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 2px 6px; flex-wrap: wrap; }
             .dh-date { font-size: 13px; font-weight: 700; color: var(--tx-495057); }
+            svg.pin { width: 1.05em; height: 1.05em; vertical-align: -.17em; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } #locSuggest .sg svg.pin { margin-top: 2px; color: var(--tx-868e96); } .loc1 svg.pin { width: 20px; height: 20px; color: var(--tx-868e96); }
             .dh-loc { background: var(--bg-e7f5ff); color: var(--tx-1864ab); border-radius: 16px; padding: 6px 12px; font-size: 13px; min-height: 36px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .dh-loc.empty { background: var(--bg-f1f3f5); color: var(--tx-868e96); font-weight: 500; }
             .dh-edit { display: flex; gap: 6px; flex: 1; justify-content: flex-end; }
@@ -395,6 +396,8 @@
             .monthhead { list-style: none; cursor: pointer; display: flex; align-items: baseline; justify-content: space-between; gap: 2px 8px; flex-wrap: wrap; padding: 10px 12px; min-height: 44px; } .monthhead::-webkit-details-marker { display: none; }
             .mh-chev { display: inline-block; width: 16px; color: var(--tx-6c757d); transition: transform .15s; } details.mbox[open] .mh-chev { transform: rotate(90deg); }
             .mh-stat { font-size: 13px; color: var(--tx-6c757d); } .mh-place { flex: 1 1 100%; font-size: 12px; color: var(--tx-1864ab); padding-left: 16px; }
+            .del-row { margin-top: 12px; padding-top: 4px; border-top: 1px dashed var(--bd-ced4da); } .del-ask { background: none; color: var(--tx-c92a2a); font-size: 14px; min-height: 44px; padding: 0 2px; text-decoration: underline; }
+            .del-confirm { border: 1px solid var(--bd-c92a2a); background: var(--bg-fff5f5); border-radius: 10px; padding: 12px; margin-top: 8px; } .del-confirm p { margin: 6px 0; font-size: 13px; } .del-confirm .del-yes { background: var(--bg-c92a2a); }
             .mbody { padding: 0 12px 6px; border-top: 1px dashed var(--bd-ced4da); } .mh-actions { padding-top: 4px; }
             .mh-name { font-size: 15px; font-weight: 700; } .mh-set { background: none; color: var(--tx-1864ab); font-size: 13px; min-height: 36px; text-decoration: underline; padding: 0 4px; }
             .mh-edit { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; } .mh-edit input[type=text] { padding: 10px; border: 1px solid var(--bd-ced4da); border-radius: 8px; font-size: 16px; }
@@ -637,7 +640,8 @@
                 <div id="mapLegend" class="maplegend" aria-hidden="true"><span><i class="dot kind-scuba-dot"></i>Scuba</span><span><i class="dot kind-freedive-dot"></i>Freedive</span><span><i class="dot kind-both-dot"></i>Both</span></div>
                 <div id="mapMsg" class="muted"></div>
                 <div id="mapUnplaced"></div>
-                <details class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
+                <div id="mapEditRow" style="display:none;margin-top:4px"><button id="mapEdit" class="linkbtn" type="button">Edit places</button></div>
+                <details id="placeDetails" class="logwrap" style="margin-top:8px"><summary>All places</summary><label class="opt" style="min-height:40px"><input type="checkbox" id="sugOn" checked /> Suggest places from the map while I type a location</label><div id="placeList"></div></details>
             </div>
             <div id="sumCards" style="display:none">
                 <div class="card sum" onclick="showView('log')" role="button" tabindex="0">

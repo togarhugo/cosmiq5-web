@@ -76,7 +76,9 @@ const PlacesUI = (() => {
     if (!stats.length) return;
     const onMap = stats.length - missing.length;                                       // every place that has a position, whatever the filter shows
     $("mapMsg").textContent = `${stats.length} place${stats.length === 1 ? "" : "s"} · ${onMap} on the map` + (missing.length ? ` · ${missing.length} still to place` : "") + (kindFilter !== "all" ? ` · showing ${kindFilter} only` : "");
-    $("mapUnplaced").innerHTML = missing.length ? missing.map((m) => `<button type="button" class="chip" data-key="${esc(m.key)}">📍 ${esc(m.name)} <span class="muted">${m.count}</span> ›</button>`).join("") : "";
+    const det = $("placeDetails"), settled = !missing.length;                          // every place is on the map: the list of places is out of the way until you ask to edit
+    det.style.display = settled && !editing ? "none" : ""; $("mapEditRow").style.display = settled ? "" : "none"; $("mapEdit").textContent = editing ? "Done editing places" : "Edit places"; if (!settled) editing = false;
+    $("mapUnplaced").innerHTML = missing.length ? missing.map((m) => `<button type="button" class="chip" data-key="${esc(m.key)}">${U.PIN} ${esc(m.name)} <span class="muted">${m.count}</span> ›</button>`).join("") : "";
     $("placeList").innerHTML = stats.map((s) => { const has = !!P.get(s.name);
       return `<div class="place-row"><span><b>${esc(s.name)}</b> <span class="muted">${s.count} dive${s.count === 1 ? "" : "s"}</span></span><span class="row" style="margin:0;gap:6px"><button type="button" class="btn-set pl-set" data-key="${esc(s.key)}">${has ? "Move" : "Set on map"}</button>${has ? `<button type="button" class="btn-set pl-del" data-key="${esc(s.key)}" style="background:var(--bg-6c757d)">Remove pin</button>` : ""}</span></div>`; }).join("");
     if (!map && hasMap() && card.offsetParent !== null) { map = newMap($("sumMap")); layer = L.layerGroup().addTo(map); }
@@ -85,7 +87,7 @@ const PlacesUI = (() => {
   }
   /** The Summary tab was opened: the map needs a size, and it is created here the first time. */
   function shown() { if ($("mapCard") && $("mapCard").style.display !== "none") { render(lastRecs()); if (map) { setTimeout(() => { map.invalidateSize(); sig = ""; draw(); }, 50); } } }
-  let recsNow = []; const lastRecs = () => recsNow;
+  let recsNow = [], editing = false; const lastRecs = () => recsNow;
   function renderFrom(recs) { recsNow = recs; render(recs); }
 
   // ---------- the picker: search, tap, drag, save ----------
@@ -148,7 +150,7 @@ const PlacesUI = (() => {
   function sPlace() { if (!sInput || !box || box.hidden) return; const r = sInput.getBoundingClientRect(); box.style.left = Math.max(4, r.left) + "px"; box.style.top = r.bottom + 3 + "px"; box.style.width = Math.min(r.width, window.innerWidth - 8) + "px"; }
   function sHide() { if (box) box.hidden = true; sItems = []; sHi = -1; clearTimeout(sTimer); sSeq++; P.cancelSuggest(); }
   function sRender(note) {
-    sBox(); box.innerHTML = sItems.map((it, i) => `<button type="button" role="option" class="sg${i === sHi ? " hi" : ""}" data-i="${i}"><span aria-hidden="true">\ud83d\udccd</span><span><b>${esc(it.name)}</b>${it.region ? `<span class="muted">${esc(it.region)}</span>` : ""}</span></button>`).join("") +
+    sBox(); box.innerHTML = sItems.map((it, i) => `<button type="button" role="option" class="sg${i === sHi ? " hi" : ""}" data-i="${i}">${U.PIN}<span><b>${esc(it.name)}</b>${it.region ? `<span class="muted">${esc(it.region)}</span>` : ""}</span></button>`).join("") +
       (note ? `<div class="sg-note">${esc(note)}</div>` : "") + `<div class="sg-foot"><span>Map suggestions &middot; &copy; OpenStreetMap</span><button type="button" class="sg-off">Turn off</button></div>`;
     box.hidden = false; sPlace();
   }
@@ -203,6 +205,7 @@ const PlacesUI = (() => {
     const byKey = (k) => stats.find((s) => s.key === k);
     $("mapUnplaced").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; const first = byKey(b.dataset.key); open([first.name, ...missing.filter((m) => m.key !== first.key).map((m) => m.name)]); });
     $("placeBannerBtn").addEventListener("click", () => open(missing.map((m) => m.name)));
+    $("mapEdit").addEventListener("click", () => { editing = !editing; render(lastRecs()); if (editing) { $("placeDetails").open = true; $("placeDetails").scrollIntoView({ block: "nearest" }); } else $("placeDetails").open = false; });
     $("placeList").addEventListener("click", async (e) => {
       const set = e.target.closest(".pl-set"), del = e.target.closest(".pl-del");
       if (set) open([byKey(set.dataset.key).name]);

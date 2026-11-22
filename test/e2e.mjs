@@ -134,7 +134,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
       assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
       assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
-      assert.match(await page.locator("#diveList > p").first().innerText(), /^2 dives$/);      await page.locator("details.dive").last().locator("summary").click();
+      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
       const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
@@ -205,7 +205,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.click("#connectBtn");
     await page.waitForFunction(() => /Dive sync done: 3 on device, 3 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     assert.equal(await page.locator("details.dive").count(), 3);
-    assert.match(await page.locator("#diveList > p").first().innerText(), /3 dives . 2 with full depth profile . 1 summary only/);
+    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
     const row = (n) => page.locator("details.dive", { has: page.locator(".dive-num", { hasText: new RegExp("^" + n + "$") }) });
     assert.match(await row(1).innerText(), /summary only/i, "dive #1: its profile was overwritten by dive #3");
     assert.equal(await row(3).locator(".badge").count(), 0, "dive #3 has its own profile (recovered from the wrapped slot)");
@@ -213,7 +213,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
-    assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
+    assert.equal(await row(1).locator("svg:not(.pin)").count(), 0, "no chart is drawn from another dive's bytes");
     console.log("PASS wrapped profile memory");
   } catch (e) {
     failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
@@ -308,7 +308,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await page.inputValue("#locIn1"), "  Komodo ", "same as above copies the value");
     await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
     assert.ok(!(await page.locator("#locPrompt").isVisible()), "question closed");
-    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    assert.deepEqual(await chips(), ["Komodo", "Komodo"]);
     await until(() => locCalls.length >= 1, "the location update to reach the cloud");
     assert.equal(locCalls.length, 1); assert.deepEqual(locCalls[0].map((i) => i.location), ["Komodo", "Komodo"]); assert.equal(locCalls[0].length, 2);
     assert.ok(uploaded.every((d) => /^[0-9a-f]{12}$/.test(d.fingerprint)), "dives were uploaded before their location");
@@ -319,7 +319,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await page.locator("#sumHours").innerText(), "0 h 42 min"); assert.match(await page.locator("#sumCount").innerText(), /across 2 dives/);
     // 3. it survives a reload (stored on the phone)
     await page.reload(); await page.click("#navLog"); await page.waitForSelector(".dh-loc");
-    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    assert.deepEqual(await chips(), ["Komodo", "Komodo"]);
     // 4. change the place of one date from its header; a known place is always written with its existing spelling
     await page.locator(".dh-loc").last().tap(); await page.waitForSelector(".dh-edit input");
     assert.ok(await page.locator("#locList option[value='Komodo']").count(), "known places are suggested");
@@ -327,7 +327,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.fill(".dh-edit input", "Banda"); await page.evaluate(() => Dives.render());
     assert.equal(await page.inputValue(".dh-edit input"), "Banda", "typing is not interrupted by a refresh");
     await page.locator(".dh-save").tap(); await toastIs(/Location saved/); await until(() => locCalls.length >= 2, "the date edit to reach the cloud");
-    const after = await chips(); assert.ok(after.includes("\u{1F4CD} Banda") && after.includes("\u{1F4CD} Komodo"), after.join(" | "));
+    const after = await chips(); assert.ok(after.includes("Banda") && after.includes("Komodo"), after.join(" | "));
     assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Banda"]);
     await page.locator(".dh-loc", { hasText: "Banda" }).tap(); await page.fill(".dh-edit input", "KOMODO"); await page.locator(".dh-save").tap(); await toastIs(/Location saved/);
     await until(() => locCalls.length >= 3, "the second date edit to reach the cloud"); assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Komodo"], "re-uses the existing spelling");
@@ -383,7 +383,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.fill("#locPrompt .month-in", "Komodo"); await page.fill("#locIn0", "Banda"); await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
     await until(async () => (await chips()).length === 2, "date headers");
     const byDate = Object.fromEntries(await page.locator(".datehead").evaluateAll((els) => els.map((e) => [e.querySelector(".dh-date").textContent.trim(), e.querySelector(".dh-loc").textContent.replace(/\s+/g, " ").trim()])));
-    assert.deepEqual(Object.values(byDate).sort(), ["\u{1F4CD} Banda", "\u{1F4CD} Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
+    assert.deepEqual(Object.values(byDate).sort(), ["Banda", "Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
     // 3. month bulk in the log: keeps places already set unless 'replace' is ticked
     assert.match(await page.locator(".monthhead").first().innerText(), /March[\s\S]*2 dives[\s\S]*max [\d.]+ m[\s\S]*Komodo, Banda/);
     await page.locator(".mh-set").tap(); await page.waitForSelector(".mh-edit input[type=text]");
@@ -615,7 +615,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/, "per-computer counts stay in the Import tab"); await openSource(page, "Cosmiq"); await page.waitForFunction(() => /Cosmiq\+ Gen 5/.test(document.querySelector("#devTabs button.active")?.textContent || ""), null, { timeout: 5000 }); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
     // ONE dive log: every dive once. 5 records, 1 of them the same dive as another -> 4 rows; the Peregrine record is the one shown (it is preferred over the Cosmiq+)
     await openSource(page, "Peregrine"); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 4, null, { timeout: 5000 });
-    assert.match(await page.locator("#navLog").innerText(), /Dive log \(4\)/, "the nav counts every dive once"); assert.match(await page.locator("#diveList > p").first().innerText(), /^4 dives . 1 duplicate from another computer left out$/);
+    assert.match(await page.locator("#navLog").innerText(), /Dive log \(4\)/, "the nav counts every dive once"); assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
     const rows = await diveRows(page);
     assert.equal(rows[0].num, "4"); assert.deepEqual(rows.map((r) => r.chips[0]).sort(), ["Cosmiq+", "Peregrine", "Peregrine", "Peregrine"], "three Peregrine rows and the Cosmiq+ dive that only it recorded: " + JSON.stringify(rows)); assert.equal(rows.filter((r) => r.chips[0] === "Cosmiq+").length, 1); assert.equal(rows.filter((r) => r.also).length, 1, "only the dive recorded twice says so");
     const merged = page.locator("#diveList details.dive", { has: page.locator(".badge.also") }); assert.equal(await merged.count(), 1, "one dive was recorded twice"); assert.match(await merged.locator("summary").innerText(), /Peregrine/); assert.match(await merged.locator(".badge.also").innerText(), /also on Cosmiq\+/); assert.equal(await merged.locator(".dive-num").innerText(), "1", "logbook number: your oldest dive is 1");
@@ -878,7 +878,8 @@ if (process.env.REAL_DB) {
     await page.click("#navLog"); await page.waitForSelector("#placeBanner", { state: "visible" }); assert.match(await page.locator("#placeBannerText").innerText(), /1 place is not on the map yet/);
     const origin = new URL(base).origin + "/"; assert.ok(referers.length > 3 && referers.every(([, ref]) => ref === origin), "tiles and search send the app's origin as referrer: " + JSON.stringify(referers.slice(0, 3)));
     // 6. remove a pin from the list
-    await page.click("#navSummary"); await page.locator("#mapCard details summary").click(); await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
+    await page.click("#navSummary"); assert.ok(await page.locator("#placeDetails").isVisible(), "a place is still to be put on the map: the list stays"); assert.ok(!(await page.locator("#mapEdit").isVisible())); await page.locator("#mapCard details summary").click();
+    await page.locator(".place-row", { hasText: "Banda" }).locator(".pl-del").click();
     await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 1, null, { timeout: 8000 }); assert.equal(places.length, 1);
     // 7. a reload brings the pins back from the account
     await page.reload(); await page.waitForFunction(() => /1 on the map/.test(document.getElementById("mapMsg")?.textContent || ""), null, { timeout: 10000 });
@@ -1123,7 +1124,8 @@ if (process.env.REAL_DB) {
     await page.locator('#mapKinds button[data-kind="freedive"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "2", "#12b886"], ["Raja Ampat", "1", "#12b886"]], "only freedive places, with their freedive count");
     assert.match(await page.locator("#mapMsg").innerText(), /3 places . 3 on the map . showing freedive only/);
     await page.locator('#mapKinds button[data-kind="scuba"]').click(); await page.waitForFunction(() => document.querySelectorAll("#sumMap .leaflet-marker-icon").length === 2); assert.deepEqual((await pins()).map((p) => [p.title.split(":")[0], p.n, p.fill]), [["Bunaken", "1", "#228be6"], ["tulamben", "3", "#228be6"]]);
-    await page.locator("#mapCard details summary").click(); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    assert.ok(!(await page.locator("#placeDetails").isVisible()), "every place is on the map: the list of places is hidden"); assert.equal(await page.locator("#mapEdit").innerText(), "Edit places"); await page.locator("#mapEdit").click(); assert.ok(await page.locator("#placeDetails").isVisible(), "Edit places shows it"); assert.equal(await page.locator("#mapEdit").innerText(), "Done editing places"); assert.equal(await page.locator("#placeList .place-row").count(), 3, "the list of all places does not depend on the filter");
+    await page.locator("#mapEdit").click(); assert.ok(!(await page.locator("#placeDetails").isVisible()), "Done editing hides it again");
     // 3. the filter is remembered; a reload keeps it
     await page.reload(); await page.waitForSelector("#sumMap .leaflet-marker-icon"); assert.equal(await page.locator("#mapKinds button.active").getAttribute("data-kind"), "scuba", "remembered"); assert.equal(await page.evaluate(() => localStorage.getItem("mapKind")), "scuba");
     assert.deepEqual(errs, [], "page errors"); await ctx.close();
@@ -1417,7 +1419,7 @@ if (process.env.REAL_DB) {
     // her own Perdix is the record shown for the dive Togar also recorded (his Peregrine copy and her Garmin hide behind it); the dive only he has stays, marked as from him
     const rows = await diveRows(page);
     assert.deepEqual(rows[1].chips, ["Perdix"]); assert.equal(rows[1].also, "also on Garmin, Peregrine", "the dive on three computers: one row, hers shown"); assert.deepEqual(rows[0].chips, ["Peregrine", "from Togar"], "the dive only he has stays, marked as from him");
-    assert.match(await page.locator("#diveList > p").first().innerText(), /^2 dives . 2 duplicates from another computer left out . 1 shared with you$/); assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
     // the Import tab lists only HER computers: his Peregrine, which only exists as copies, is not one of them
     await page.click("#navImport"); assert.deepEqual((await page.locator("#devTabs button").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Shearwater Perdix \u00b7 1", "Garmin Descent \u00b7 1"], "shared dives do not add dive computers");
     await page.click("#navSummary"); await page.waitForFunction(() => /across 2 dives/.test(document.getElementById("sumCount").textContent), null, { timeout: 5000 });
@@ -1439,6 +1441,37 @@ if (process.env.REAL_DB) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
     console.log("PASS sharing dive logs");
   } catch (e) { failed++; console.log("FAIL sharing dive logs\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-share.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: delete a dive from the dive log: asks first, removes the dive and its hidden copies, is remembered, is retried when the connection fails ----
+{
+  const imp = (device, n, iso, over = {}) => ({ fingerprint: (0xd00000000000 + n + { peregrine: 0x100, perdix: 0x300 }[device]).toString(16).padStart(12, "0"), device, startedAt: iso, mode: "scuba", durationSec: 2400, maxDepthM: 18, o2Percent: 32, headerHex: "", profileHex: "", extra: JSON.stringify({ n, t: 27, iv: 10, s: [[0, 0, 28], [1200, 18, 27], [2400, 0, 27]] }), ...over });
+  const all0 = [imp("perdix", 1, "2025-04-02T09:03:00"), imp("peregrine", 1, "2025-04-02T09:00:00", { sharedFrom: "togar@example.com" }), imp("perdix", 2, "2025-04-03T09:00:00")];
+  let serverDives = [...all0], deleted = [], failNext = true; const calls = [];
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "sharon@example.com", name: "Sharon", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Sharon", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
+  await page.route("**/api/dives", (r) => r.request().method() === "GET" ? r.fulfill({ json: { dives: serverDives, deleted } }) : r.fulfill({ json: { stored: 0 } })); await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives/delete", (r) => { const b = JSON.parse(r.request().postData()); calls.push(b.fingerprints); if (failNext) { failNext = false; return r.fulfill({ status: 500, json: { error: "down" } }); } serverDives = serverDives.filter((d) => !b.fingerprints.includes(d.fingerprint)); deleted = [...deleted, ...b.fingerprints]; return r.fulfill({ json: { deleted: b.fingerprints.length } }); });
+  try {
+    await page.goto(base); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 2, null, { timeout: 8000 });
+    const first = page.locator("#diveList details.dive").nth(1);                              // the older dive: her Perdix dive with Togar's Peregrine copy behind it
+    await first.locator("summary").click(); await page.waitForSelector(".del-ask"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap delete");
+    await page.locator(".del-ask").tap(); await page.waitForSelector(".del-confirm");
+    const txt = await page.locator(".del-confirm").innerText(); assert.match(txt, /Delete dive 1\?/); assert.match(txt, /cannot be undone/); assert.match(txt, /Peregrine/, "says that the copy from another computer goes too"); assert.match(txt, /not come back when you sync or import/);
+    await page.locator(".del-no").tap(); await page.waitForSelector(".del-ask"); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
+    // delete: the connection fails first, so the dive is gone from this phone at once and the cloud is told later
+    await page.locator(".del-ask").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
+    assert.deepEqual(calls[0].sort(), [all0[0].fingerprint, all0[1].fingerprint].sort(), "the dive and its hidden copy are deleted together"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(1\)/);
+    await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 });
+    await page.waitForFunction(() => true); await page.waitForTimeout(500); assert.equal(calls.length, 2, "the failed deletion is sent again the next time"); assert.deepEqual(deleted.sort(), [all0[0].fingerprint, all0[1].fingerprint].sort());
+    // the cloud answers with a stale list that still holds the dive: it stays deleted on this phone
+    serverDives = [...all0]; await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 }); await page.waitForTimeout(500);
+    assert.equal(await page.locator("#diveList details.dive").count(), 1); assert.match(await page.locator("#diveList details.dive").first().locator("summary").innerText(), /Perdix/);
+    assert.equal(await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("cosmiq", 1); r.onsuccess = () => { const q = r.result.transaction("dives").objectStore("dives").getAll(); q.onsuccess = () => res(q.result.filter((d) => d.deleted).length); }; })), 2, "only the fingerprints of the deleted dives are kept");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS delete a dive");
+  } catch (e) { failed++; console.log("FAIL delete a dive\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-delete.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

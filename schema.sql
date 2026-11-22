@@ -117,3 +117,11 @@ CREATE TABLE IF NOT EXISTS bt_reports (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS bt_reports_by_user ON bt_reports (user_email, id);
+
+-- Dives deleted from a dive log (fingerprint only): never stored again by a sync, an import or a copy from another person (migration 0011).
+CREATE TABLE IF NOT EXISTS deleted_dives (
+  user_email  TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  deleted_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_email, fingerprint)
+);
