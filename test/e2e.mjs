@@ -478,6 +478,10 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await page.locator("#sumDiver .diver-row .ico", { hasText: /\S/ }).count(), 0, "no emoji or text icons left");
     assert.ok(await page.locator("#sumDanRow img.dan-logo").evaluate((i) => i.complete && i.naturalWidth > 50), "the DAN logo loads");
     assert.equal(await page.locator("#sumDiver .diver-row svg.flag polygon").getAttribute("fill"), "#fff");
+    // the DAN logo works on any background: the holes of the D and the A are transparent (like the gap in the N), the flag's stripe and cross stay white
+    const px = await page.evaluate(async () => { const im = new Image(); im.src = "dan-logo.png"; await im.decode(); const c = document.createElement("canvas"); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext("2d"); g.drawImage(im, 0, 0);
+      const at = (x, y) => Array.from(g.getImageData(x, y, 1, 1).data); return { dCounter: at(17, 101), aCounter: at(51, 99), stripe: at(50, 41), cross: at(87, 20), letter: at(40, 105) }; });
+    assert.equal(px.dCounter[3], 0, "the D's hole is transparent"); assert.ok(px.aCounter[3] <= 5, "the A's hole is transparent"); assert.deepEqual(px.stripe, [255, 255, 255, 255], "the flag's stripe stays white"); assert.deepEqual(px.cross, [255, 255, 255, 255], "so does the cross"); assert.equal(px.letter[3], 255, "the letters stay solid red"); assert.ok(px.letter[0] > 190 && px.letter[1] < 70);
     await page.locator("#sumDiver").screenshot({ path: process.env.SHOT_DIVER || "/tmp/shot-diver.png" });
     // 1. nothing entered yet: placeholders and hints; your Google name is the fallback for the name
     await until(async () => (await diver()).name === "Google Name", "the Google name as a fallback");
