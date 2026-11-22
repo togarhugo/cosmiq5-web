@@ -103,7 +103,7 @@ function patchPage(page) {
   page.locator = (sel, ...a) => { const l = locator(sel, ...a); if (typeof sel === "string" && NAV.test(sel)) for (const m of ["click", "tap"]) { const f = l[m].bind(l); l[m] = (o = {}) => viaMenu(page, (timeout) => f({ ...o, ...(timeout ? { timeout } : {}) })); } return l; };
   return page;
 }
-{ const newContext = browser.newContext.bind(browser); browser.newContext = async (...a) => { const ctx = await newContext(...a), newPage = ctx.newPage.bind(ctx); ctx.newPage = async (...b) => { const p = patchPage(await newPage(...b)); await p.route("**/api/trips", (r) => r.fulfill({ json: { trips: [] } })); return p; };   // no trips unless a scenario says otherwise return ctx; }; }
+{ const newContext = browser.newContext.bind(browser); browser.newContext = async (...a) => { const ctx = await newContext(...a), newPage = ctx.newPage.bind(ctx); ctx.newPage = async (...b) => { const p = patchPage(await newPage(...b)); await p.route("**/api/trips", (r) => r.fulfill({ json: { trips: [] } })); return p; }; return ctx; }; }  // no trips unless a scenario says otherwise
 // The map opens by itself after a new location is saved (a user setting, on by default). Older scenarios are about other things and do not mock the map: switch it off for them.
 { const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); } catch (e) {} }); return c; }; }
 let failed = 0;
