@@ -680,7 +680,15 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   await page.goto(base);
   try {
     await page.click("#navLog"); await openSource(page, "Peregrine"); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
-    assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth menu/);
+    assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth on in the computer.s menu/);
+    // the test button: what the browser can see, nothing downloaded or saved
+    await page.click("#pgProbe"); await page.waitForFunction(() => /Result: this looks like a Shearwater/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    const probeTxt = await page.locator("#pgMsg").innerText(); assert.match(probeTxt, /Name: Peregrine/); assert.match(probeTxt, /Connected/); assert.match(probeTxt, /Data channel: found/); assert.match(probeTxt, /Services seen: Shearwater data service/);
+    assert.equal(sim.log.length, 0, "the test sends nothing to the dive computer"); assert.equal(uploaded.length, 0); assert.equal(await page.evaluate(() => window.__pgDisconnected), true, "disconnected again after the test");
+    await page.evaluate(() => { window.__pgMode = "wrong"; window.__pgDisconnected = false; }); await page.click("#pgProbe");
+    await page.waitForFunction(() => /does not offer the Shearwater service/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 }); assert.equal(await page.locator("#pgMsg").evaluate((e) => getComputedStyle(e).color === "rgb(201, 42, 42)"), true, "a negative result is shown as a problem");
+    await page.evaluate(() => { window.__pgMode = "cancel"; }); await page.click("#pgProbe"); await page.waitForFunction(() => /No dive computer was chosen/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
+    await page.evaluate(() => { window.__pgMode = "ok"; });
     // a device that is not a Shearwater, and a cancelled chooser: clear messages, nothing saved
     await page.evaluate(() => { window.__pgMode = "wrong"; }); await page.click("#pgBtn");
     await page.waitForFunction(() => /not a Shearwater dive computer/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
@@ -704,6 +712,11 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     sim.log.length = 0; await page.click("#pgBtn");
     await page.waitForFunction(() => /Peregrine: 3 on the dive computer, 0 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
     assert.equal(sim.log.filter((l) => /^35/.test(l)).length, 1, "only the manifest is read"); assert.equal(uploaded.length, 3);
+    // the same download for a Perdix 2: its own tab, its own records (device perdix), the same protocol
+    await openSource(page, "Perdix"); await page.waitForFunction(() => /perdix/i.test(document.getElementById("impTitle").textContent), null, { timeout: 5000 });
+    assert.ok(await page.locator("#pgBtn").isVisible(), "the Perdix tab opens with the Bluetooth download in view"); assert.match(await page.locator("#impBt").innerText(), /Perdix/); assert.match(await page.locator("#impBt").innerText(), /Bluefy/);
+    await page.click("#pgBtn"); await page.waitForFunction(() => /Perdix: 3 on the dive computer, 3 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
+    assert.equal(uploaded.length, 6); assert.deepEqual([...new Set(uploaded.slice(3).map((d) => d.device))], ["perdix"], "stored as Perdix dives, not Peregrine ones"); assert.equal(await page.locator("details.dive").count(), 3);
     assert.deepEqual(errs, [], "page errors");
     console.log("PASS peregrine bluetooth");
   } catch (e) { failed++; console.log("FAIL peregrine bluetooth\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-pg.png", fullPage: true }); }

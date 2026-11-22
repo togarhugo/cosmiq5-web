@@ -997,9 +997,9 @@
                 <div id="impGarmin" style="display:none">
                     <p class="muted" style="margin:0 0 10px">Garmin does not let other apps read your dives directly, so you bring the dive files over. Dives are in <b>FIT</b> files (<code>.fit</code>), alone or inside a ZIP:</p>
                     <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
-                        <li><b>One dive:</b> on the Garmin Connect <b>website</b>, open the dive, choose the gear menu &rsaquo; <b>Export Original</b>. You get a ZIP with the <code>.fit</code> inside.</li>
+                        <li><b>One dive:</b> on the Garmin Connect <b>website</b>, open the dive, choose the gear menu &rsaquo; <b>Export Original</b>. You get a ZIP with the <code>.fit</code> inside. <b>On an iPhone</b> use Safari, open <code>connect.garmin.com</code>, tap <b>aA &rsaquo; Request Desktop Website</b> (the Garmin Connect <i>app</i> has no export); the ZIP is saved in Files and you choose it here.</li>
                         <li><b>All your dives:</b> in your Garmin account go to <b>Data Management &rsaquo; Export Your Data</b>. Garmin emails you a big ZIP (it can take some hours or days). Drop that ZIP here: runs, sleep and other activities in it are skipped.</li>
-                        <li><b>From the watch:</b> connect it to a computer with its cable and copy the files from <code>Garmin/Activity</code> (some models need the free OpenMTP app on a Mac).</li>
+                        <li><b>From the watch:</b> connect it to a computer with its cable and copy the files from <code>Garmin/Activity</code>. The Descent Mk1 shows up as a drive; the Mk2, Mk2i and Mk3 do not on a Mac, so use the free OpenMTP or Android File Transfer app there (Windows copies them directly).</li>
                         <li>Drag the file or ZIP into the box below (or tap the box to choose it).</li>
                     </ol>
                 </div>
@@ -1016,12 +1016,13 @@
                 <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
                 <div id="impBt">
                 <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
-                    <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
-                    <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
-                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
-                    <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
-                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
-                </details>
+                        <p class="muted" style="margin:6px 0 10px">Reads the <span class="impModel">Peregrine</span> directly, without Shearwater Cloud. Needs a browser with Bluetooth: <b>Bluefy</b> on iPhone, Chrome on Android or a computer. On the dive computer just switch <b>Bluetooth</b> on in its menu, and close Shearwater Cloud first (only one app can be connected). Older computers with classic Bluetooth, such as the Petrel 1, cannot connect from a browser. This had not worked on a real Peregrine when released: if it does not, run the test below and use the file import above.</p>
+                        <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
+                        <button id="pgProbe" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:8px">Test: what can the app see?</button>
+                        <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                        <div id="pgMsg" class="muted" role="status">Switch Bluetooth on in the computer's menu, then tap a button and choose it in the list.</div>
+                        <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
+                    </details>
                 </div>
             </div>
             <div id="srcHideRow" style="display:none;margin:-4px 0 12px"><button id="srcHide" class="linkbtn" type="button">Hide this dive computer (it has no dives yet)</button></div>

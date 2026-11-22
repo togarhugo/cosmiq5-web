@@ -227,7 +227,7 @@
     const dev = await nav.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SERVICE_UUID] });
     const server = await dev.gatt.connect();
     let svc;
-    try { svc = await server.getPrimaryService(SERVICE_UUID); } catch (e) { try { dev.gatt.disconnect(); } catch (e2) {} throw new Error("\u201c" + (dev.name || "That device") + "\u201d is not a Shearwater dive computer. Choose your Peregrine in the list."); }
+    try { svc = await server.getPrimaryService(SERVICE_UUID); } catch (e) { try { dev.gatt.disconnect(); } catch (e2) {} throw new Error("\u201c" + (dev.name || "That device") + "\u201d is not a Shearwater dive computer. Choose your dive computer in the list."); }
     const chars = await svc.getCharacteristics();
     const ch = chars.find((c) => c.properties.notify && (c.properties.writeWithoutResponse || c.properties.write));
     if (!ch) { try { dev.gatt.disconnect(); } catch (e) {} throw new Error("The Shearwater Bluetooth service has no usable data channel."); }
@@ -252,6 +252,27 @@
     return { io, name: dev.name || "Shearwater", close() { try { dev.gatt.disconnect(); } catch (e) {} } };
   }
 
-  const api = { connect, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
+  /**
+   * A test that shows what the browser can see, without downloading anything: pick the computer, connect, and report which services it
+   * offers and whether the Shearwater data channel is there. Returns a short text (also fine to paste to someone helping).
+   */
+  async function probe(trace) {
+    const nav = typeof navigator !== "undefined" ? navigator : null;
+    if (!nav || !nav.bluetooth) throw new Error("This browser cannot use Bluetooth. On iPhone open Dive Manager in Bluefy, on Android use Chrome.");
+    const named = { device_information: "device information", battery_service: "battery", generic_access: "generic access" };
+    const dev = await nav.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SERVICE_UUID, ...Object.keys(named)] });
+    const lines = ["Name: " + (dev.name || "(none)"), "Connecting\u2026"]; if (trace) trace("PROBE name=" + (dev.name || "") + " id=" + (dev.id || ""));
+    let server; try { server = await dev.gatt.connect(); } catch (e) { throw new Error("Found \u201c" + (dev.name || "the device") + "\u201d but could not connect (" + (e && e.message || e) + "). Is another app (Shearwater Cloud, Subsurface) connected to it? Only one can be at a time."); }
+    lines.pop(); lines.push("Connected.");
+    const seen = [];
+    for (const u of [SERVICE_UUID, ...Object.keys(named)]) { try { const svc = await server.getPrimaryService(u); seen.push(u === SERVICE_UUID ? "Shearwater data service" : named[u]); if (u === SERVICE_UUID) { const chars = await svc.getCharacteristics(); const ch = chars.find((c) => c.properties && c.properties.notify && (c.properties.writeWithoutResponse || c.properties.write)); lines.push("Data channel: " + (ch ? "found" : "NOT found") + " (" + chars.length + " characteristics)"); } } catch (e) { /* not offered, or not allowed */ } }
+    try { dev.gatt.disconnect(); } catch (e) {}
+    lines.push("Services seen: " + (seen.length ? seen.join(", ") : "none"));
+    const ok = seen.includes("Shearwater data service");
+    lines.push(ok ? "Result: this looks like a Shearwater dive computer the app can talk to. Use \u201cDownload dives over Bluetooth\u201d." : "Result: Bluetooth works, but this device does not offer the Shearwater service. Is it the right device, with Bluetooth switched on in its menu?");
+    return { ok, text: lines.join(" \u00b7 ") };
+  }
+
+  const api = { connect, probe, SERVICE_UUID, ProtocolError, slipFrames, slipRead, transfer, rdbi, download, decompressLre, decompressXor, parseManifest, parseDive, readDives, ticksToStart };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Shearwater = api;
 })(typeof self !== "undefined" ? self : this);

@@ -134,16 +134,21 @@ If a message says a file could not be read, it names the reason. If the app cann
 ### Garmin Descent: import dive files
 Garmin does **not** let other apps read your dives straight from the watch or from your Garmin account (their programmes are for approved companies, and signing in with your Garmin password would be fragile and unsafe), so you bring the files over. The **Garmin Descent** tab in the Dive log has its own box:
 1. Get your dives as **FIT** files (`.fit`):
-   * **One dive:** on the Garmin Connect **website**, open the dive, gear menu → **Export Original**. You get a ZIP with the `.fit` inside.
+   * **One dive:** on the Garmin Connect **website**, open the dive, gear menu → **Export Original**. You get a ZIP with the `.fit` inside. On an iPhone use Safari, open `connect.garmin.com` and choose *Request Desktop Website*: the Garmin Connect app itself has no export.
    * **All your dives:** Garmin account → **Data Management → Export Your Data**. Garmin emails a big ZIP (hours to days). Drop the ZIP as it is: runs, sleep and other activities in it are skipped and counted.
-   * **From the watch:** cable to a computer, copy the files from `Garmin/Activity` (some models need the free OpenMTP app on a Mac).
+   * **From the watch:** cable to a computer, copy the files from `Garmin/Activity`. The Descent Mk1 shows as a drive; the Mk2, Mk2i and Mk3 do not on a Mac (use the free OpenMTP or Android File Transfer there; Windows copies them directly).
 2. **Drag the file or ZIP into the box** (or tap it to choose). Several files at once are fine.
 3. Each dive appears in the Garmin Descent log with the **watch's own dive number**, depth, duration, minimum temperature, the gas (O₂ %) and the depth chart. Scuba, **gauge** and **apnea (freedive)** sessions are told apart.
 Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Summary and the regulator counter, using the first computer's record.
 The time shown is the watch's clock (the file stores a UTC time and the watch's offset). If a file has no offset the app says so and shows UTC. This import reads Garmin's published file format and is **beta**: it was built and tested with files made to that format and has not yet been compared with every watch, so check your first import against the watch. A freedive session is imported as one dive per file.
 
-### Shearwater Peregrine: Bluetooth (experimental)
-Under **Bluetooth download (experimental)** the app can also read the Peregrine directly. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released: on the first real try the phone's list did not show the Peregrine. Use the file import above; the Bluetooth route is left in for further testing. It only reads: nothing is written to the Peregrine.
+### Shearwater Bluetooth download (Peregrine, Perdix 2) and the Bluetooth test
+Under **Bluetooth download (experimental)** (already open on the Perdix tab) the app can read the **Peregrine** or **Perdix 2** directly, without Shearwater Cloud and without exporting anything. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released (the phone's list did not show it), and the Perdix 2 has not been tried yet. It only reads: nothing is written to the computer.
+1. You need a browser with Bluetooth: **Bluefy** on an iPhone, Chrome on Android or a computer. Safari cannot do it.
+2. On the dive computer switch **Bluetooth** on in its menu. Close Shearwater Cloud (and any other app) first: a dive computer talks to one app at a time.
+3. Tap **Test: what can the app see?** first. It picks the computer, connects, sends nothing, and says whether it can see the Shearwater data service. If the computer is missing from the list, or the result says it is not a Shearwater service, the download will not work either, and you know where it stops.
+4. Tap **Download dives over Bluetooth**. Only new dives are downloaded; each is saved the moment it arrives.
+Older computers with classic Bluetooth (such as the Petrel 1) cannot connect from a browser at all. If it does not work, use the file import above and tell me what the test says.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
 
