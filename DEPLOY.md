@@ -177,6 +177,7 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_lates
 npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0007_api_keys.sql                   # API keys (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0008_regulator_service.sql           # regulator service month, limits, history (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0009_bt_reports.sql                  # Bluetooth reports / download logs people send to their own account (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

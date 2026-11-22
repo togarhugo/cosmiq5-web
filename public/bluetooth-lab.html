@@ -65,14 +65,15 @@
 
         <div class="card" id="secReport">
             <h2>5 &middot; Report</h2>
-            <p class="muted" style="margin:0 0 6px">Everything above in one text, to copy or save and send to whoever is helping. <b>Look it over first:</b> it can contain the dive computer's serial number and the names of other Bluetooth devices around you.</p>
+            <p class="muted" style="margin:0 0 6px">Everything above in one text, to copy, save, or <b>send to your own account</b> (private, so it can be looked at afterwards). The text also includes the recent Bluetooth attempts from the Dive log. <b>Look it over first:</b> it can contain the dive computer's serial number and the names of other Bluetooth devices around you.</p>
             <label class="muted"><input type="checkbox" id="onlyLikely" checked /> in the report, list only devices that look like a dive computer (others are only counted)</label>
-            <div class="row"><button id="repCopy" type="button">Copy report</button><button id="repSave" type="button" class="alt">Save as a file</button><button id="repClear" type="button" class="alt">Clear</button><span id="repState" class="muted"></span></div>
+            <div class="row"><button id="repCopy" type="button">Copy report</button><button id="repSave" type="button" class="alt">Save as a file</button><button id="repSend" type="button">Send to my account</button><button id="repClear" type="button" class="alt">Clear</button><span id="repState" class="muted"></span></div>
             <textarea id="report" readonly aria-label="Report"></textarea>
             <h2 style="margin-top:12px">Log</h2><div id="log" role="log"></div>
         </div>
 
         <script src="shearwater.js"></script>
+        <script src="bt-log.js"></script>
         <script src="bluetooth-lab.js"></script>
     </body>
 </html>

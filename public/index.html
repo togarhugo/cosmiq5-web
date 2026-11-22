@@ -1019,6 +1019,13 @@
                         <p class="muted" style="margin:6px 0 10px">Reads the <span class="impModel">Peregrine</span> directly, without Shearwater Cloud. Needs a browser with Bluetooth: <b>Bluefy</b> on iPhone, Chrome on Android or a computer. On the dive computer just switch <b>Bluetooth</b> on in its menu, and close Shearwater Cloud first (only one app can be connected). Older computers with classic Bluetooth, such as the Petrel 1, cannot connect from a browser. This had not worked on a real Peregrine when released: if it does not, run the test below and use the file import above.</p>
                         <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
                         <button id="pgProbe" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:8px">Test: what can the app see?</button>
+                        <details id="btLogBox" class="logwrap" style="margin-top:10px"><summary>Download log <span id="btLogCount" class="muted"></span></summary>
+                            <p class="muted" style="margin:6px 0">Every Bluetooth attempt on this device (a download, a test): what was chosen, each step with its time, who answered, the result and the last bytes exchanged. Use it to see where a failed attempt stopped.</p>
+                            <ul id="btLogList" style="list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-family:var(--mono)"></ul>
+                            <textarea id="btLogText" readonly aria-label="Bluetooth download log" style="width:100%;min-height:160px;font-family:var(--mono);font-size:11px;border:1px solid var(--bd-ced4da);border-radius:8px;padding:8px;background:var(--bg-fff);color:var(--text)"></textarea>
+                            <div class="row wrap" style="margin:8px 0 0"><button id="btLogCopy" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy</button><button id="btLogSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save as file</button><button id="btLogSend" class="btn-set" type="button">Send to my account</button><button id="btLogClear" class="btn-set" type="button" style="background:var(--bg-6c757d)">Clear</button></div>
+                            <div id="btLogMsg" class="muted" role="status" style="margin-top:6px"></div>
+                        </details>
                         <a id="labLink" class="linkbtn" href="bluetooth-lab.html" style="display:inline-block;margin-top:8px">Open the Bluetooth lab (detailed troubleshooting)</a>
                         <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
                         <div id="pgMsg" class="muted" role="status">Switch Bluetooth on in the computer's menu, then tap a button and choose it in the list.</div>
@@ -1357,6 +1364,7 @@
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
         <script src="garmin-fit.js"></script>
+        <script src="bt-log.js"></script>
         <script src="shearwater.js"></script>
         <script src="sqlite-lite.js"></script>
         <script src="shearwater-cloud.js"></script>

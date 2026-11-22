@@ -36,7 +36,9 @@
     for (const r of shown.sort((a, b) => (b.rssi || -999) - (a.rssi || -999))) out.push(`- name="${r.name || ""}" likely=${likely(r)} rssi=${r.rssi} heard=${r.count}x announces=[${[...r.uuids].join(", ")}] mfr=${JSON.stringify(r.mfr)} serviceData=${JSON.stringify(r.svc)} txPower=${r.tx}`);
     out.push("", "== Inspected device ==");
     if (inspect.name) { out.push("name: " + inspect.name); for (const s of inspect.services) { out.push(`service ${s.uuid}${KNOWN[s.uuid] ? " (" + KNOWN[s.uuid] + ")" : ""}`); for (const c of s.chars) out.push(`  char ${c.uuid}${CHARS[c.uuid] ? " (" + CHARS[c.uuid] + ")" : ""}  [${c.props}]`); } for (const r of inspect.reads) out.push("read " + r); } else out.push("not run");
-    out.push("", "== Shearwater handshake ==", shake ? JSON.stringify(shake) : "not run", "", "== Log ==", ...lines);
+    out.push("", "== Shearwater handshake ==", shake ? JSON.stringify(shake) : "not run");
+    const past = typeof BtLog !== "undefined" ? BtLog.list().slice(0, 5) : []; out.push("", "== Recent Bluetooth attempts on this device ==", past.length ? past.map((e) => BtLog.format(e)).join("\n\n") : "none");
+    out.push("", "== Log ==", ...lines);
     const t = $("report"); if (t) t.value = out.join("\n");
   }
 
@@ -157,12 +159,13 @@
   async function handshake() {
     const st = $("shakeState"); if (!SW) { st.textContent = "The Shearwater code did not load."; return; }
     st.textContent = "Choose the dive computer in the browser's list…"; st.className = "muted"; let conn = null;
+    const L = typeof BtLog !== "undefined" ? BtLog.begin({ kind: "handshake", device: "shearwater", model: "Shearwater (lab)" }) : null; L && L.step("Choose the dive computer in the list");
     try {
-      conn = await SW.connect((l) => log("  " + l)); st.textContent = "Connected to " + conn.name + ". Asking…"; log("Handshake: connected to " + conn.name);
+      conn = await SW.connect((l) => { log("  " + l); L && L.trace(l); }); st.textContent = "Connected to " + conn.name + ". Asking…"; log("Handshake: connected to " + conn.name); L && (L.info({ deviceName: conn.name }), L.step("Connected to " + conn.name));
       const id = await SW.identify(conn.io); shake = { name: conn.name, ...id }; st.textContent = `Answered: serial ${id.serial}, firmware ${id.firmware}, model number ${id.model}. The download will work.`; st.className = "ok";
-      log("Handshake OK: " + JSON.stringify(shake));
+      log("Handshake OK: " + JSON.stringify(shake)); L && (L.info({ serial: id.serial, firmware: id.firmware, model: id.model }), L.end(true, "The computer answered."));
     } catch (e) {
-      const m = e && e.name === "NotFoundError" ? "No device was chosen." : (e && e.message) || String(e); if (!(e && e.name === "NotFoundError")) shake = { failed: m }; st.textContent = m; st.className = e && e.name === "NotFoundError" ? "muted" : "bad"; log("Handshake failed: " + m, "bad");
+      const m = e && e.name === "NotFoundError" ? "No device was chosen." : (e && e.message) || String(e); if (!(e && e.name === "NotFoundError")) shake = { failed: m }; st.textContent = m; st.className = e && e.name === "NotFoundError" ? "muted" : "bad"; log("Handshake failed: " + m, "bad"); L && L.end(false, m, { cancelled: !!(e && e.name === "NotFoundError") });
     } finally { if (conn) conn.close(); refreshReport(); }
   }
 
@@ -172,13 +175,19 @@
     try { await navigator.clipboard.writeText(t.value); ok = true; } catch (e) { t.select(); try { ok = document.execCommand("copy"); } catch (e2) { /* ignore */ } }
     $("repState").textContent = ok ? "Copied." : "Select the text and copy it by hand.";
   }
+  async function sendReport() {
+    refreshReport(); const st = $("repState"), body = $("report").value.slice(0, 195000);
+    try { const r = await fetch("/api/bt-reports", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "lab", body }) }); const j = await r.json().catch(() => ({}));
+      st.textContent = r.ok ? `Sent to your account (report #${j.id}). It can now be looked at.` : (j.error || "Could not send (" + r.status + ")"); log(r.ok ? "Report sent to your account as #" + j.id : "Report not sent: " + r.status); }
+    catch (e) { st.textContent = "Could not send: " + e.message; }
+  }
   function saveReport() { refreshReport(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([$("report").value], { type: "text/plain" })); a.download = "bluetooth-lab-report.txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 
   window.addEventListener("DOMContentLoaded", async () => {
     $("scanStart").addEventListener("click", startScan); $("scanStop").addEventListener("click", stopScan); $("scanNamed").addEventListener("change", drawScan);
     $("inspectBtn").addEventListener("click", inspectDevice); $("tree").addEventListener("click", charAction);
     $("inspectDisc").addEventListener("click", () => { try { if (connected) connected.gatt.disconnect(); } catch (e) { /* ignore */ } });
-    $("shakeBtn").addEventListener("click", handshake); $("repCopy").addEventListener("click", copyReport); $("repSave").addEventListener("click", saveReport); $("onlyLikely").addEventListener("change", refreshReport);
+    $("shakeBtn").addEventListener("click", handshake); $("repCopy").addEventListener("click", copyReport); $("repSave").addEventListener("click", saveReport); $("repSend").addEventListener("click", sendReport); $("onlyLikely").addEventListener("change", refreshReport);
     $("repClear").addEventListener("click", () => { lines.length = 0; $("log").textContent = ""; scan.rows.clear(); scan.started = null; inspect.name = ""; inspect.services = []; inspect.reads = []; shake = null; drawScan(); refreshReport(); $("repState").textContent = "Cleared."; });
     await checkEnv(); refreshReport(); window.__labReady = true;
   });

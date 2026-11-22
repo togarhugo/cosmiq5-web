@@ -2,7 +2,7 @@
 
 A web app to **manage a Deepblu Cosmiq+ Gen 5 dive computer** now that the official app has been discontinued: change its settings, download and keep your dive log, and track your diving, all from a phone or laptop browser over Bluetooth.
 
-> **Current version: 0.20.0** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
+> **Current version: 0.20.1** · User manual: [MANUAL.md](MANUAL.md) · Deployment: [DEPLOY.md](DEPLOY.md) · Bluetooth protocol notes: [technical_documentation.md](technical_documentation.md)
 
 ## What it does
 

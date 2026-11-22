@@ -235,3 +235,20 @@ test("the Bluetooth lab page is private like the rest of the app, and is served 
   assert.equal(page.status, 200); assert.match(page.headers.get("content-type"), /text\/html/); const body = await page.text(); assert.match(body, /Bluetooth lab/); assert.match(body, /bluetooth-lab\.js/);
   const js = await call(env, "/bluetooth-lab.js", { headers: { cookie } }); assert.equal(js.status, 200); assert.match(js.headers.get("content-type"), /javascript/); assert.match(await js.text(), /requestLEScan/);
 });
+
+test("Bluetooth reports: saved to your own account, listed, read back, deleted; private; size and kind checked; only the newest 30 kept", async () => {
+  const env = makeEnv(); const { cookie: me } = await googleSession(env); const { cookie: other } = await googleSession(env, { email: "other@example.com" });
+  const send = (cookie, o) => post(env, "/api/bt-reports", o, { cookie }), get = (cookie, p = "") => call(env, "/api/bt-reports" + p, { headers: { cookie } });
+  assert.equal((await call(env, "/api/bt-reports")).status, 401, "signed-out requests are refused");
+  const r1 = await send(me, { kind: "lab", body: "== Browser ==\nWeb Bluetooth: available\n== Shearwater handshake ==\n{\"serial\":\"12345678\"}" }); assert.equal(r1.status, 201); const id1 = (await r1.json()).id; assert.ok(id1 > 0);
+  const id2 = (await (await send(me, { kind: "download", body: "=== Download: Peregrine ===\nResult: FAILED - timeout" })).json()).id;
+  const list = await (await get(me)).json(); assert.deepEqual(list.reports.map((r) => [r.id, r.kind]), [[id2, "download"], [id1, "lab"]], "newest first"); assert.ok(list.reports.every((r) => r.size > 10 && !("body" in r)), "the list has sizes, not the texts");
+  const one = (await (await get(me, "/" + id1)).json()).report; assert.equal(one.kind, "lab"); assert.match(one.body, /Web Bluetooth: available/);
+  assert.equal((await get(other, "/" + id1)).status, 404, "another person cannot read it"); assert.equal((await (await get(other)).json()).reports.length, 0); assert.equal((await call(env, "/api/bt-reports/" + id1, { method: "DELETE", headers: { cookie: other } })).status, 404, "nor delete it");
+  for (const [name, body] of [["unknown kind", { kind: "evil", body: "x" }], ["no body", { kind: "lab" }], ["empty body", { kind: "lab", body: "   " }], ["body not text", { kind: "lab", body: { a: 1 } }]]) assert.equal((await send(me, body)).status, 400, name);
+  assert.equal((await send(me, { kind: "lab", body: "x".repeat(200_001) })).status, 413, "too long"); assert.equal((await send(me, { kind: "lab", body: "x".repeat(200_000) })).status, 201, "exactly the limit is fine");
+  assert.equal((await post(env, "/api/bt-reports", { kind: "lab", body: "x" }, { cookie: me, origin: "https://evil.example" })).status, 403, "cross-site posts are refused");
+  assert.equal((await call(env, "/api/bt-reports/" + id1, { method: "DELETE", headers: { cookie: me } })).status, 200); assert.equal((await get(me, "/" + id1)).status, 404);
+  for (let i = 0; i < 34; i++) await send(me, { kind: "download", body: "run " + i });
+  const kept = (await (await get(me)).json()).reports; assert.equal(kept.length, 30, "only the newest 30 are kept"); assert.equal((await get(me, "/" + id2)).status, 404, "the oldest were dropped");
+});

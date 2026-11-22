@@ -212,40 +212,63 @@ const Dives = (() => {
   async function probeShearwater() {
     const out = $("pgMsg"), say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : ""; } };
     if (busy) { say2("Wait for the running sync to finish first.", true); return; }
-    try { say2("Choose your dive computer in the list\u2026"); const r = await window.Shearwater.probe((l) => { if (typeof diag === "function") diag("PG " + l); }); say2(r.text, !r.ok); if (typeof diag === "function") diag("PG probe: " + r.text); log("Bluetooth test: " + r.text, r.ok ? "log-info" : "log-err"); }
-    catch (e) { say2(e && e.name === "NotFoundError" ? "No dive computer was chosen." : (e && e.message) || String(e), !(e && e.name === "NotFoundError")); }
+    const device = BT_MODELS[curDevice] ? curDevice : "peregrine", L = window.BtLog.begin({ kind: "test", device, model: BT_MODELS[device] });
+    try { L.step("Choose your dive computer in the list"); say2("Choose your dive computer in the list\u2026"); const r = await window.Shearwater.probe((l) => { if (typeof diag === "function") diag("PG " + l); L.trace(l); }); say2(r.text, !r.ok); if (typeof diag === "function") diag("PG probe: " + r.text); log("Bluetooth test: " + r.text, r.ok ? "log-info" : "log-err"); L.step(r.text); L.end(r.ok, r.text); }
+    catch (e) { const cancelled = e && e.name === "NotFoundError", m = cancelled ? "No dive computer was chosen." : (e && e.message) || String(e); say2(m, !cancelled); L.end(false, m, { cancelled }); }
+    renderBtLog();
   }
   async function syncPeregrine() {
     const device = BT_MODELS[curDevice] ? curDevice : "peregrine", model = BT_MODELS[device];
     const out = $("pgMsg"), bar = $("pgBar"), btn = $("pgBtn"), cancel = $("pgCancel");
-    const say2 = (t, bad) => { if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : ""; } };
-    if (busy) { say2("Wait for the running sync to finish first.", true); return; }
+    const L = window.BtLog.begin({ kind: "download", device, model });
+    const say2 = (t, bad) => { L.step(t); if (out) { out.textContent = t; out.style.color = bad ? "var(--tx-c92a2a)" : ""; } };
+    if (busy) { say2("Wait for the running sync to finish first.", true); L.end(false, "Another sync was running."); return; }
     busy = true; pgCancel = false; btn.disabled = true; cancel.style.display = ""; bar.style.width = "0";
     const fp = (startedAt) => window.DiveImport.fingerprint(device + "|" + startedAt.slice(0, 16));
-    const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0;
-    const trace = (l) => { if (typeof diag === "function") diag("PG " + l); };
+    const seen = new Set((await all()).map((d) => d.fingerprint)), fresh = []; let conn = null, problems = 0, ended = false;
+    const trace = (l) => { if (typeof diag === "function") diag("PG " + l); L.trace(l); };
     try {
       say2("Choose your " + model + " in the list\u2026"); conn = await window.Shearwater.connect(trace);
-      say2("Connected to " + conn.name + ".");
+      L.info({ deviceName: conn.name }); say2("Connected to " + conn.name + ".");
       const res = await window.Shearwater.readDives(conn.io, {
         known: (startedAt) => seen.has(fp(startedAt)), cancelled: () => pgCancel,
         onProgress: (m, f) => { say2(m); bar.style.width = Math.round(f * 100) + "%"; },
-        onProblem: (m) => { problems++; log(model + ": could not read dive " + m, "log-err"); },
+        onProblem: (m) => { problems++; L.step("PROBLEM: " + m); log(model + ": could not read dive " + m, "log-err"); },
         onDive: async (d) => {
           const rec = importedRecord(d, device);
           await put(rec); seen.add(rec.fingerprint); fresh.push(rec); render();                      // saved the moment it arrives
         } });
+      L.info({ serial: res.serial, firmware: res.firmware, model: res.model, total: res.total, fresh: res.fresh, failed: res.failed });
       const up = fresh.length ? await cloudPush() : 0;
       const msg = `${model}: ${res.total} on the dive computer, ${fresh.length} new` + (problems ? `, ${problems} could not be read (see diagnostics)` : "") +
         (fresh.length ? (cloudState === "ok" ? `, ${up} uploaded` : ", saved on this phone, cloud unavailable") : "");
-      say2(msg, !!problems && !fresh.length); bar.style.width = "100%"; log(msg, "log-info"); saveLast({ ok: !problems, msg });
+      say2(msg, !!problems && !fresh.length); bar.style.width = "100%"; log(msg, "log-info"); saveLast({ ok: !problems, msg }); L.end(!problems || fresh.length > 0, msg, { fresh: fresh.length, problems }); ended = true;
     } catch (e) {
-      const m = e && e.name === "NotFoundError" ? "No dive computer was chosen." : e && e.message ? e.message : String(e);
+      const cancelled = e && e.name === "NotFoundError" || (e && /Cancelled by you/.test(e.message || "")), m = e && e.name === "NotFoundError" ? "No dive computer was chosen." : e && e.message ? e.message : String(e);
       say2(m + (fresh.length ? ` ${fresh.length} dive(s) were saved before it stopped: run it again to continue.` : ""), !(e && e.name === "NotFoundError"));
-      log(model + " sync stopped: " + m, "log-err"); if (fresh.length) await cloudPush();
-    } finally { if (conn) conn.close(); busy = false; btn.disabled = false; cancel.style.display = "none"; render(); }
+      log(model + " sync stopped: " + m, "log-err"); if (fresh.length) await cloudPush(); L.end(false, m + (fresh.length ? ` (${fresh.length} dives saved before it stopped)` : ""), { cancelled, fresh: fresh.length }); ended = true;
+    } finally { if (conn) conn.close(); busy = false; btn.disabled = false; cancel.style.display = "none"; if (!ended) L.end(false, "stopped unexpectedly"); render(); renderBtLog(); }
     if (fresh.length) openPrompt(fresh, "Where did you dive?", `${fresh.length} new ${model} dive${fresh.length === 1 ? "" : "s"}. Just the area, for example Banda, Komodo or Tulamben.`);
     return { saved: fresh.length };
+  }
+  // ---- the download log panel (Dive log > Bluetooth download) ----
+  function renderBtLog() {
+    const box = $("btLogBox"); if (!box || !window.BtLog) return;
+    const list = window.BtLog.list(); $("btLogCount").textContent = list.length ? `(${list.length})` : "";
+    const ul = $("btLogList"); ul.textContent = ""; if (!list.length) { const li = document.createElement("li"); li.className = "muted"; li.textContent = "No Bluetooth attempts yet."; ul.appendChild(li); }
+    for (const e of list.slice(0, 8)) { const li = document.createElement("li"); li.textContent = window.BtLog.summary(e); li.style.color = e.outcome && !e.outcome.ok && !e.outcome.cancelled ? "var(--tx-c92a2a)" : ""; ul.appendChild(li); }
+    $("btLogText").value = window.BtLog.formatAll(list.slice(0, 10));
+  }
+  async function btLogAct(what) {
+    const msg = $("btLogMsg"), say2 = (t) => { msg.textContent = t; };
+    if (what === "copy") { const t = window.BtLog.formatAll(window.BtLog.list()); try { await navigator.clipboard.writeText(t); say2("Copied."); } catch (e) { $("btLogText").select(); say2("Select the text and copy it by hand."); } }
+    else if (what === "save") { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([window.BtLog.formatAll(window.BtLog.list())], { type: "text/plain" })); a.download = "bluetooth-download-log.txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); say2("Saved."); }
+    else if (what === "clear") { window.BtLog.clear(); renderBtLog(); say2("Cleared."); }
+    else if (what === "send") {
+      const list = window.BtLog.list(); if (!list.length) return say2("Nothing to send yet.");
+      try { const r = await fetch("/api/bt-reports", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "download", body: window.BtLog.formatAll(list).slice(0, 195000) }) });
+        const j = await r.json().catch(() => ({})); say2(r.ok ? `Sent to your account (report #${j.id}). It can now be looked at.` : (j.error || "Could not send (" + r.status + ")")); } catch (e) { say2("Could not send: " + e.message); }
+    }
   }
 
   // ---------- UI ----------
@@ -464,7 +487,7 @@ const Dives = (() => {
   const DEV_KEY = "logDevice";
   let selDevice = (() => { try { return localStorage.getItem(DEV_KEY); } catch (e) { return null; } })();
   // ---- which dive computers are shown: the ones that have dives, plus the ones this person added by hand ----
-  const SRC_KEY = "sources", OWNER_KEY = "owner", USER_KEYS = ["lastSync", "diver", "regulator", SRC_KEY, "logDevice", "yearsOpen"];
+  const SRC_KEY = "sources", OWNER_KEY = "owner", USER_KEYS = ["lastSync", "diver", "regulator", SRC_KEY, "logDevice", "yearsOpen", "btLog"];
   const HOW = { cosmiq: "Sync over Bluetooth", peregrine: "From a Shearwater Cloud export", perdix: "From a Shearwater Cloud export", garmin: "From FIT files (Garmin Connect)" };
   const loadSrc = () => { try { const a = JSON.parse(localStorage.getItem(SRC_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => U.DEVICES.some((v) => v.id === x)) : []; } catch (e) { return []; } };
   const saveSrc = (a) => { try { localStorage.setItem(SRC_KEY, JSON.stringify(a)); } catch (e) {} };
@@ -534,7 +557,8 @@ const Dives = (() => {
     for (const id of ["srcEmptyList", "srcAddList"]) $(id).addEventListener("click", (e) => { const b = e.target.closest("button[data-add]"); if (b) addSource(b.dataset.add); });
     $("srcAdd").addEventListener("click", () => { const l = $("srcAddList"); l.style.display = l.style.display === "none" ? "" : "none"; });
     $("srcHide").addEventListener("click", hideSource);
-    $("pgBtn").addEventListener("click", syncPeregrine); $("pgProbe").addEventListener("click", probeShearwater); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
+    $("pgBtn").addEventListener("click", syncPeregrine); $("pgProbe").addEventListener("click", probeShearwater);
+    for (const [id, what] of [["btLogCopy", "copy"], ["btLogSave", "save"], ["btLogSend", "send"], ["btLogClear", "clear"]]) $(id).addEventListener("click", () => btLogAct(what)); $("btLogBox").addEventListener("toggle", renderBtLog); renderBtLog(); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
     const card = $("importCard");                                                                  // drop a file from Finder / Spotlight / Files onto the card
     if (card) {
       const over = (on) => card.classList.toggle("dropping", on);

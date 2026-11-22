@@ -662,6 +662,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
   await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } });
     const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
+  const sentLogs = []; await page.route("**/api/bt-reports", (r) => { sentLogs.push(JSON.parse(r.request().postData())); return r.fulfill({ status: 201, json: { id: 7, ok: true } }); });
   const T = (d, h) => Date.UTC(2026, 4, d, h, 30) / 1000, mk = (ticks, d10, n) => ({ ticks, blob: pnfDive({ ticks, maxDepth10: d10, duration: 2400 + n * 60, samples: [[0, 50, 28], [0, d10 / 2, 28], [0, d10, 27], [0, 30, 27]] }) });
   const sim = peregrine({ dives: [mk(T(2, 9), 285, 1), mk(T(2, 14), 190, 2), mk(T(3, 9), 240, 3)] });
   await page.exposeFunction("__pgWrite", async (arr) => { await sim.io.write(Uint8Array.from(arr)); return sim.drain().map((a) => Array.from(a)); });
@@ -679,7 +680,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await openSource(page, "Peregrine"); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    await page.click("#navLog"); await openSource(page, "Peregrine"); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#impBt > details > summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
     assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth on in the computer.s menu/);
     // the test button: what the browser can see, nothing downloaded or saved
     await page.click("#pgProbe"); await page.waitForFunction(() => /Result: this looks like a Shearwater/.test(document.getElementById("pgMsg").textContent), null, { timeout: 5000 });
@@ -717,6 +718,18 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.ok(await page.locator("#pgBtn").isVisible(), "the Perdix tab opens with the Bluetooth download in view"); assert.match(await page.locator("#impBt").innerText(), /Perdix/); assert.match(await page.locator("#impBt").innerText(), /Bluefy/);
     await page.click("#pgBtn"); await page.waitForFunction(() => /Perdix: 3 on the dive computer, 3 new/.test(document.getElementById("pgMsg").textContent), null, { timeout: 20000 });
     assert.equal(uploaded.length, 6); assert.deepEqual([...new Set(uploaded.slice(3).map((d) => d.device))], ["perdix"], "stored as Perdix dives, not Peregrine ones"); assert.equal(await page.locator("details.dive").count(), 3);
+    // the download log: every attempt above is written down, with its steps, identity, counts and bytes
+    await page.locator("#btLogBox summary").click(); await page.waitForFunction(() => document.querySelectorAll("#btLogList li").length >= 7, null, { timeout: 5000 });
+    assert.match(await page.locator("#btLogCount").innerText(), /\(\d+\)/); const sum = await page.locator("#btLogList").innerText();
+    assert.match(sum, /Download\s+Perdix\s+OK - Perdix: 3 on the dive computer, 3 new/); assert.match(sum, /Bluetooth test\s+Peregrine\s+OK/); assert.match(sum, /FAILED - .*not a Shearwater dive computer/); assert.match(sum, /cancelled - No dive computer was chosen/);
+    const logTxt = await page.locator("#btLogText").inputValue();
+    for (const must of ["=== Download: Peregrine ===", "=== Download: Perdix ===", "=== Bluetooth test: Peregrine ===", "Result: OK - Peregrine: 3 on the dive computer, 3 new", "Result: CANCELLED - No dive computer was chosen.", "Computer: Peregrine (peregrine), Bluetooth name \"Peregrine\"", "Counts: 3 on the computer, 3 new, 0 could not be read", "Downloading dive 1 of 3", "Connected to Peregrine.", "TX ", "RX "]) assert.ok(logTxt.includes(must), "download log has: " + must);
+    assert.match(logTxt, /Identity: serial \S+, firmware \S+, model number \d+/); assert.match(logTxt, /Browser: .* \| System: .* \| App: \d+\.\d+\.\d+/);
+    await page.click("#btLogSend"); await page.waitForFunction(() => /Sent to your account \(report #7\)/.test(document.getElementById("btLogMsg").textContent), null, { timeout: 5000 });
+    assert.equal(sentLogs.length, 1); assert.equal(sentLogs[0].kind, "download"); assert.ok(sentLogs[0].body.includes("Bluetooth download log") && sentLogs[0].body.includes("=== Download: Perdix ==="), "the whole log is what is sent");
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("btLog")).length); assert.ok(stored >= 7 && stored <= 25, "kept on this device: " + stored);
+    await page.reload(); await page.click("#navLog"); await openSource(page, "Peregrine"); await page.locator("#btLogBox summary").click(); assert.ok((await page.locator("#btLogText").inputValue()).includes("=== Download: Perdix ==="), "still there after a reload");
+    await page.click("#btLogClear"); await page.waitForFunction(() => /No Bluetooth attempts yet/.test(document.getElementById("btLogList").textContent)); assert.equal(await page.evaluate(() => localStorage.getItem("btLog")), null);
     assert.deepEqual(errs, [], "page errors");
     console.log("PASS peregrine bluetooth");
   } catch (e) { failed++; console.log("FAIL peregrine bluetooth\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-pg.png", fullPage: true }); }
@@ -1303,6 +1316,7 @@ if (process.env.REAL_DB) {
 {
   const sim = peregrine({ dives: [] });
   const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  const sentReports = []; await page.route("**/api/bt-reports", (r) => { sentReports.push(JSON.parse(r.request().postData())); return r.fulfill({ status: 201, json: { id: 12, ok: true } }); });
   await page.exposeFunction("__pgWrite", async (arr) => { await sim.io.write(Uint8Array.from(arr)); return sim.drain().map((a) => Array.from(a)); });
   await page.addInitScript((noScan) => {
     Object.defineProperty(navigator, "platform", { configurable: true, get: () => "MacIntel" }); Object.defineProperty(navigator, "userAgentData", { configurable: true, value: { platform: "macOS", brands: [{ brand: "Google Chrome", version: "140" }] } });
@@ -1349,6 +1363,9 @@ if (process.env.REAL_DB) {
     const rep = await page.locator("#report").inputValue();
     for (const must of ["== Browser ==", "Web Bluetooth: available", "== Advertisement scan ==", "name=\"Peregrine\" likely=true", "0x1234", "== Inspected device ==", "service fe25c237", "Shearwater data service", "== Shearwater handshake ==", "\"serial\"", "Handshake OK"]) assert.ok(rep.includes(must), "report has: " + must + " :: " + rep.slice(rep.indexOf("== Shearwater handshake"), rep.indexOf("== Shearwater handshake") + 300).replace(/\n/g, " / "));
     assert.ok(!rep.includes("JBL Flip"), "other devices' names are not in the report by default"); assert.match(rep, /3 not listed/);
+    assert.ok(rep.includes("== Recent Bluetooth attempts on this device ==") && rep.includes("=== Handshake: Shearwater (lab) ===") && rep.includes("Result: OK - The computer answered."), "the handshake is also in the shared download log");
+    await page.click("#repSend"); await page.waitForFunction(() => /Sent to your account \(report #12\)/.test(document.getElementById("repState").textContent), null, { timeout: 5000 });
+    assert.equal(sentReports.length, 1); assert.equal(sentReports[0].kind, "lab"); assert.ok(sentReports[0].body.includes("== Browser ==") && sentReports[0].body.includes("== Shearwater handshake =="), "the report is what is sent"); assert.ok(!sentReports[0].body.includes("JBL Flip"), "the other devices' names are not sent by default");
     await page.uncheck("#onlyLikely"); assert.ok((await page.locator("#report").inputValue()).includes("JBL Flip"), "the checkbox puts them back");
     await page.click("#repClear"); assert.ok(!(await page.locator("#report").inputValue()).includes("Handshake OK")); assert.equal(await page.locator("#log").innerText(), "");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
@@ -1357,7 +1374,7 @@ if (process.env.REAL_DB) {
     await p2.goto(base + "bluetooth-lab.html"); await p2.waitForFunction(() => window.__labReady === true); assert.match(await p2.locator("#envTable").innerText(), /NO Bluetooth adapter found or it is switched off/); assert.match(await p2.locator("#envTable").innerText(), /switched off \(needs a Chrome setting/); assert.ok(!/System Settings/.test(await p2.locator("#envHints").innerText()), "no Mac hint on Windows");
     await p2.click("#scanStart"); assert.match(await p2.locator("#scanHelp").innerText(), /enable-experimental-web-platform-features/); assert.deepEqual(e2, []);
     // the app links to the lab from the Bluetooth section
-    await page.goto(base); await page.click("#navLog"); await openSource(page, "Peregrine"); await page.locator("#importCard details summary").click(); assert.equal(await page.locator("#labLink").getAttribute("href"), "bluetooth-lab.html");
+    await page.goto(base); await page.click("#navLog"); await openSource(page, "Peregrine"); await page.locator("#impBt > details > summary").click(); assert.equal(await page.locator("#labLink").getAttribute("href"), "bluetooth-lab.html");
     console.log("PASS bluetooth lab");
   } catch (e) { failed++; console.log("FAIL bluetooth lab\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-lab.png", fullPage: true }); }
   await ctx.close();

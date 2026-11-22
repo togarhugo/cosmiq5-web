@@ -1,6 +1,6 @@
 # Dive Manager — User Manual
 
-*For version 0.20.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.20.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
@@ -150,13 +150,16 @@ Under **Bluetooth download (experimental)** (already open on the Perdix tab) the
 4. Tap **Download dives over Bluetooth**. Only new dives are downloaded; each is saved the moment it arrives.
 Older computers with classic Bluetooth (such as the Petrel 1) cannot connect from a browser at all. If it does not work, use the file import above and open the **Bluetooth lab** (link under the test button, or `/bluetooth-lab.html`).
 
+### Download log (every Bluetooth attempt)
+Under the Bluetooth download, **Download log** records every attempt on this device: a download, a *Test: what can the app see?* or a lab handshake. Each entry shows the computer, browser and system, the time of every step, who answered (serial, firmware, model number), the counts, the result (OK, FAILED or CANCELLED, or *no result* if the page was closed mid-way) and the first and last bytes exchanged. The newest 25 are kept on this device (never HTML, capped in size). **Copy**, **Save as file**, **Clear**, or **Send to my account**: that stores the log privately in your own account (the newest 30 are kept) so someone helping can look at it afterwards. A different person signing in on the same browser starts with an empty log.
+
 ### Bluetooth lab (sandbox)
 A read-only troubleshooting page that shows how a dive computer talks Bluetooth. It never writes to the computer, except the handshake's three *read* requests.
 1. **Browser checks:** Web Bluetooth, the Bluetooth adapter, and a checklist (on a Mac: System Settings → Privacy & Security → Bluetooth → switch your browser on; quit Shearwater Cloud everywhere; Bluetooth on at the computer).
 2. **Listen for what is advertising nearby:** every Bluetooth LE device the browser can hear, with name, signal, announced services and manufacturer data; devices that look like a Shearwater get a green *likely* tag. This needs one Chrome setting, `chrome://flags/#enable-experimental-web-platform-features` = Enabled (the page explains it).
 3. **Pick a device and look inside it:** lists its services and characteristics, reads the harmless ones (name, model, battery) and can listen to notifications.
 4. **Shearwater handshake:** asks for the serial, firmware and model number.
-5. **Report:** everything as text to copy or save. By default it lists only dive-computer-like devices; review it first, since it can contain the computer's serial number.
+5. **Report:** everything as text to copy, save, or **Send to my account**; it also contains the recent attempts from the download log. By default it lists only dive-computer-like devices; review it first, since it can contain the computer's serial number.
 If nothing at all shows up in step 2 (not even your other Bluetooth devices), the problem is the browser's or the system's Bluetooth permission, not the dive computer.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
