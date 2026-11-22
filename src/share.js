@@ -38,8 +38,8 @@ export async function handleShare(request, url, env, email) {
     const r = await readBody(request, env, email); if (r.error) return r.error;
     const res = await env.DB.prepare(
       "INSERT OR IGNORE INTO dives (user_email, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra, shared_from) " +
-      "SELECT ?, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra, ? FROM dives WHERE user_email = ? AND shared_from = '' AND started_at >= ? AND started_at <= ?"
-    ).bind(r.to, email, email, r.lo, r.hi).run();
+      "SELECT ?, fingerprint, device_mac, started_at, mode, duration_sec, max_depth_m, o2_percent, header_hex, profile_hex, location, device, extra, ? FROM dives WHERE user_email = ? AND shared_from = '' AND started_at >= ? AND started_at <= ? AND NOT EXISTS (SELECT 1 FROM deleted_dives x WHERE x.user_email = ? AND x.fingerprint = dives.fingerprint)"
+    ).bind(r.to, email, email, r.lo, r.hi, r.to).run();
     return json({ copied: res.meta.changes || 0, to: r.to });
   }
   if (path === "/api/share/remove" && m === "POST") {                                // the recipient removes the dives another person shared with them

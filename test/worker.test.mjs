@@ -288,3 +288,27 @@ test("sharing a dive log: you copy your OWN dives into the other person's accoun
   assert.equal((await (await api(other, "/api/share/remove", { from: "me@example.com" })).json()).removed, 3); const left = await list(other); assert.deepEqual(left.map((d) => d.fingerprint), ["dddddddddddd"], "her own dive stays"); assert.equal((await list(me)).filter((d) => d.sharedFrom === "").length, 3, "and my own dives were not touched");
   assert.equal((await (await api(me, "/api/share/copy", { to: "other@example.com" })).json()).copied, 3, "after a removal the dives can be shared again");
 });
+
+test("deleting dives: only your own, remembered by fingerprint so a sync, an import or a copy cannot bring them back; validated and private", async () => {
+  const env = makeEnv(); const { cookie: me } = await googleSession(env); const { cookie: other } = await googleSession(env, { email: "other@example.com" });
+  const raw = (fp, startedAt) => ({ fingerprint: fp, headerHex: "00".repeat(36), profileHex: "ab".repeat(40), startedAt });
+  const get = async (cookie) => (await call(env, "/api/dives", { headers: { cookie } })).json(), del = (cookie, fingerprints) => post(env, "/api/dives/delete", { fingerprints }, { cookie });
+  await post(env, "/api/dives", { dives: [raw("aaaaaaaaaaaa", "2025-03-14T09:00:00"), raw("bbbbbbbbbbbb", "2025-03-15T09:00:00"), raw("cccccccccccc", "2025-03-16T09:00:00")] }, { cookie: me });
+  await post(env, "/api/dives", { dives: [raw("aaaaaaaaaaaa", "2025-03-14T09:00:00")] }, { cookie: other });
+  assert.equal((await call(env, "/api/dives/delete", { method: "POST", body: "{}" })).status, 401, "signed out");
+  for (const body of [[], ["zz"], ["aaaaaaaaaaaa", 5], Array(101).fill("aaaaaaaaaaaa").map((_, i) => i.toString(16).padStart(12, "0"))]) assert.equal((await del(me, body)).status, 400, JSON.stringify(body).slice(0, 30));
+  assert.equal((await post(env, "/api/dives/delete", "nope", { cookie: me })).status, 400);
+  assert.equal((await call(env, "/api/dives/delete", { method: "POST", headers: { cookie: me, "content-type": "application/json", origin: "https://evil.example" }, body: JSON.stringify({ fingerprints: ["aaaaaaaaaaaa"] }) })).status, 403, "cross-origin writes are refused");
+  const r = await (await del(me, ["aaaaaaaaaaaa", "aaaaaaaaaaaa"])).json(); assert.equal(r.deleted, 1, "one dive removed (the duplicate in the request counts once)");
+  const mine = await get(me); assert.deepEqual(mine.dives.map((d) => d.fingerprint).sort(), ["bbbbbbbbbbbb", "cccccccccccc"]); assert.deepEqual(mine.deleted, ["aaaaaaaaaaaa"]);
+  assert.equal((await get(other)).dives.length, 1, "another person's dive with the same fingerprint is untouched"); assert.deepEqual((await get(other)).deleted, []);
+  // a sync or an import that sends the dive again does not store it
+  const again = await (await post(env, "/api/dives", { dives: [raw("aaaaaaaaaaaa", "2025-03-14T09:00:00"), raw("dddddddddddd", "2025-03-17T09:00:00")] }, { cookie: me })).json(); assert.equal(again.stored, 1, "only the new dive");
+  assert.ok(!(await get(me)).dives.some((d) => d.fingerprint === "aaaaaaaaaaaa"));
+  // a copy from another person does not bring it back either, but sends the rest
+  await post(env, "/api/dives", { dives: [raw("eeeeeeeeeeee", "2025-04-01T09:00:00")] }, { cookie: other }); await del(other, ["eeeeeeeeeeee"]);
+  assert.equal((await (await post(env, "/api/share/copy", { to: "me@example.com" }, { cookie: other })).json()).copied, 0, "she deleted her own dive, nothing to copy");
+  await post(env, "/api/dives", { dives: [raw("ffffffffffff", "2025-04-02T09:00:00")] }, { cookie: other }); await del(me, ["ffffffffffff"]);
+  assert.equal((await (await post(env, "/api/share/copy", { to: "me@example.com" }, { cookie: other })).json()).copied, 0, "I deleted that dive before: a copy does not bring it back");
+  assert.ok(!(await get(me)).dives.some((d) => d.fingerprint === "ffffffffffff"));
+});

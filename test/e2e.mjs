@@ -1441,4 +1441,35 @@ if (process.env.REAL_DB) {
   } catch (e) { failed++; console.log("FAIL sharing dive logs\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-share.png", fullPage: true }); }
   await ctx.close();
 }
+// ---- scenario: delete a dive from the dive log: asks first, removes the dive and its hidden copies, is remembered, is retried when the connection fails ----
+{
+  const imp = (device, n, iso, over = {}) => ({ fingerprint: (0xd00000000000 + n + { peregrine: 0x100, perdix: 0x300 }[device]).toString(16).padStart(12, "0"), device, startedAt: iso, mode: "scuba", durationSec: 2400, maxDepthM: 18, o2Percent: 32, headerHex: "", profileHex: "", extra: JSON.stringify({ n, t: 27, iv: 10, s: [[0, 0, 28], [1200, 18, 27], [2400, 0, 27]] }), ...over });
+  const all0 = [imp("perdix", 1, "2025-04-02T09:03:00"), imp("peregrine", 1, "2025-04-02T09:00:00", { sharedFrom: "togar@example.com" }), imp("perdix", 2, "2025-04-03T09:00:00")];
+  let serverDives = [...all0], deleted = [], failNext = true; const calls = [];
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "sharon@example.com", name: "Sharon", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Sharon", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
+  await page.route("**/api/dives", (r) => r.request().method() === "GET" ? r.fulfill({ json: { dives: serverDives, deleted } }) : r.fulfill({ json: { stored: 0 } })); await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives/delete", (r) => { const b = JSON.parse(r.request().postData()); calls.push(b.fingerprints); if (failNext) { failNext = false; return r.fulfill({ status: 500, json: { error: "down" } }); } serverDives = serverDives.filter((d) => !b.fingerprints.includes(d.fingerprint)); deleted = [...deleted, ...b.fingerprints]; return r.fulfill({ json: { deleted: b.fingerprints.length } }); });
+  try {
+    await page.goto(base); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 2, null, { timeout: 8000 });
+    const first = page.locator("#diveList details.dive").nth(1);                              // the older dive: her Perdix dive with Togar's Peregrine copy behind it
+    await first.locator("summary").click(); await page.waitForSelector(".del-ask"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap delete");
+    await page.locator(".del-ask").tap(); await page.waitForSelector(".del-confirm");
+    const txt = await page.locator(".del-confirm").innerText(); assert.match(txt, /Delete dive 1\?/); assert.match(txt, /cannot be undone/); assert.match(txt, /Peregrine/, "says that the copy from another computer goes too"); assert.match(txt, /not come back when you sync or import/);
+    await page.locator(".del-no").tap(); await page.waitForSelector(".del-ask"); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
+    // delete: the connection fails first, so the dive is gone from this phone at once and the cloud is told later
+    await page.locator(".del-ask").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
+    assert.deepEqual(calls[0].sort(), [all0[0].fingerprint, all0[1].fingerprint].sort(), "the dive and its hidden copy are deleted together"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(1\)/);
+    await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 });
+    await page.waitForFunction(() => true); await page.waitForTimeout(500); assert.equal(calls.length, 2, "the failed deletion is sent again the next time"); assert.deepEqual(deleted.sort(), [all0[0].fingerprint, all0[1].fingerprint].sort());
+    // the cloud answers with a stale list that still holds the dive: it stays deleted on this phone
+    serverDives = [...all0]; await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 }); await page.waitForTimeout(500);
+    assert.equal(await page.locator("#diveList details.dive").count(), 1); assert.match(await page.locator("#diveList details.dive").first().locator("summary").innerText(), /Perdix/);
+    assert.equal(await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("cosmiq", 1); r.onsuccess = () => { const q = r.result.transaction("dives").objectStore("dives").getAll(); q.onsuccess = () => res(q.result.filter((d) => d.deleted).length); }; })), 2, "only the fingerprints of the deleted dives are kept");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS delete a dive");
+  } catch (e) { failed++; console.log("FAIL delete a dive\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-delete.png", fullPage: true }); }
+  await ctx.close();
+}
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

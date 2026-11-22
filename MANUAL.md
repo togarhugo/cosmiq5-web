@@ -123,6 +123,7 @@ Tap a dive to open it:
 * **Depth chart** with a **grid**: horizontal lines at round depths (in metres, down the left) and vertical lines at round minutes (along the bottom), so you can read depth and time off the line.
 * **Max depth, duration, minimum temperature, O₂ %, dive number, average depth, time since your last dive, surface pressure.**
 * **Location** field for that dive.
+* **Delete this dive…** at the bottom. It asks first (*Delete dive* / *Keep it*). Deleting removes the dive and the copies other computers recorded of it, from this phone and from your account, and it **cannot be undone**: the dive does not come back when you sync the dive computer or import a file again. Copies that were shared with other people stay on their accounts.
 * **Technical details**: the raw header bytes, for the curious.
 
 A badge may appear on a dive:
