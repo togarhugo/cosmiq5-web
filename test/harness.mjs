@@ -19,7 +19,7 @@ export function makeD1() {
     bind: (...args) => stmt(sql, args),
     first: async () => db.prepare(sql).get(...a) ?? null,
     all: async () => ({ results: db.prepare(sql).all(...a) }),
-    run: async () => ({ meta: { changes: Number(db.prepare(sql).run(...a).changes) } }),
+    run: async () => { const r = db.prepare(sql).run(...a); return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } }; },
   });
   return { prepare: (sql) => stmt(sql), batch: async (sts) => { const o = []; for (const s of sts) o.push(await s.run()); return o; }, raw: db };
 }

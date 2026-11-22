@@ -115,7 +115,7 @@ download and upload. Tap **Download raw backup** after the first sync.
 Binary data (the picture, certification files) is stored as base64 text and the Worker never decodes it, which keeps requests far below
 the free plan's CPU limit.
 
-- **Second dive computer (Shearwater Peregrine):** dives carry a `device` column (`cosmiq` default, `peregrine`). Imported dives have no raw
+- **Other dive computers (Shearwater Peregrine and Perdix, Garmin Descent):** dives carry a `device` column (`cosmiq` default, `peregrine`, `perdix`, `garmin`; the list is `src/devices.js`, a test keeps it equal to `DEVICES` in `public/dive-utils.js`). Garmin dives come from FIT files read in the browser (`public/garmin-fit.js`, field numbers from the FIT SDK profile); no Garmin account or API is involved. Imported dives have no raw
   bytes: `header_hex`/`profile_hex` are empty and their decoded values + depth samples are JSON in `extra` (the Worker stores it as text,
   never parses it, caps it at 120 KB per dive and 700 KB per request). The file is parsed in the browser (UDDF, `public/dive-import.js`);
   the fingerprint is a hash of device + start minute so re-importing adds nothing. Totals de-duplicate overlapping dives from two devices.
@@ -177,6 +177,8 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0005_devices_and_lates
 npx wrangler d1 execute cosmiq --remote --file=migrations/0006_places.sql                     # map positions of dive places (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0007_api_keys.sql                   # API keys (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0008_regulator_service.sql           # regulator service month, limits, history (run once)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0009_bt_reports.sql                  # Bluetooth reports / download logs people send to their own account (idempotent)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0010_shared_dives.sql                # dives.shared_from: dives one person copies into another's account (run once)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

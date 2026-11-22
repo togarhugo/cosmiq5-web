@@ -23,12 +23,12 @@ export function pnfDive({ ticks, units = 0, maxDepth10 = 285, duration = 2700, s
   out.push(rec(0xff, (r) => { r[2] = 0x12; r[3] = 0x34; r[4] = 0x56; r[5] = 0x78; r[13] = 9; }));
   const all = new Uint8Array(out.length * 32); out.forEach((r, i) => all.set(r, i * 32)); return all;
 }
-export function peregrine({ dives, chunk = 20, base = 0x80000000, hooks = {}, omit = [] }) {
+export function peregrine({ dives, chunk = 20, base = 0x80000000, hooks = {}, omit = [], model = 9 }) {
   // memory: manifest (newest first) + each dive blob at base + address
   const manifest = new Uint8Array(0x600).fill(0), blobs = new Map(); let addr = 0x1000;
   dives.slice().reverse().forEach((d, i) => { const o = i * 32; manifest[o] = 0xa5; manifest[o + 1] = 0xc4; new DataView(manifest.buffer).setUint32(o + 4, d.ticks); new DataView(manifest.buffer).setUint32(o + 20, addr); blobs.set(base + addr, d.blob); addr += 0x10000; });
   const log = []; let inbox = [], outbox = [], session = null;
-  const ids = { 0x8010: [...Buffer.from("12345678")], 0x8011: [...Buffer.from("V93")], 0x8060: [9], 0x8021: [0, base >>> 24, (base >> 16) & 255, (base >> 8) & 255, base & 255, 0, 0, 0, 0] };
+  const ids = { 0x8010: [...Buffer.from("12345678")], 0x8011: [...Buffer.from("V93")], 0x8060: [model], 0x8021: [0, base >>> 24, (base >> 16) & 255, (base >> 8) & 255, base & 255, 0, 0, 0, 0] };
   for (const k of omit) delete ids[k];
   const respond = (payload) => { const pk = [1, 0xff, payload.length + 1, 0, ...payload], b = slipEnc(pk), nframes = Math.ceil(b.length / chunk);
     for (let i = 0, k = 0; i < b.length; i += chunk - 2, k++) outbox.push(Uint8Array.from([nframes, k, ...b.slice(i, i + chunk - 2)])); };
@@ -49,5 +49,5 @@ export function peregrine({ dives, chunk = 20, base = 0x80000000, hooks = {}, om
     async read() { const n = outbox.shift(); if (!n) throw new S.ProtocolError("timeout waiting for the dive computer"); return n; },
   };
   const drain = () => outbox.splice(0, outbox.length);
-  return { io, log, wrote: log, drain };
+  return { io, log, wrote: log, drain, setModel: (m) => { ids[0x8060] = [m]; } };
 }

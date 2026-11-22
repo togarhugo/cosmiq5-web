@@ -1,13 +1,13 @@
 # Dive Manager — User Manual
 
-*For version 0.19.1. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
+*For version 0.21.0. Dive Manager manages a Deepblu Cosmiq+ (Gen 5) dive computer and your dive records.*
 
 ## Contents
 1. [Getting started](#1-getting-started)
 2. [Finding your way around](#2-finding-your-way-around)
 3. [Summary](#3-summary)
 4. [Connecting and syncing](#4-connecting-and-syncing)
-5. [Dive log](#5-dive-log)
+5. [Dive log and Import](#5-dive-log-and-import)
 6. [Dive locations](#6-dive-locations)
 7. [Device settings](#7-device-settings)
 8. [Account](#8-account) (including [API access](#api-access-let-other-tools-read-your-dive-log))
@@ -87,16 +87,36 @@ Tap the You card or the regulator card to jump to the matching Account section.
 Good to know:
 * **Each dive is saved the moment it arrives.** If the connection drops, or you tap **Cancel**, you keep what was downloaded; tap sync again to continue.
 * Downloading is slow (the device sends very small pieces): a few dives take seconds, a whole log can take minutes. Keep the screen on.
-* In **Dive log → Sync** you can switch off the clock sync or the automatic download, and tap **Re-check every dive** if something seems missing.
+* In **Import → Cosmiq+ → Sync** you can switch off the clock sync or the automatic download, and tap **Re-check every dive** if something seems missing.
 * **Download raw backup** saves all your dives as a file you can keep.
 * **Copy diagnostics / Save diagnostics** produce a report (version, device traffic) you can send when something goes wrong.
 
 ---
 
-## 5. Dive log
+## 5. Dive log and Import
 
-At the top, choose the dive computer: **Cosmiq+ Gen 5** or **Shearwater Peregrine**. Each has its **own log**; the app remembers your choice.
+Two separate tabs: the **Dive log** only lists your dives; **Import** is where dives come in.
 
+### Dive log: one list, every dive once
+* **One list for all your dive computers.** A dive that two computers recorded (you wore both) appears **once**, with the record of the computer ranked first in this list: **Peregrine, Perdix, Garmin, Cosmiq+**. So for you: a Peregrine dive is shown instead of the Cosmiq+ copy; for someone with a Perdix and a Garmin the Perdix record is shown. The row says which computer it is (a small chip) and which others recorded it (*also on Cosmiq+*); the header says how many duplicates were left out. The same rule decides the Summary, the regulator counter and the map.
+* **Places are kept.** A place entered on a hidden record is shown on the record that is displayed, and a place you enter applies to both.
+* **Numbers.** The number in the box is your logbook number: 1 is your oldest dive. A computer's own number is in the dive's details.
+* **Dives from another person** (see *Share dives* in Account) appear in the same list with a chip *from <name>*. A dive both of you recorded shows **your own computer's** record, never the shared copy.
+* An empty log points you to Import.
+
+### Import: bring dives in
+Open **Import**. Only **your** dive computers are listed: the ones that already have dives in your account, plus the ones you add yourself. The choices are **Cosmiq+ Gen 5**, **Shearwater Peregrine**, **Shearwater Perdix** and **Garmin Descent**. Each has its own box with its own steps: the Cosmiq+ syncs over Bluetooth, the Peregrine and Perdix download over Bluetooth or import a Shearwater Cloud file, the Garmin imports FIT files. The count next to each computer is how many dives *that computer* holds (before duplicates are left out). When something new arrives, the Import tab says so and has an **Open the dive log** button.
+* **Nothing listed yet?** The app asks *Which dive computer do you use?*: tap yours and its box appears.
+* **Another computer later:** tap **+ Add a dive computer** under the tabs.
+* **Added by mistake?** While a computer has no dives, **Hide this dive computer** removes its tab.
+* **No Cosmiq+?** If your dive computers do not include a Cosmiq+, its **Connect & Sync** button, connection status and the **Device** tab are hidden, because they only make sense with one. Add the Cosmiq+ and they come back.
+* **Download raw backup (.json)** is at the bottom of Import.
+Each person only ever sees their own dives (plus any another person chose to share): every account has its own log, and if someone else signs in on the same browser, the dives and settings stored there for the previous person are cleared first (dives that were never uploaded are saved to a backup file, never given to the other account).
+
+### Share dives (Account)
+You dive together? **Account → Share dives** copies **your own** dive log into the other person's account (any other name on the allow-list). Choose the person, optionally a **From** / **Until** date, press **Preview** (it shows how many dives per year would be copied), then **Copy** (tap twice). Copying again adds only what is new, and dives that were shared with *you* are never passed on. The copies carry your name, rank **after** the other person's own computers, and the other person can **Remove** everything you shared (Account → Share dives → *Shared with you*). Think before copying everything: the copied dives count in that person's totals, regulator counter, places and map, so choose a **From** date and leave out dives they were not on.
+
+### The dive list
 Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number (bold, in a small box), time, mode (scuba / freedive / gauge), maximum depth and duration.
 
 Tap a dive to open it:
@@ -112,11 +132,11 @@ A badge may appear on a dive:
 | **PARTIAL PROFILE** | The device had already overwritten the last minutes of the profile; the chart shows the gap. All summary numbers are still correct. |
 | **SUMMARY ONLY** | The device overwrote this dive's whole profile (it keeps roughly the last 128). Depth, duration and temperature are intact. |
 
-### Shearwater Peregrine: import from Shearwater Cloud
+### Shearwater Peregrine and Perdix: import a Shearwater Cloud file (the alternative to Bluetooth)
 The Peregrine passes its dives to the **Shearwater Cloud** app; Dive Manager reads what Shearwater Cloud exports.
 1. Download your dives from the Peregrine into **Shearwater Cloud**, as you normally do.
 2. In Shearwater Cloud **export the database**: on a phone open **Profile** and tap **Export** (you get a `.db` file or an account export, a `.zip`); on a computer use **File › Export › Export Whole Database**. Save it to your phone (Files / Downloads). The menu names differ between app versions.
-3. In Dive Manager open **Dive log → Shearwater Peregrine**, then **drag the file into the dashed box** (or tap the box and choose it). Both the `.db` and the `.zip` work, and so does a **UDDF** export.
+3. In Dive Manager open **Import → Shearwater Peregrine**, then **drag the file into the dashed box** (or tap the box and choose it). Both the `.db` and the `.zip` work, and so does a **UDDF** export.
 4. You see *"3 new dives imported, 0 already there"* and are asked where you dived.
 
 On a computer you can also **drag the file onto the card** instead of using the chooser (handy when you cannot find the folder: drag it straight from a Finder or Spotlight result). The file chooser shows **all** files (it does not filter by type), so a `.db` file is never greyed out. Tested on a real export of 138 dives: every dive decoded, and depth and duration match the numbers Shearwater Cloud itself stores.
@@ -125,8 +145,39 @@ Importing again later (a newer export) only adds the dives you do not have yet. 
 
 If a message says a file could not be read, it names the reason. If the app cannot read your export at all, send me the message: I built this reader from other people's descriptions of Shearwater's file layout and tested it on files I made myself, not on a real Shearwater Cloud export.
 
-### Shearwater Peregrine: Bluetooth (experimental)
-Under **Bluetooth download (experimental)** the app can also read the Peregrine directly. It follows the protocol of the open-source libdivecomputer, but it had **not worked on a real Peregrine** when it was released: on the first real try the phone's list did not show the Peregrine. Use the file import above; the Bluetooth route is left in for further testing. It only reads: nothing is written to the Peregrine.
+### Garmin Descent: import dive files
+Garmin does **not** let other apps read your dives straight from the watch or from your Garmin account (their programmes are for approved companies, and signing in with your Garmin password would be fragile and unsafe), so you bring the files over. The **Garmin Descent** tab in the Dive log has its own box:
+1. Get your dives as **FIT** files (`.fit`):
+   * **One dive:** on the Garmin Connect **website**, open the dive, gear menu → **Export Original**. You get a ZIP with the `.fit` inside. On an iPhone use Safari, open `connect.garmin.com` and choose *Request Desktop Website*: the Garmin Connect app itself has no export.
+   * **All your dives:** Garmin account → **Data Management → Export Your Data**. Garmin emails a big ZIP (hours to days). Drop the ZIP as it is: runs, sleep and other activities in it are skipped and counted.
+   * **From the watch:** cable to a computer, copy the files from `Garmin/Activity`. The Descent Mk1 shows as a drive; the Mk2, Mk2i and Mk3 do not on a Mac (use the free OpenMTP or Android File Transfer there; Windows copies them directly).
+2. **Drag the file or ZIP into the box** (or tap it to choose). Several files at once are fine.
+3. Each dive appears in the Garmin Descent log with the **watch's own dive number**, depth, duration, minimum temperature, the gas (O₂ %) and the depth chart. Scuba, **gauge** and **apnea (freedive)** sessions are told apart.
+Already imported dives are skipped, so you can import a newer export again and again. A dive that the Cosmiq+ (or Peregrine) also recorded is counted **once** in the Summary and the regulator counter, using the first computer's record.
+The time shown is the watch's clock (the file stores a UTC time and the watch's offset). If a file has no offset the app says so and shows UTC. This import reads Garmin's published file format and is **beta**: it was built and tested with files made to that format and has not yet been compared with every watch, so check your first import against the watch. A freedive session is imported as one dive per file.
+
+### Shearwater Bluetooth download (Peregrine, Perdix 2): the main way
+**Download over Bluetooth** is the first thing on the Peregrine and Perdix tabs: no export, no Shearwater Cloud, only new dives are downloaded, each saved as it arrives. It reads only: nothing is written to the computer. A dive already in your log (even from an earlier file import) is recognised and not added twice.
+* **Peregrine:** works on a real Peregrine (tried from Chrome on a Mac: it connected, answered with its serial, firmware and model number, and downloaded).
+* **Perdix:** the same method and the same code. It has **not yet been tried on a real Perdix**, so it is not claimed to work: if it fails, use the test and send the download log (below). A Perdix 2 should work; older computers with classic Bluetooth (the Petrel 1, and possibly the original Perdix) cannot connect from a browser at all.
+* The **file import** (Shearwater Cloud database or UDDF) stays underneath as the alternative, for example for a computer that cannot connect.
+1. You need a browser with Bluetooth: **Bluefy** on an iPhone, Chrome on Android or a computer. Safari cannot do it.
+2. On the dive computer switch **Bluetooth** on in its menu. Close Shearwater Cloud (and any other app) first: a dive computer talks to one app at a time.
+3. Tap **Test: what can the app see?** first. It picks the computer, connects, sends nothing, and says whether it can see the Shearwater data service. If the computer is missing from the list, or the result says it is not a Shearwater service, the download will not work either, and you know where it stops.
+4. Tap **Download dives over Bluetooth**. Only new dives are downloaded; each is saved the moment it arrives.
+If it does not work, use the file import below it and open the **Bluetooth lab** (link under the test button, or `/bluetooth-lab.html`).
+
+### Download log (every Bluetooth attempt)
+Under the Bluetooth download, **Download log** records every attempt on this device: a download, a *Test: what can the app see?* or a lab handshake. Each entry shows the computer, browser and system, the time of every step, who answered (serial, firmware, model number; a model number the app knows is named: **9 = Peregrine**), the counts, the result (OK, FAILED or CANCELLED, or *no result* if the page was closed mid-way) and the first and last bytes exchanged, each with the time since the attempt began. The steps are in words: *Read serial number: "93D47FB9" (39 ms)*, *Dive list page 1: 138 dives listed*, *Dive 3 of 10 (2026-05-02 09:30): 14336 bytes, 480 depth samples, 2.4 s*, or *Dive 4 of 10: FAILED: the reason*. If a computer says it is a Peregrine (model number 9) but you are on the Perdix tab, the download stops before any dive is read, so no dive is filed under the wrong computer. The newest 25 are kept on this device (never HTML, capped in size). **Copy**, **Save as file**, **Clear**, or **Send to my account**: that stores the log privately in your own account (the newest 30 are kept) so someone helping can look at it afterwards. A different person signing in on the same browser starts with an empty log.
+
+### Bluetooth lab (sandbox)
+A read-only troubleshooting page that shows how a dive computer talks Bluetooth. It never writes to the computer, except the handshake's three *read* requests.
+1. **Browser checks:** Web Bluetooth, the Bluetooth adapter, and a checklist (on a Mac: System Settings → Privacy & Security → Bluetooth → switch your browser on; quit Shearwater Cloud everywhere; Bluetooth on at the computer).
+2. **Listen for what is advertising nearby:** every Bluetooth LE device the browser can hear, with name, signal, announced services and manufacturer data; devices that look like a Shearwater get a green *likely* tag. This needs one Chrome setting, `chrome://flags/#enable-experimental-web-platform-features` = Enabled (the page explains it).
+3. **Pick a device and look inside it:** lists its services and characteristics, reads the harmless ones (name, model, battery) and can listen to notifications.
+4. **Shearwater handshake:** asks for the serial, firmware and model number. A real Peregrine answered it from Chrome on a Mac (serial, firmware *V89 Classic*, model number 9).
+5. **Report:** everything as text to copy, save, or **Send to my account**. It starts with a **Summary** in plain words (for example *REACHABLE: Peregrine answered the Shearwater protocol…*) and also contains the recent attempts from the download log. By default it lists only dive-computer-like devices; review it first, since it can contain the computer's serial number.
+If nothing at all shows up in step 2 (not even your other Bluetooth devices), the problem is the browser's or the system's Bluetooth permission, not the dive computer.
 
 Header line: *"106 dives · 90 with full depth profile · 2 partial · 14 summary only"*.
 
@@ -312,7 +363,7 @@ The menu itself shows your own address and a ready-to-copy example. In short:
 | "This browser can't use Bluetooth" | Use Chrome/Edge, or Bluefy on iPhone/iPad. |
 | Can't find the dive computer | Wake it, keep it close, make sure Bluetooth is on and no other app is connected to it. |
 | Sync stops or times out | Tap **Cancel**/wait, then sync again: downloaded dives are kept and it continues. |
-| A dive is missing | **Dive log → Re-check every dive**. |
+| A dive is missing | **Import → Cosmiq+ → Re-check every dive**. |
 | A chart says *summary only* | The device overwrote that profile; nothing can bring it back. Sync after each trip. |
 | "Not applied: the dive computer still shows …" | Try again; check the device's screen; reconnect if it keeps happening. |
 | Signed out / "reload the page to sign in again" | Reload; sign in again. Unsent edits are kept and retried. |

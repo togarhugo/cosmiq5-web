@@ -59,8 +59,15 @@
   }
 
   // ---- several dive computers ----
-  const DEVICES = [{ id: "cosmiq", name: "Cosmiq+ Gen 5", short: "Cosmiq+" }, { id: "peregrine", name: "Shearwater Peregrine", short: "Peregrine" }];
+  const DEVICES = [{ id: "cosmiq", name: "Cosmiq+ Gen 5", short: "Cosmiq+" }, { id: "peregrine", name: "Shearwater Peregrine", short: "Peregrine" }, { id: "perdix", name: "Shearwater Perdix", short: "Perdix" }, { id: "garmin", name: "Garmin Descent", short: "Garmin" }];
   const deviceOf = (rec) => rec.device || "cosmiq";
+  /**
+   * When two computers recorded the same dive, the record of the FIRST one in this list is the one shown and counted: the Shearwaters first
+   * (their log is the most complete), the Cosmiq+ last. A dive copied from another person's log (`sharedFrom`) always comes after the person's own
+   * computers: your own Perdix beats a Peregrine dive that was shared with you.
+   */
+  const PREFERENCE = ["peregrine", "perdix", "garmin", "cosmiq"];
+  const isShared = (r) => !!r.sharedFrom;
   const startMs = (r) => Date.parse(r.startedAt + "Z"), HOUR = 3600000;
   /** Do the two dives overlap on the clock (the other computer started a few minutes early or late)? */
   const overlaps = (a, b) => { const as = startMs(a), bs = startMs(b); return as < bs + (b.durationSec || 0) * 1000 && bs < as + (a.durationSec || 0) * 1000; };
@@ -80,8 +87,8 @@
    */
   function duplicateMap(recs) {
     const out = new Map(), kept = [];
-    for (const dev of DEVICES) {
-      const mine = recs.filter((r) => deviceOf(r) === dev.id), matched = new Set(), claimed = new Set(), rest = [];
+    for (const shared of [false, true]) for (const id of PREFERENCE) {
+      const mine = recs.filter((r) => deviceOf(r) === id && isShared(r) === shared), matched = new Set(), claimed = new Set(), rest = [];
       for (const r of mine) { const hit = kept.find((k) => Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && overlaps(k, r)); if (hit) { out.set(r.fingerprint, hit.fingerprint); matched.add(hit.fingerprint); } else rest.push(r); }
       for (const r of rest) {
         const hit = kept.find((k) => !matched.has(k.fingerprint) && !claimed.has(k.fingerprint) && Math.abs(startMs(k) - startMs(r)) < 15 * HOUR && shiftedSame(k, r));
@@ -89,11 +96,23 @@
       }
       for (const r of mine) if (!out.has(r.fingerprint)) kept.push(r);
     }
-    for (const r of recs) if (!DEVICES.some((d) => d.id === deviceOf(r))) kept.push(r);
+    for (const r of recs) if (!PREFERENCE.includes(deviceOf(r))) kept.push(r);
     return out;
   }
+  /** {dup: duplicate fingerprint -> kept fingerprint, extras: kept fingerprint -> [the records hidden behind it]} */
+  function duplicateGroups(recs) {
+    const dup = duplicateMap(recs), extras = new Map(), byFp = new Map(recs.map((r) => [r.fingerprint, r]));
+    for (const [d, k] of dup) { if (!extras.has(k)) extras.set(k, []); extras.get(k).push(byFp.get(d)); }
+    return { dup, extras };
+  }
   /** Dives to count in totals: every dive once. When two computers recorded the same dive, the Cosmiq+ record is used. */
-  function uniqueDives(recs) { const dup = duplicateMap(recs); return recs.filter((r) => !dup.has(r.fingerprint)).sort((a, b) => a.startedAt.localeCompare(b.startedAt)); }
+  function uniqueDives(recs) {
+    const { dup, extras } = duplicateGroups(recs);
+    return recs.filter((r) => !dup.has(r.fingerprint)).map((r) => {                      // a place entered on a hidden record (for example the Cosmiq+'s) is not lost when another computer's record is the one shown
+      const hidden = extras.get(r.fingerprint); if (!hidden || r.location) return r;
+      const loc = hidden.map((h) => h.location).find(Boolean); return loc ? { ...r, location: loc } : r;
+    }).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  }
   /** Dive number to show: the computer's own count when it has one, otherwise its place in that computer's log (oldest = 1). */
   function diveNumbers(recs) {
     const out = new Map(), by = new Map();
@@ -265,6 +284,6 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { regulatorStatus, regulatorMessage, monthsSince, monthLabel, REG_HISTORY_MAX, KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  const api = { PREFERENCE, isShared, duplicateGroups, regulatorStatus, regulatorMessage, monthsSince, monthLabel, REG_HISTORY_MAX, KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);

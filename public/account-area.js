@@ -304,6 +304,37 @@ const AccountArea = (() => {
     try { await api("DELETE", "/api/regulator"); setReg(null); say("Regulator removed"); renderRegulator(); } catch (e) { note("regMsg", e.message, true); }
   }
 
+  // ---------- share dives with the other person who uses this app ----------
+  const whoIs = (email) => { const t = String(email || "").split("@")[0].split(/[._-]/)[0]; return t.charAt(0).toUpperCase() + t.slice(1); };
+  let shareInfo = { targets: [], received: [] }, sharePreviewed = null;
+  const shareBody = () => ({ to: $("shareTo").value, from: $("shareFrom").value, until: $("shareUntil").value });
+  async function loadShare() {
+    try { shareInfo = await api("GET", "/api/share"); } catch (e) { return; }
+    const sel = $("shareTo"), keep = sel.value; sel.innerHTML = shareInfo.targets.map((t) => `<option value="${esc(t)}">${esc(whoIs(t))} (${esc(t)})</option>`).join(""); if (keep && shareInfo.targets.includes(keep)) sel.value = keep;
+    $("shareOut").style.display = shareInfo.targets.length ? "" : "none"; $("shareNone").style.display = shareInfo.targets.length ? "none" : "";
+    const rec = shareInfo.received; $("shareIn").style.display = rec.length ? "" : "none";
+    $("shareInList").innerHTML = rec.map((r) => `<div class="row" style="margin:4px 0;align-items:center"><span><b>${r.count}</b> dive${r.count === 1 ? "" : "s"} from <b>${esc(whoIs(r.from))}</b> <span class="muted">(${esc(r.first.slice(0, 7))} to ${esc(r.last.slice(0, 7))})</span></span><button class="btn-set share-remove" type="button" data-from="${esc(r.from)}" style="background:var(--bg-6c757d)">Remove</button></div>`).join("");
+    const badge = $("shareBadge"), n = rec.reduce((a, r) => a + r.count, 0); badge.textContent = n + " shared with you"; badge.style.display = n ? "" : "none";
+  }
+  async function previewShare() {
+    sharePreviewed = null; $("shareCopyBtn").disabled = true; note("shareMsg", "");
+    try {
+      const r = await api("POST", "/api/share/preview", shareBody()), who = whoIs($("shareTo").value);
+      $("sharePreview").innerHTML = r.total ? `<b>${r.total}</b> dive${r.total === 1 ? "" : "s"} would be copied to ${esc(who)}:<ul style="margin:6px 0 0">` + r.byYear.map((y) => `<li>${esc(y.year)}: ${y.count}</li>`).join("") + "</ul>" : "No dives of yours in that period.";
+      if (r.total) { sharePreviewed = { ...shareBody(), total: r.total }; $("shareCopyBtn").disabled = false; $("shareCopyBtn").textContent = `Copy ${r.total} dive${r.total === 1 ? "" : "s"} to ${who}`; }
+    } catch (e) { note("shareMsg", e.message, true); }
+  }
+  async function copyShare() {
+    if (!sharePreviewed) return; const who = whoIs(sharePreviewed.to);
+    try { const r = await api("POST", "/api/share/copy", { to: sharePreviewed.to, from: sharePreviewed.from, until: sharePreviewed.until });
+      say(`${r.copied} dive${r.copied === 1 ? "" : "s"} copied to ${who}`); note("shareMsg", r.copied ? `${r.copied} new dive${r.copied === 1 ? "" : "s"} copied to ${who}'s account.` + (r.copied < sharePreviewed.total ? ` ${sharePreviewed.total - r.copied} ${sharePreviewed.total - r.copied === 1 ? "was" : "were"} already there.` : "") : `Nothing new: all ${sharePreviewed.total} were already in ${who}'s account.`);
+    } catch (e) { note("shareMsg", e.message, true); }
+  }
+  async function removeShared(btn) {
+    const from = btn.dataset.from;
+    try { const r = await api("POST", "/api/share/remove", { from }); await Dives.forgetShared(from); say(`${r.removed} dive${r.removed === 1 ? "" : "s"} removed`); await loadShare(); Dives.render(); } catch (e) { note("shareMsg", e.message, true); }
+  }
+
   // ---------- help / version ----------
   async function checkUpdate() {
     note("helpMsg", "Checking…");
@@ -343,6 +374,9 @@ const AccountArea = (() => {
       $(cfg.add).addEventListener("click", () => addFile(cfg)); $(cfg.list).addEventListener("click", (e) => fileAction(cfg, e));
     }
     $("certList").addEventListener("keydown", (e) => { const f = e.target.closest && e.target.closest(".wface"); if (f && e.target === f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); const id = f.closest(".wcard").dataset.id; toggleCert(id, openCert === id ? false : true); } });
+    $("sharePreviewBtn").addEventListener("click", previewShare); for (const id of ["shareTo", "shareFrom", "shareUntil"]) $(id).addEventListener("change", () => { sharePreviewed = null; $("shareCopyBtn").disabled = true; $("shareCopyBtn").textContent = "Copy dives"; });
+    $("shareCopyBtn").addEventListener("click", (e) => { if (sharePreviewed) confirmTap(e.currentTarget, "Tap again to copy", copyShare); });
+    $("shareInList").addEventListener("click", (e) => { const b = e.target.closest(".share-remove"); if (b) confirmTap(b, "Tap again to remove", () => removeShared(b)); });
     $("certShowAdd").addEventListener("click", () => { $("certAddBox").style.display = ""; $("certShowAdd").style.display = "none"; note("certMsg", ""); $("certLabel").focus(); });
     $("certAddCancel").addEventListener("click", () => { hideCertAdd(); note("certMsg", ""); });
     $("certAuto").addEventListener("click", async () => { try { await api("PUT", "/api/profile/latest-cert", { id: "" }); pinnedCert = ""; say("Main certification is now the newest by date"); renderFiles(); } catch (e) { note("certMsg", e.message, true); } });
@@ -362,7 +396,7 @@ const AccountArea = (() => {
     const hint = $("sumRegHintLink"); if (hint) hint.addEventListener("click", (e) => { e.preventDefault(); window.showView("account"); open("regulator"); });
     const card = $("sumReg"); if (card) { const go = () => { window.showView("account"); open("regulator"); }; card.addEventListener("click", go); card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); }); }
   }
-  function show() { renderRegulator(); showVersions(); }
+  function show() { renderRegulator(); showVersions(); loadShare(); }
   function showCerts() { loadFiles(); }
 
   return { init, show, showCerts, open, regulator: () => regulator, diver, refresh: renderRegulator };

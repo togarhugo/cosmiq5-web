@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS dives (
   location     TEXT,                   -- free-text dive area ("Komodo"); NULL = not set
   device       TEXT NOT NULL DEFAULT 'cosmiq',  -- which dive computer: 'cosmiq' (Bluetooth) or an imported one ('peregrine')
   extra        TEXT,                   -- imported dives: decoded values + depth samples as JSON (header_hex/profile_hex are empty)
+  shared_from  TEXT NOT NULL DEFAULT '',  -- '' = recorded on this person's own computers; otherwise the email of the person who shared this dive (see migrations/0010_shared_dives.sql)
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, fingerprint)
 );
@@ -106,3 +107,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
   rotated_from TEXT
 );
 CREATE INDEX IF NOT EXISTS api_keys_by_user ON api_keys (user_email, created_at);
+
+-- Bluetooth reports / download logs a person sends to their own account (see migrations/0009_bt_reports.sql)
+CREATE TABLE IF NOT EXISTS bt_reports (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_email TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS bt_reports_by_user ON bt_reports (user_email, id);

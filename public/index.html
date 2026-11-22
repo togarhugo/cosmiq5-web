@@ -333,7 +333,7 @@
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
             .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
             .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
-            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); }
+            .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); } .ti-import { --ti: url(/auth/icon-import.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
             .sum { cursor: default; } .sum[role="button"] { cursor: pointer; }
             .sum-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-868e96); font-weight: 600; margin-bottom: 6px; }
@@ -515,6 +515,12 @@
             .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
             .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
             @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
+            @media (max-width: 1023px) { .nav { gap: 3px; } .nav button { flex: 1 1 auto; font-size: 12px; padding: 8px 3px 7px; } .nav .ti { width: 28px; height: 28px; } }
+            .no-cosmiq #connectBtn, .no-cosmiq #disconnectBtn, .no-cosmiq #status, .no-cosmiq #btBanner, .no-cosmiq #clockStatus, .no-cosmiq #navDevice, .no-cosmiq #deviceView { display: none !important; }
+            .srchead { margin: 14px 0 6px; font-size: 14px; } #impTitle + #impBt .srchead { margin-top: 4px; }
+            .devchip { font-size: 11px; font-weight: 600; color: var(--tx-495057); background: var(--bg-e9ecef); border-radius: 10px; padding: 2px 8px; margin-left: 6px; white-space: nowrap; } .devchip.shared { color: var(--tx-1864ab); background: var(--bg-e7f5ff); }
+            .srclist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; } .srcbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; background: var(--bg-f1f3f5); color: var(--tx-212529); border-radius: 10px; font-size: 15px; } .srcbtn span { font-size: 12px; }
+            .linkbtn { background: none; color: var(--tx-1864ab); font-size: 13px; font-weight: 600; padding: 8px 4px; min-height: 36px; } #srcAddRow { margin: -2px 0 10px; }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
             #shell, #side, #main { display: contents; } .acct-label { display: none; }
             @media (min-width: 1024px) {
@@ -543,7 +549,7 @@
                 #sumRegHint { margin: 0; }
                 #sumMap { height: 440px; }
                 #certsView { max-width: 700px; } .wallet { --cw-h: 230px; --cw-peek: 116px; }
-                #logView { max-width: 980px; } #deviceView { max-width: 1120px; }
+                #logView, #importView { max-width: 980px; } #deviceView { max-width: 1120px; }
                 #deviceView .section.active { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; } #deviceView .section.active > .card { margin: 0; }
                 #accountView { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; max-width: 1100px; } #accountView[style*="none"] { display: none; }
                 #accountView > .card { margin: 0; }
@@ -586,6 +592,7 @@
         <div class="nav">
             <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Summary</span></button>
             <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
+            <button id="navImport" onclick="showView('import')"><i class="ti ti-import" aria-hidden="true"></i><span>Import</span></button>
             <button id="navCerts" onclick="showView('certs')"><i class="ti ti-cert" aria-hidden="true"></i><span>Certificates</span></button>
             <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
         </div>
@@ -974,31 +981,73 @@
             <div id="placeBanner" class="card" style="display:none"><span aria-hidden="true">&#128506;</span> <span id="placeBannerText"></span>
                 <button id="placeBannerBtn" class="btn-set" type="button" style="margin-left:8px">Place on map</button></div>
             <datalist id="locList"></datalist>
+            <div id="diveList"></div>
+        </div>
+
+        <div id="importView" style="display:none">
+            <div id="impIntro" class="card muted" style="margin-bottom:12px">Bring dives into Dive Manager. Pick the dive computer and download or import its dives; they appear in the <a href="#" id="impToLog">Dive log</a>, one list for all your computers with duplicates left out.</div>
+            <div id="srcEmpty" class="card" style="display:none">
+                <h3>Which dive computer do you use?</h3>
+                <p class="muted" style="margin:0 0 10px">Only the dive computers that have dives, or that you add here, are shown. Pick yours to get started; you can add more later.</p>
+                <div id="srcEmptyList" class="srclist"></div>
+            </div>
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
+            <div id="srcAddRow" style="display:none"><button id="srcAdd" class="linkbtn" type="button">+ Add a dive computer</button><div id="srcAddList" class="srclist" style="display:none"></div></div>
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
-                <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
-                <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
-                    <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
+                <div id="impBt">
+                    <h4 class="srchead">Download over Bluetooth</h4>
+                    <p id="btIntro" class="muted" style="margin:0 0 8px"></p>
+                    <ol class="help" style="margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                        <li>Use <b>Bluefy</b> on an iPhone, or Chrome on Android or a computer (Safari cannot do Bluetooth).</li>
+                        <li>On the dive computer switch <b>Bluetooth</b> on in its menu, and close Shearwater Cloud everywhere (a computer talks to one app at a time).</li>
+                        <li>Tap the button and choose your dive computer in the list. Only new dives are downloaded, each saved as it arrives.</li>
+                    </ol>
+                    <button id="pgBtn" class="btn-main" type="button">Download dives over Bluetooth</button>
+                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
+                    <div id="pgMsg" class="muted" role="status">Switch Bluetooth on in the computer's menu, then tap the button and choose it in the list.</div>
+                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
+                    <button id="pgProbe" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:8px">Test: what can the app see?</button>
+                    <details id="btLogBox" class="logwrap" style="margin-top:10px"><summary>Download log <span id="btLogCount" class="muted"></span></summary>
+                            <p class="muted" style="margin:6px 0">Every Bluetooth attempt on this device (a download, a test): what was chosen, each step with its time, who answered, the result and the last bytes exchanged. Use it to see where a failed attempt stopped.</p>
+                            <ul id="btLogList" style="list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-family:var(--mono)"></ul>
+                            <textarea id="btLogText" readonly aria-label="Bluetooth download log" style="width:100%;min-height:160px;font-family:var(--mono);font-size:11px;border:1px solid var(--bd-ced4da);border-radius:8px;padding:8px;background:var(--bg-fff);color:var(--text)"></textarea>
+                            <div class="row wrap" style="margin:8px 0 0"><button id="btLogCopy" class="btn-set" type="button" style="background:var(--bg-6c757d)">Copy</button><button id="btLogSave" class="btn-set" type="button" style="background:var(--bg-6c757d)">Save as file</button><button id="btLogSend" class="btn-set" type="button">Send to my account</button><button id="btLogClear" class="btn-set" type="button" style="background:var(--bg-6c757d)">Clear</button></div>
+                            <div id="btLogMsg" class="muted" role="status" style="margin-top:6px"></div>
+                        </details>
+                    <a id="labLink" class="linkbtn" href="bluetooth-lab.html" style="display:inline-block;margin-top:8px">Open the Bluetooth lab (detailed troubleshooting)</a>
+                </div>
+                <h4 id="impFileHead" class="srchead">Or import a file from Shearwater Cloud</h4>
+                <div id="impPeregrine">
+                    <p class="muted" style="margin:0 0 10px">The <span class="impModel">Peregrine</span> hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
+                    <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                    <li>Download your dives from the <span class="impModel">Peregrine</span> into <b>Shearwater Cloud</b>, as you normally do.</li>
                     <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
                     <li>Drag the file into the box below (or tap the box to choose it). A <b>UDDF</b> export works too.</li>
-                </ol>
+                    </ol>
+                </div>
+                <div id="impGarmin" style="display:none">
+                    <p class="muted" style="margin:0 0 10px">Garmin does not let other apps read your dives directly, so you bring the dive files over. Dives are in <b>FIT</b> files (<code>.fit</code>), alone or inside a ZIP:</p>
+                    <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
+                        <li><b>One dive:</b> on the Garmin Connect <b>website</b>, open the dive, choose the gear menu &rsaquo; <b>Export Original</b>. You get a ZIP with the <code>.fit</code> inside. <b>On an iPhone</b> use Safari, open <code>connect.garmin.com</code>, tap <b>aA &rsaquo; Request Desktop Website</b> (the Garmin Connect <i>app</i> has no export); the ZIP is saved in Files and you choose it here.</li>
+                        <li><b>All your dives:</b> in your Garmin account go to <b>Data Management &rsaquo; Export Your Data</b>. Garmin emails you a big ZIP (it can take some hours or days). Drop that ZIP here: runs, sleep and other activities in it are skipped.</li>
+                        <li><b>From the watch:</b> connect it to a computer with its cable and copy the files from <code>Garmin/Activity</code>. The Descent Mk1 shows up as a drive; the Mk2, Mk2i and Mk3 do not on a Mac, so use the free OpenMTP or Android File Transfer app there (Windows copies them directly).</li>
+                        <li>Drag the file or ZIP into the box below (or tap the box to choose it).</li>
+                    </ol>
+                </div>
                 <label id="dropZone" for="impFile" tabindex="0" role="button" aria-label="Drop a Shearwater Cloud file here, or tap to choose one">
                     <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <b>Drop your Shearwater Cloud file here</b>
-                    <span>or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF</span>
+                    <b id="dropTitle">Drop your Shearwater Cloud file here</b>
+                    <span id="dropKinds">or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF</span>
                 </label>
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
-                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
-                <details class="logwrap" style="margin-top:12px"><summary>Bluetooth download (experimental)</summary>
-                    <p class="muted" style="margin:6px 0 10px">Reads the Peregrine directly, without Shearwater Cloud. It had not worked on a real Peregrine when this was released: if your phone does not list the Peregrine, use the file above.</p>
-                    <button id="pgBtn" class="btn-main" type="button" style="background:var(--bg-6c757d)">Download dives over Bluetooth</button>
-                    <div class="bar"><div id="pgBar" style="height:100%;width:0;background:var(--green);transition:width .2s"></div></div>
-                    <div id="pgMsg" class="muted" role="status">On the Peregrine open its <b>Bluetooth</b> menu, then tap the button and choose it in the list.</div>
-                    <button id="pgCancel" class="btn-set" type="button" style="display:none;background:var(--bg-6c757d);margin-top:6px">Cancel</button>
-                </details>
+                <div id="impNotePeregrine">
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The <span class="impModel">Peregrine</span> keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
+                </div>
+                <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
             </div>
+            <div id="srcHideRow" style="display:none;margin:-4px 0 12px"><button id="srcHide" class="linkbtn" type="button">Hide this dive computer (it has no dives yet)</button></div>
             <div id="syncCard" class="card">
                 <h3>Sync</h3>
                 <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
@@ -1015,7 +1064,7 @@
                 </div>
                 <div id="diagMsg" class="muted"></div>
             </div>
-            <div id="diveList"></div>
+            <div id="impGoLog" class="card" style="display:none"><span id="impGoLogText"></span> <button id="impGoLogBtn" class="btn-set" type="button" style="margin-left:8px">Open the dive log</button></div>
             <button class="btn-main btn-test" style="margin-top:10px" onclick="Dives.exportBackup()">Download raw backup (.json)</button>
         </div>
 
@@ -1165,6 +1214,24 @@
                 </div>
             </details>
 
+            <details class="card acc" data-sec="share">
+                <summary>Share dives <span id="shareBadge" class="regbadge" style="display:none"></span></summary>
+                <div class="acc-body">
+                    <p class="muted" style="margin:0 0 10px">Dive together? Copy your dive log into the other person's account. Their Dive log then lists every dive once: the record of <b>their own</b> dive computer when they have one, yours otherwise. Only dives you recorded yourself are copied, and copying again adds only what is new.</p>
+                    <div id="shareOut" style="display:none">
+                        <label class="label" for="shareTo">Share with</label>
+                        <select id="shareTo" class="fld"></select>
+                        <div class="row wrap" style="margin:6px 0 0"><label class="label" style="margin:0">From <input id="shareFrom" class="fld" type="date" style="width:auto" /></label><label class="label" style="margin:0">Until <input id="shareUntil" class="fld" type="date" style="width:auto" /></label></div>
+                        <p class="muted" style="margin:6px 0 8px"><b>Think before copying everything:</b> the copied dives count in their totals, regulator counter, places and map. Choose a <b>From</b> date so dives they were not on are left out.</p>
+                        <div id="sharePreview" class="box" style="margin-bottom:8px">Press <b>Preview</b> to see how many dives would be copied.</div>
+                        <div class="row wrap" style="margin:0"><button id="sharePreviewBtn" class="btn-set" type="button" style="background:var(--bg-6c757d)">Preview</button><button id="shareCopyBtn" class="btn-set" type="button" disabled>Copy dives</button></div>
+                    </div>
+                    <p id="shareNone" class="muted" style="display:none;margin:0">There is nobody else on the allow-list to share with.</p>
+                    <div id="shareIn" style="display:none;margin-top:12px"><div class="label" style="margin-top:0">Shared with you</div><div id="shareInList"></div></div>
+                    <div id="shareMsg" class="msg" role="status"></div>
+                </div>
+            </details>
+
             <details class="card acc" data-sec="regulator">
                 <summary>Regulator <span id="regBadge" class="regbadge" style="display:none"></span></summary>
                 <div class="acc-body">
@@ -1241,7 +1308,7 @@
                                 <tr><td><code>cursor</code></td><td>The <code>nextCursor</code> of the previous page: asks for the next page.</td></tr>
                                 <tr><td><code>order</code></td><td><code>desc</code> (default) or <code>asc</code>.</td></tr>
                                 <tr><td><code>from</code>, <code>to</code></td><td>Days, like <code>2025-03-14</code>, both included.</td></tr>
-                                <tr><td><code>device</code></td><td><code>cosmiq</code> or <code>peregrine</code>.</td></tr>
+                                <tr><td><code>device</code></td><td><code>cosmiq</code>, <code>peregrine</code> or <code>garmin</code>.</td></tr>
                                 <tr><td><code>kind</code></td><td><code>scuba</code> (includes gauge mode) or <code>freedive</code>.</td></tr>
                                 <tr><td><code>location</code></td><td>A place name, any capital letters.</td></tr>
                                 <tr><td><code>uploadedSince</code></td><td>Only dives added after this time, like <code>2025-04-01T10:00:00Z</code>: to fetch just what is new.</td></tr>
@@ -1328,6 +1395,8 @@
         <script src="dive-protocol.js"></script>
         <script src="dive-utils.js"></script>
         <script src="dive-import.js"></script>
+        <script src="garmin-fit.js"></script>
+        <script src="bt-log.js"></script>
         <script src="shearwater.js"></script>
         <script src="sqlite-lite.js"></script>
         <script src="shearwater-cloud.js"></script>
@@ -1379,13 +1448,14 @@
             let currentView = "summary";
             function showView(v) {
                 currentView = v;
-                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["certs", "navCerts"], ["account", null]]) {
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["import", "navImport"], ["certs", "navCerts"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
                     if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
                 document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
                 if (v === "account") { Account.load(); AccountArea.show(); }
                 if (v === "certs") AccountArea.showCerts();
+                if (v === "import") Dives.render();
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
                 if (v === "summary") Dives.render().then(() => PlacesUI.shown());
@@ -2019,7 +2089,8 @@
                       : "<b>This browser can't use Bluetooth.</b> Use Chrome or Edge (Android, Windows, Mac, Linux). Your saved dive log is still viewable here.";
                 b.classList.add("show");
             }
-            window.addEventListener("load", () => {
+            window.addEventListener("load", async () => {
+                if (await Dives.claimDevice()) { location.reload(); return; }                 // someone else signed in on this browser: start clean (see dives.js)
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
                 PlacesUI.init();                                                             // map pins of the places you have dived
                 ApiKeys.init();                                                              // Account > API access

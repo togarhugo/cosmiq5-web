@@ -6,6 +6,7 @@
 import CosmiqDive from "../public/dive-protocol.js";        // the same decoder the app uses for the Cosmiq+ bytes
 import { allowedEmails } from "./auth.js";
 import { VERSION } from "./version.js";
+import { DEVICE_IDS } from "./devices.js";
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...extra } });
 const KEY_RE = /^dm_[A-Za-z0-9_-]{43}$/, ID_RE = /^[0-9a-f]{16}$/, DIVE_RE = /^[0-9a-f]{12}$/;
@@ -93,7 +94,7 @@ async function authenticate(request, env) {
 
 const toBytes = (h) => Uint8Array.from(h.match(/../g) || [], (x) => parseInt(x, 16));
 const kindOf = (mode) => (mode === "freedive" ? "freedive" : "scuba");
-const SELECT = "fingerprint, device, started_at, mode, duration_sec, max_depth_m, o2_percent, location, created_at, header_hex, json_extract(extra, '$.n') AS x_number, json_extract(extra, '$.t') AS x_temp";
+const SELECT = "fingerprint, shared_from, device, started_at, mode, duration_sec, max_depth_m, o2_percent, location, created_at, header_hex, json_extract(extra, '$.n') AS x_number, json_extract(extra, '$.t') AS x_temp";
 
 /** One dive as the API shows it. `data` (samples / raw) is only added when asked for, because it is the expensive part. */
 function shape(r, places, data) {
@@ -102,7 +103,7 @@ function shape(r, places, data) {
   if (cosmiq && r.header_hex && r.header_hex.length === 72) { h = toBytes(r.header_hex); const d = CosmiqDive.parseDive(h, new Uint8Array(0)); number = d.number; minTemp = d.minTempC; }
   const pos = r.location ? places.get(r.location.trim().toLowerCase()) : null;
   const o = { id: r.fingerprint, device: r.device || "cosmiq", kind: kindOf(r.mode), mode: r.mode, startedAt: r.started_at, durationSec: r.duration_sec, maxDepthM: r.max_depth_m, minTempC: minTemp, o2Percent: r.o2_percent ?? null,
-    diveNumber: number, location: r.location || null, position: pos || null, uploadedAt: iso(r.created_at) };
+    diveNumber: number, location: r.location || null, position: pos || null, uploadedAt: iso(r.created_at), ...(r.shared_from ? { sharedFrom: r.shared_from } : {}) };     // sharedFrom: a dive copied from another person's log
   if (data) {
     if (cosmiq) {
       let samples = null, status = "unavailable";
@@ -148,7 +149,7 @@ export async function handleApiV1(request, url, env) {
     const cap = include ? MAX_PAGE_WITH_DATA : MAX_PAGE, lim = q.has("limit") ? Number(q.get("limit")) : Math.min(DEFAULT_PAGE, cap);
     if (!Number.isInteger(lim) || lim < 1 || lim > cap) return fail(400, "bad_request", `limit must be a whole number from 1 to ${cap}` + (include ? " when include is used." : "."));
     const where = ["user_email = ?"], bind = [email];
-    const device = q.get("device"); if (device) { if (device !== "cosmiq" && device !== "peregrine") return fail(400, "bad_request", "device must be cosmiq or peregrine."); where.push("device = ?"); bind.push(device); }
+    const device = q.get("device"); if (device) { if (!DEVICE_IDS.includes(device)) return fail(400, "bad_request", "device must be " + DEVICE_IDS.join(", ").replace(/, ([^,]*)$/, " or $1") + "."); where.push("device = ?"); bind.push(device); }
     const kind = q.get("kind"); if (kind) { if (kind !== "scuba" && kind !== "freedive") return fail(400, "bad_request", "kind must be scuba or freedive."); where.push(kind === "freedive" ? "mode = 'freedive'" : "(mode IS NULL OR mode != 'freedive')"); }
     for (const [name, op] of [["from", ">="], ["to", "<="]]) { const v = q.get(name); if (v) { if (!dateOk(v)) return fail(400, "bad_request", `${name} must be a date like 2025-03-14.`); where.push(`substr(started_at, 1, 10) ${op} ?`); bind.push(v); } }
     const loc = q.get("location"); if (loc) { if (loc.length > 60) return fail(400, "bad_request", "location is too long."); where.push("lower(location) = lower(?)"); bind.push(loc); }

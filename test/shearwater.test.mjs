@@ -70,3 +70,23 @@ test("readDives: a dive that cannot be read is reported and skipped; cancel stop
   await assert.rejects(S.readDives(peregrine({ dives: [good], omit: [0x8060] }).io, { known: () => false, onDive: async () => {} }), /refused the request \(code 31\)/);
   await assert.rejects(S.readDives({ write: async () => {}, read: async () => { throw new S.ProtocolError("timeout waiting for the dive computer"); } }, { known: () => false, onDive: async () => {} }), /timeout/);
 });
+
+test("download log: every stage of a download is described in words with timings, and the model can stop it before any dive is read", async () => {
+  const dives = [0, 1].map((i) => ({ ticks: T0 + i * 4 * hour, blob: pnfDive({ ticks: T0 + i * 4 * hour, maxDepth10: 200, samples: [[0, 100, 28], [0, 200, 27]] }) }));
+  const dev = peregrine({ dives }), notes = [], events = []; dev.io.note = (t) => notes.push(t);
+  const res = await S.readDives(dev.io, { known: () => false, log: (m) => events.push(m), identity: async (id) => events.push("IDENTITY " + JSON.stringify(id)), onDive: async () => {} });
+  assert.equal(res.fresh, 2);
+  assert.ok(events.includes('IDENTITY {"serial":"12345678","firmware":"' + res.firmware + '","model":9,"modelName":"Peregrine"}'), "the identity hook gets the model name (9 = Peregrine, as a real Peregrine answered)");
+  const text = events.join("\n");
+  for (const must of ["Identity: serial 12345678, firmware", "model number 9 (Peregrine)", "Log layout: answer", "base address 0x80000000", "Dive list page 1: 2 dives listed", "2 dives on the computer, 2 not downloaded yet (2026-05-02 09:30 to 2026-05-02 13:30)", "Dive 1 of 2 (2026-05-02 09:30, address 0x", "depth samples", "log version 13"]) assert.ok(text.includes(must), "log has: " + must + "\n" + text);
+  const n = notes.join("\n"); assert.match(n, /Read serial number \(0x8010\): "12345678" \(\d+ ms\)/); assert.match(n, /Read firmware \(0x8011\): "/); assert.match(n, /Read model number \(0x8060\): /); assert.match(n, /Download request: 0xe0000000, up to 1536 bytes, plain: accepted \(\d+ ms\)/, "the dive list request"); assert.match(n, /Data: 7 blocks, 1536 bytes received -> 1536 bytes, \d+\.\d+ s/); assert.match(n, /Download request: 0x80011000, up to 16777215 bytes, compressed: accepted/, "a dive"); assert.match(n, /Data: \d+ blocks, \d+ bytes received \(compressed\) -> \d+ bytes/);
+  // the hook can refuse (wrong computer for the chosen tab): nothing is downloaded
+  let asked = 0; const dev2 = peregrine({ dives }), got = [];
+  await assert.rejects(S.readDives(dev2.io, { known: () => false, identity: async () => { throw new Error("wrong computer"); }, onDive: async (d) => got.push(d) }), /wrong computer/); assert.equal(got.length, 0); assert.ok(!dev2.log.some((l) => /^35/.test(l)), "no download request was made");
+  // a failing dive is named in the log with the reason
+  const bad = { ticks: T0, blob: pnfDive({ ticks: T0 + 60 }) }, ev3 = []; await S.readDives(peregrine({ dives: [bad] }).io, { known: () => false, log: (m) => ev3.push(m), onDive: async () => {}, onProblem: () => {} }); assert.ok(ev3.some((m) => /Dive 1 of 1 \(2026-05-02 09:30\): FAILED: the dive downloaded does not match the list/.test(m)), ev3.join("\n"));
+  // describeExchange: words for requests, nothing for data blocks; a refusal is explained
+  assert.equal(S.describeExchange(Uint8Array.from([0x36, 1]), Uint8Array.from([0x76, 1]), 5), null);
+  assert.match(S.describeExchange(Uint8Array.from([0x22, 0x80, 0x60]), Uint8Array.from([0x7f, 0x22, 0x31]), 12), /Read model number \(0x8060\): refused, answer 7f2231 \(12 ms\)/);
+  assert.equal(S.modelName(9), "Peregrine"); assert.equal(S.modelName(42), "", "an unknown number is not guessed");
+});
