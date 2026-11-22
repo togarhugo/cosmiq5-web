@@ -16,7 +16,7 @@ database_id = "da3daca5-ced2-46b5-924e-0021b8afb5f3"
 # Google OAuth client (public identifier, same one the other thmlab apps use).
 # Its redirect URI list in Google Cloud Console must include https://dive-manager.thmlab.org/auth/callback
 # Moving addresses later: set CANONICAL_HOST (the new host) and LEGACY_HOSTS (comma separated old hosts) and the old address forwards (307) to the new one.
-GOOGLE_CLIENT_ID = "234504022788-v4pd8ehvn3g5i6qqv7ce7ce2dert3152.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "234504022788-3ufmus7cvjgt91u8ec7c92qr9pgb8dq2.apps.googleusercontent.com"
 # Secrets (never commit these):
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET
 #   npx wrangler secret put SESSION_SECRET      (32+ random chars, e.g. `openssl rand -hex 32`)
