@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Draws the five tab icons (public/auth/icon-summary|log|import|cert|device.png): simple outline icons, one colour, drawn as a mask so the page can
+"""Draws the six tab icons (public/auth/icon-summary|log|import|cert|device|trips.png): simple outline icons, one colour, drawn as a mask so the page can
 paint them in the text colour of either theme (Overview = dashboard, Dive log = closed book, Import = tray with arrow, Certificates = ID card,
-Device = watch).   python3 scripts/make-nav-icons.py   (needs Pillow)"""
+Device = watch, Trips = suitcase).   python3 scripts/make-nav-icons.py   (needs Pillow)"""
 from PIL import Image, ImageDraw
 import os
 S, C, SW = 8, 148, 7                                   # supersampling, canvas in px, stroke weight
@@ -35,3 +35,5 @@ im, d = canvas(); line(d, [(22, 98), (22, 126), (126, 126), (126, 98)]); line(d,
 im, d = canvas(); box(d, 16, 34, 132, 114, 13); ring(d, 48, 64, 9.5, 6); d.arc([px(30), px(80), px(66), px(116)], 180, 360, fill=255, width=px(6)); line(d, [(84, 62), (118, 62)], 6); line(d, [(84, 84), (106, 84)], 6); save(im, "icon-cert.png")
 # Device: a watch, strap above and below the round face
 im, d = canvas(); ring(d, 74, 74, 34); line(d, [(56, 49), (60, 18), (88, 18), (92, 49)]); line(d, [(56, 99), (60, 130), (88, 130), (92, 99)]); save(im, "icon-device.png")
+# Trips: a suitcase with a handle and a band across the middle
+im, d = canvas(); box(d, 18, 48, 130, 122, 13); line(d, [(54, 48), (54, 32), (94, 32), (94, 48)]); line(d, [(18, 82), (130, 82)]); save(im, "icon-trips.png")

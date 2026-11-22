@@ -306,8 +306,8 @@
             .tabs::-webkit-scrollbar { display: none; }
             .tab { flex: 0 0 auto; padding: 10px 14px; }
             .nav { display: flex; gap: 6px; margin-bottom: 15px; }
-            .nav button { flex: 1; background: var(--bg-e9ecef); color: var(--tx-495057); border-radius: 10px; font-size: 15px; }
-            .nav button.active { background: var(--bg-343a40); color: var(--tx-fff); }
+            .nav > button { flex: 1; background: var(--bg-e9ecef); color: var(--tx-495057); border-radius: 10px; font-size: 15px; }
+            .nav > button.active { background: var(--bg-343a40); color: var(--tx-fff); }
             .banner { background: var(--bg-fff3cd); color: var(--tx-664d03); border: 1px solid var(--bd-ffeeba); border-radius: 10px; padding: 12px; font-size: 13px; margin-bottom: 12px; display: none; }
             .banner.show { display: block; }
             .muted { color: var(--tx-6c757d); font-size: 12px; }
@@ -331,7 +331,7 @@
             details.logwrap { margin-top: 20px; } details.logwrap summary { font-size: 12px; color: var(--tx-6c757d); min-height: 44px; display: flex; align-items: center; }
             #log { margin-top: 6px; }
             .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
-            .nav { gap: 4px; } .nav button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
+            .nav { gap: 4px; } .nav > button { flex: 1 1 0; padding: 8px 6px 7px; font-size: 13px; white-space: nowrap; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; line-height: 1.15; }
             .nav .ti { display: block; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--ti) center / contain no-repeat; mask: var(--ti) center / contain no-repeat; }
             .ti-summary { --ti: url(/auth/icon-summary.png); } .ti-log { --ti: url(/auth/icon-log.png); } .ti-device { --ti: url(/auth/icon-device.png); } .ti-cert { --ti: url(/auth/icon-cert.png); } .ti-import { --ti: url(/auth/icon-import.png); }
             #locBanner { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
@@ -530,12 +530,52 @@
             .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
             .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
             @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
-            @media (max-width: 1023px) { .nav { gap: 3px; } .nav button { flex: 1 1 auto; font-size: 12px; padding: 8px 3px 7px; } .nav .ti { width: 28px; height: 28px; } }
+            @media (max-width: 1023px) { .nav { gap: 3px; } .nav > button { flex: 1 1 auto; font-size: 12px; padding: 8px 3px 7px; } .nav .ti { width: 28px; height: 28px; } }
             .no-cosmiq #connectBtn, .no-cosmiq #disconnectBtn, .no-cosmiq #status, .no-cosmiq #btBanner, .no-cosmiq #clockStatus, .no-cosmiq #navDevice, .no-cosmiq #deviceView { display: none !important; }
             .srchead { margin: 14px 0 6px; font-size: 14px; } #impTitle + #impBt .srchead { margin-top: 4px; }
             .devchip { font-size: 11px; font-weight: 600; color: var(--tx-495057); background: var(--bg-e9ecef); border-radius: 10px; padding: 2px 8px; margin-left: 6px; white-space: nowrap; } .devchip.shared { color: var(--tx-1864ab); background: var(--bg-e7f5ff); }
             .srclist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; } .srcbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; background: var(--bg-f1f3f5); color: var(--tx-212529); border-radius: 10px; font-size: 15px; } .srcbtn span { font-size: 12px; }
             .linkbtn { background: none; color: var(--tx-1864ab); font-size: 13px; font-weight: 600; padding: 8px 4px; min-height: 36px; } #srcAddRow { margin: -2px 0 10px; }
+            /* ---------- Trips ---------- */
+            .ti-trips { --ti: url(/auth/icon-trips.png); }
+            .menu-btn { display: none; position: absolute; left: 0; top: 0; width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 12px; background: var(--bg-e9ecef); color: var(--tx-212529); align-items: center; justify-content: center; z-index: 2; }
+            #navBackdrop { display: none; }
+            @media (max-width: 1023px) {
+                .menu-btn { display: inline-flex; }
+                header .theme-slot:not(.nav-theme) { display: none; }
+                #navBackdrop.show { display: block; position: fixed; inset: 0; z-index: 1100; background: rgba(0, 0, 0, .45); }
+                .nav { position: fixed; z-index: 1200; left: 0; top: 0; bottom: 0; width: min(82vw, 320px); margin: 0; padding: 18px 12px calc(16px + env(safe-area-inset-bottom)); flex-direction: column; gap: 4px; overflow-y: auto; overflow-x: hidden; background: var(--bg-fff); border-right: 1px solid var(--bd-dee2e6); box-shadow: 6px 0 24px rgba(0, 0, 0, .28); transform: translateX(-105%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; }
+                .nav.open { transform: none; visibility: visible; transition: transform .2s ease; }
+                .nav > button { flex: none; flex-direction: row; justify-content: flex-start; gap: 14px; padding: 13px 12px; font-size: 16px; text-align: left; min-height: 48px; }
+                .nav > button:not(.active) { background: transparent; } .nav .ti { width: 26px; height: 26px; flex: none; }
+                .nav .nav-theme { position: static; margin-top: auto; padding: 18px 8px 4px; }
+            }
+            @media (min-width: 1024px) { .nav .nav-theme, .menu-btn { display: none !important; } }
+            @media (prefers-reduced-motion: reduce) { .nav, .nav.open { transition: none; } }
+            .tp-hero { cursor: pointer; border-left: 5px solid var(--bd-1c7ed6); } #sumTrip { margin-bottom: 14px; }
+            .tp-label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--tx-6c757d); margin-bottom: 6px; } .tp-title { font-size: 20px; font-weight: 700; line-height: 1.2; } .tp-sub { font-size: 13px; margin-top: 2px; }
+            .tp-count { display: flex; gap: 10px; align-items: center; margin: 12px 0 8px; } .tp-big { font-family: var(--mono); font-size: 34px; font-weight: 700; line-height: 1; background: var(--bg-f1f3f5); border-radius: 10px; padding: 8px 12px; } .tp-l { font-size: 13px; color: var(--tx-6c757d); }
+            .tp-pills { display: flex; gap: 6px; flex-wrap: wrap; } .tp-pill { font-size: 12px; background: var(--bg-f1f3f5); border-radius: 12px; padding: 3px 9px; } .tp-pill.ok { background: var(--bg-ebfbee); color: var(--tx-2b8a3e); } .tp-pill.warn { background: var(--bg-fff4e6); color: var(--tx-d9480f); } .tp-pill.bad { background: var(--bg-fff5f5); color: var(--tx-c92a2a); }
+            .tp-bar, .tp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; } .tp-bar h2 { margin: 0; font-size: 20px; }
+            .tp-row { display: flex; width: 100%; gap: 12px; align-items: center; text-align: left; padding: 10px 0; background: none; color: inherit; border-top: 1px solid var(--bd-e9ecef); border-radius: 0; min-height: 56px; } .card h3 + .tp-row { border-top: 0; }
+            .tp-date { font-family: var(--mono); font-size: 12px; text-align: center; background: var(--bg-f1f3f5); border-radius: 8px; padding: 5px 8px; min-width: 58px; } .tp-rowtxt { display: flex; flex-direction: column; min-width: 0; } .tp-rowtxt b { font-size: 15px; } .tp-rowtxt .muted { font-size: 12px; }
+            .tp-head .fld, .tp-edit .fld, .tp-add .fld, .tp-three .fld { width: 100%; box-sizing: border-box; font-size: 16px; padding: 9px 10px; min-height: 44px; border: 1px solid var(--bd-ced4da); border-radius: 8px; background: var(--bg-fff); color: var(--tx-212529); font-family: inherit; }
+            .fld[aria-invalid="true"] { border-color: var(--bd-c92a2a); }
+            .tp-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; } .tp-edit .tp-two, .tp-add .tp-two { grid-template-columns: minmax(0, 1fr) 96px; } .tp-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+            .tp-bag { margin-bottom: 12px; } .tp-h { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 5px; } .tp-h b { font-size: 15px; }
+            .tp-wbar { height: 10px; border-radius: 5px; background: var(--bg-e9ecef); overflow: hidden; } .tp-wbar i { display: block; height: 100%; border-radius: 5px; background: var(--bg-2b8a3e); } .tp-wbar i.warn { background: var(--bg-e67700); } .tp-wbar i.over { background: var(--bg-c92a2a); }
+            .tp-small { font-size: 12px; } .tp-ghead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin: 16px 0 2px; padding-bottom: 4px; border-bottom: 1px dashed var(--bd-ced4da); font-size: 14px; } .tp-group:first-child .tp-ghead { margin-top: 0; }
+            .tp-item { display: flex; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--bd-e9ecef); min-height: 48px; }
+            .tp-ck { flex: 0 0 auto; width: 28px; height: 28px; min-height: 28px; padding: 0; border: 2px solid var(--bd-adb5bd); border-radius: 7px; background: transparent; color: #fff; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; } .tp-ck.on { background: var(--bg-2b8a3e); border-color: var(--bd-2b8a3e); }
+            .tp-name { flex: 1; min-width: 0; text-align: left; background: none; color: var(--tx-212529); font-size: 15px; font-weight: 600; padding: 8px 2px; min-height: 40px; border-radius: 6px; overflow-wrap: anywhere; } .tp-item.done .tp-name { text-decoration: line-through; color: var(--tx-6c757d); font-weight: 500; }
+            .tp-kg { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; } .tp-bagbtn { font-size: 11px; font-weight: 700; border-radius: 12px; padding: 4px 9px; min-height: 30px; white-space: nowrap; background: var(--bg-e7f5ff); color: var(--tx-1864ab); } .tp-bagbtn.carry { background: var(--bg-fff4e6); color: var(--tx-d9480f); }
+            .tp-edit, .tp-add { background: var(--bg-f1f3f5); border-radius: 10px; padding: 10px; margin: 6px 0; } .tp-edit { background: var(--bg-e7f5ff); } .tp-add b { display: block; font-size: 14px; margin-bottom: 8px; }
+            .tp-chips { display: flex; gap: 6px; margin: 8px 0; } .tp-chip { border: 1px solid var(--bd-ced4da); border-radius: 16px; padding: 6px 14px; font-size: 13px; min-height: 36px; background: var(--bg-fff); color: var(--tx-212529); } .tp-chip.on { background: var(--bg-343a40); color: var(--tx-fff); border-color: transparent; }
+            .tp-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; } .tp-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; padding-top: 6px; }
+            .tp-del { background: none; color: var(--tx-c92a2a); font-size: 14px; min-height: 40px; padding: 0 4px; text-decoration: underline; } .tp-del.solid { background: var(--bg-c92a2a); color: #fff; text-decoration: none; padding: 0 14px; border-radius: 8px; }
+            .tp-foot { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+            @media (min-width: 1024px) { #tripsView { max-width: 780px; } }
+            @media (max-width: 380px) { .tp-three { grid-template-columns: 1fr 1fr; } }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
             #shell, #side, #main { display: contents; } .acct-label { display: none; }
             @media (min-width: 1024px) {
@@ -545,9 +585,9 @@
                 #side header { display: contents; }
                 #side .brand { order: 0; text-align: left; margin: 0 0 22px 6px; } #side .brand .logo { width: 150px; height: auto; }
                 #side .nav { order: 1; flex-direction: column; gap: 4px; margin: 0 0 18px; overflow: visible; }
-                #side .nav button { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; font-size: 15px; text-align: left; border-radius: 10px; }
+                #side .nav > button { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; font-size: 15px; text-align: left; border-radius: 10px; }
                 #side .nav .ti { width: 24px; height: 24px; flex: none; }
-                #side .nav button:not(.active) { background: transparent; } #side .nav button:not(.active):hover { background: var(--bg-e9ecef); }
+                #side .nav > button:not(.active) { background: transparent; } #side .nav > button:not(.active):hover { background: var(--bg-e9ecef); }
                 #side #connectBtn, #side #disconnectBtn { order: 2; margin-bottom: 6px; font-size: 15px; padding: 12px; }
                 #side #status { order: 3; text-align: left; margin: 2px 6px 10px; }
                 #side #btBanner, #side #clockStatus, #side #syncBanner { order: 4; text-align: left; font-size: 12px; }
@@ -578,6 +618,7 @@
         <div id="shell">
         <aside id="side">
         <header>
+            <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="mainNav"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
             <div class="theme-slot" data-theme-switch></div>
             <h1 class="brand"><img class="logo logo-light" src="/auth/logo-light.png" alt="Dive Manager" width="176" height="78"><img class="logo logo-dark" src="/auth/logo-dark.png" alt="Dive Manager" width="176" height="78" loading="lazy"></h1>
             <div id="status" class="status">Disconnected</div>
@@ -604,17 +645,21 @@
             <button id="cancelSync" class="btn-set" type="button" style="background:var(--bg-6c757d);margin-top:6px">Cancel</button>
         </div>
 
-        <div class="nav">
+        <div id="navBackdrop" aria-hidden="true"></div>
+        <div id="mainNav" class="nav">
             <button id="navSummary" onclick="showView('summary')"><i class="ti ti-summary" aria-hidden="true"></i><span>Overview</span></button>
             <button id="navLog" onclick="showView('log')"><i class="ti ti-log" aria-hidden="true"></i><span>Dive log <span id="diveCount"></span></span></button>
             <button id="navImport" onclick="showView('import')"><i class="ti ti-import" aria-hidden="true"></i><span>Import</span></button>
             <button id="navCerts" onclick="showView('certs')"><i class="ti ti-cert" aria-hidden="true"></i><span>Certificates</span></button>
+            <button id="navTrips" onclick="showView('trips')"><i class="ti ti-trips" aria-hidden="true"></i><span>Trips</span></button>
             <button id="navDevice" class="active" onclick="showView('device')"><i class="ti ti-device" aria-hidden="true"></i><span>Device</span></button>
+            <div class="theme-slot nav-theme" data-theme-switch></div>
         </div>
 
         </aside>
         <main id="main">
         <div id="summaryView" style="display:none">
+            <div id="sumTrip" class="card tp-hero" role="button" tabindex="0" style="display:none"></div>
             <div id="sumEmpty" class="card muted">No dives yet. Open the <b>Dive log</b> tab and sync your dive computer.</div>
             <div id="sumDiver" class="card sum" style="display:none">
                 <div id="sumName" class="diver-name"></div>
@@ -1118,6 +1163,8 @@
             <p id="certWalletHint" class="wallet-hint muted" style="display:none">Tap any card to open it, make it your main one, or share it.</p>
         </div>
 
+        <div id="tripsView" style="display:none"></div>
+
         <div id="accountView" style="display:none">
             <details class="card acc" data-sec="profile">
                 <summary>Profile picture</summary>
@@ -1419,6 +1466,8 @@
         <script src="places.js"></script>
         <script src="dives.js"></script>
         <script src="places-ui.js"></script>
+        <script src="trip-utils.js"></script>
+        <script src="trips.js"></script>
         <script src="/auth/kdf.js"></script>
         <script src="vendor/qrcode.js"></script>
         <script src="account.js"></script>
@@ -1461,16 +1510,30 @@
                 document.getElementById(id).classList.add("active");
                 if (btn) { btn.classList.add("active"); try { btn.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (e) {} }
             }
+            // Phone: the tabs live in a menu that slides in from the left (the 3-line button). On a laptop they are the sidebar and none of this applies.
+            const navEl = () => document.getElementById("mainNav");
+            function openMenu(open) {
+                const nav = navEl(), btn = document.getElementById("menuBtn"); if (!nav || !btn) return;
+                nav.classList.toggle("open", !!open); document.getElementById("navBackdrop").classList.toggle("show", !!open); btn.setAttribute("aria-expanded", open ? "true" : "false");
+                if (open) { const a = nav.querySelector("button.active") || nav.querySelector("button"); if (a) a.focus(); }
+            }
+            const closeMenu = () => { const nav = navEl(); if (nav && nav.classList.contains("open")) { openMenu(false); const b = document.getElementById("menuBtn"); if (b && b.offsetParent) b.focus(); } };
+            document.getElementById("menuBtn").addEventListener("click", () => openMenu(!navEl().classList.contains("open")));
+            document.getElementById("navBackdrop").addEventListener("click", closeMenu);
+            document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+            window.matchMedia("(min-width: 1024px)").addEventListener("change", (e) => { if (e.matches) openMenu(false); });
             let currentView = "summary";
             function showView(v) {
                 currentView = v;
-                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["import", "navImport"], ["certs", "navCerts"], ["account", null]]) {
+                for (const [name, nav] of [["summary", "navSummary"], ["device", "navDevice"], ["log", "navLog"], ["import", "navImport"], ["certs", "navCerts"], ["trips", "navTrips"], ["account", null]]) {
                     document.getElementById(name + "View").style.display = v === name ? "" : "none";
                     if (nav) document.getElementById(nav).classList.toggle("active", v === name);
                 }
                 document.getElementById("acctBtn").classList.toggle("active", v === "account");     // the account lives behind the avatar
                 if (v === "account") { Account.load(); AccountArea.show(); }
                 if (v === "certs") AccountArea.showCerts();
+                if (v === "trips") Trips.show();
+                closeMenu();
                 if (v === "import") Dives.render();
                 try { localStorage.setItem("view", v); } catch (e) {}
                 if (v === "log") { Dives.render().then(() => Dives.revealPrompt()); }
@@ -2109,6 +2172,7 @@
                 if (await Dives.claimDevice()) { location.reload(); return; }                 // someone else signed in on this browser: start clean (see dives.js)
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
                 PlacesUI.init();                                                             // map pins of the places you have dived
+                Trips.init();                                                                // the next trip on the Overview
                 ApiKeys.init();                                                              // Account > API access
                 if (!navigator.bluetooth) showBtHelp();
                 document.getElementById("diveFullBtn").addEventListener("click", (e) => { e.preventDefault(); syncDivesNow(true); });

@@ -8,6 +8,7 @@ import { VERSION } from "./version.js";
 import { IMPORTED_DEVICES } from "./devices.js";
 import { handleBtReports } from "./btreports.js";
 import { handleShare } from "./share.js";
+import { handleTrips } from "./trips.js";
 
 // Dive Manager: static app + dive-log API. Sign-in is Google OAuth inside this Worker
 // (see auth.js). Everything except /auth/* requires a valid session: fails closed.
@@ -94,6 +95,7 @@ export default {
     if (url.pathname === "/api/places") return handlePlaces(request, url, env, email);
     if (url.pathname === "/api/bt-reports" || url.pathname.startsWith("/api/bt-reports/")) return handleBtReports(request, url, env, email);
     if (url.pathname === "/api/share" || url.pathname.startsWith("/api/share/")) return handleShare(request, url, env, email);
+    if (url.pathname === "/api/trips" || url.pathname.startsWith("/api/trips/")) return handleTrips(request, url, env, email);
     if (url.pathname === "/api/keys" || url.pathname.startsWith("/api/keys/")) { const r = await handleKeys(request, url, env, email); if (r) return r; }
 
     // Set (or clear) the dive area of existing dives. Only the signed-in user's own dives can be touched.

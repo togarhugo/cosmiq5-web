@@ -125,3 +125,12 @@ CREATE TABLE IF NOT EXISTS deleted_dives (
   deleted_at  TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_email, fingerprint)
 );
+
+-- Dive trips: one row per trip, the trip itself as JSON (migration 0012).
+CREATE TABLE IF NOT EXISTS trips (
+  user_email TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_email, id)
+);
