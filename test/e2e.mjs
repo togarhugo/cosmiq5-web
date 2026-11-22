@@ -213,7 +213,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
-    assert.equal(await row(1).locator("svg").count(), 0, "no chart is drawn from another dive's bytes");
+    assert.equal(await row(1).locator("svg:not(.pin)").count(), 0, "no chart is drawn from another dive's bytes");
     console.log("PASS wrapped profile memory");
   } catch (e) {
     failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
@@ -308,7 +308,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await page.inputValue("#locIn1"), "  Komodo ", "same as above copies the value");
     await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
     assert.ok(!(await page.locator("#locPrompt").isVisible()), "question closed");
-    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    assert.deepEqual(await chips(), ["Komodo", "Komodo"]);
     await until(() => locCalls.length >= 1, "the location update to reach the cloud");
     assert.equal(locCalls.length, 1); assert.deepEqual(locCalls[0].map((i) => i.location), ["Komodo", "Komodo"]); assert.equal(locCalls[0].length, 2);
     assert.ok(uploaded.every((d) => /^[0-9a-f]{12}$/.test(d.fingerprint)), "dives were uploaded before their location");
@@ -319,7 +319,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await page.locator("#sumHours").innerText(), "0 h 42 min"); assert.match(await page.locator("#sumCount").innerText(), /across 2 dives/);
     // 3. it survives a reload (stored on the phone)
     await page.reload(); await page.click("#navLog"); await page.waitForSelector(".dh-loc");
-    assert.deepEqual(await chips(), ["\u{1F4CD} Komodo", "\u{1F4CD} Komodo"]);
+    assert.deepEqual(await chips(), ["Komodo", "Komodo"]);
     // 4. change the place of one date from its header; a known place is always written with its existing spelling
     await page.locator(".dh-loc").last().tap(); await page.waitForSelector(".dh-edit input");
     assert.ok(await page.locator("#locList option[value='Komodo']").count(), "known places are suggested");
@@ -327,7 +327,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.fill(".dh-edit input", "Banda"); await page.evaluate(() => Dives.render());
     assert.equal(await page.inputValue(".dh-edit input"), "Banda", "typing is not interrupted by a refresh");
     await page.locator(".dh-save").tap(); await toastIs(/Location saved/); await until(() => locCalls.length >= 2, "the date edit to reach the cloud");
-    const after = await chips(); assert.ok(after.includes("\u{1F4CD} Banda") && after.includes("\u{1F4CD} Komodo"), after.join(" | "));
+    const after = await chips(); assert.ok(after.includes("Banda") && after.includes("Komodo"), after.join(" | "));
     assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Banda"]);
     await page.locator(".dh-loc", { hasText: "Banda" }).tap(); await page.fill(".dh-edit input", "KOMODO"); await page.locator(".dh-save").tap(); await toastIs(/Location saved/);
     await until(() => locCalls.length >= 3, "the second date edit to reach the cloud"); assert.deepEqual(locCalls.at(-1).map((i) => i.location), ["Komodo"], "re-uses the existing spelling");
@@ -383,7 +383,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.fill("#locPrompt .month-in", "Komodo"); await page.fill("#locIn0", "Banda"); await page.click("#locSave"); await toastIs(/Location saved for 2 dives/);
     await until(async () => (await chips()).length === 2, "date headers");
     const byDate = Object.fromEntries(await page.locator(".datehead").evaluateAll((els) => els.map((e) => [e.querySelector(".dh-date").textContent.trim(), e.querySelector(".dh-loc").textContent.replace(/\s+/g, " ").trim()])));
-    assert.deepEqual(Object.values(byDate).sort(), ["\u{1F4CD} Banda", "\u{1F4CD} Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
+    assert.deepEqual(Object.values(byDate).sort(), ["Banda", "Komodo"], "14 March Banda (own entry), 15 March Komodo (the month's place)");
     // 3. month bulk in the log: keeps places already set unless 'replace' is ticked
     assert.match(await page.locator(".monthhead").first().innerText(), /March[\s\S]*2 dives[\s\S]*max [\d.]+ m[\s\S]*Komodo, Banda/);
     await page.locator(".mh-set").tap(); await page.waitForSelector(".mh-edit input[type=text]");

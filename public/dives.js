@@ -433,7 +433,7 @@ const Dives = (() => {
     $("sumCards").style.display = sm.count ? "" : "none";
     if (!sm.count) return;
     $("sumLastDate").textContent = fmtDayLong(sm.last.date);
-    $("sumLastSub").textContent = [U.agoText(sm.last.daysAgo), sm.last.location && "\ud83d\udccd " + sm.last.location].filter(Boolean).join(" \u00b7 ");
+    $("sumLastSub").innerHTML = [esc(U.agoText(sm.last.daysAgo)), sm.last.location && U.PIN + " " + esc(sm.last.location)].filter(Boolean).join(" \u00b7 ");
     $("sumHours").textContent = U.hoursText(sm.totalSec);
     const kc = $("sumLastKind"); kc.className = "kindchip kind-" + sm.last.kind; kc.textContent = KIND_LABEL[sm.last.kind];
     $("sumKinds").innerHTML = U.KINDS.filter((k) => k === "scuba" || sm.byKind[k].count).map((k) => `<div class="kindrow"><span class="kindchip kind-${k}">${KIND_LABEL[k]}</span><b>${U.durText(sm.byKind[k].sec)}</b><span class="muted">${sm.byKind[k].count} dive${sm.byKind[k].count === 1 ? "" : "s"}</span></div>`).join("");
@@ -474,7 +474,7 @@ const Dives = (() => {
   }
 
   // ---------- locations: the question after a sync, the banner, date headers, per-dive field ----------
-  const locEditor = (rec) => `<div class="loc1"><span aria-hidden="true">\ud83d\udccd</span><input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
+  const locEditor = (rec) => `<div class="loc1">${U.PIN}<input class="dive-loc" list="locList" maxlength="60" autocomplete="off" placeholder="Location, e.g. Komodo" value="${esc(rec.location || "")}" aria-label="Dive location"><button class="btn-set dive-loc-save" type="button" data-fp="${esc(rec.fingerprint)}">Save</button></div>`;
   async function fillSuggestions() { const known = U.knownLocations(await all()); $("locList").innerHTML = known.map((k) => `<option value="${esc(k)}">`).join(""); return known; }
 
   /** Ask for the area of each date among `targets`. One row per date; "same as above" copies the row before it. */
@@ -717,10 +717,10 @@ const Dives = (() => {
         U.groupByMonth(g).map(({ month, recs: mrs }) => {
           const names = [...new Set(mrs.map((r) => r.location).filter(Boolean))], msecs = mrs.reduce((a, r) => a + r.durationSec, 0);
           const head = `<summary class="monthhead" data-month="${esc(month)}"><span class="mh-name"><span class="mh-chev" aria-hidden="true">\u25B8</span>${esc(new Date(+month.slice(0, 4), +month.slice(5) - 1, 1).toLocaleDateString(undefined, { month: "long" }))}</span><span class="mh-stat">${mrs.length} dive${mrs.length === 1 ? "" : "s"} \u00b7 ${fmtDur(msecs)} \u00b7 max ${Math.max(...mrs.map((r) => r.maxDepthM)).toFixed(1)} m</span>` +
-            `<span class="mh-place">${names.length ? "\ud83d\udccd " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span></summary>`;
+            `<span class="mh-place">${names.length ? U.PIN + " " + esc(names.join(", ")) : '<span class="muted">No place set</span>'}</span></summary>`;
           return `<details class="mbox" data-month="${esc(month)}"${openMonths.has(month) ? " open" : ""}>` + head + `<div class="mbody"><div class="mh-actions"><button class="mh-set" type="button" data-month="${esc(month)}">Set place for the month</button></div>` + U.groupByDate(mrs).map(({ date, recs: rs }) => {
             const dl = U.dateLocation(rs), label = dl.mixed ? "Mixed" : dl.location || "Add location";
-            return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>\ud83d\udccd ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
+            return `<div class="datehead"><span class="dh-date">${esc(fmtDayShort(date))}</span><button class="dh-loc${dl.location || dl.mixed ? "" : " empty"}" type="button" data-date="${esc(date)}" data-loc="${esc(dl.location)}"${dl.mixed ? ' data-mixed="1"' : ""}>${U.PIN} ${esc(label)}</button></div>` + rs.map(rowHtml).join("");
           }).join("") + `</div></details>`;
         }).join("") + `</div></details>`;
     }

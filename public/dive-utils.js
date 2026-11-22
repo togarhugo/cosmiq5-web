@@ -310,6 +310,8 @@
     return days === 0 ? "expires today" : days === 1 ? "1 day left" : days < 120 ? `${days} days left` : `${Math.round(days / 30.44)} months left`;
   }
 
-  const api = { PREFERENCE, isShared, duplicateGroups, regulatorStatus, regulatorMessage, monthsSince, monthLabel, REG_HISTORY_MAX, KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
+  /** The map-pin icon (outline, takes the colour of the text around it) used wherever a place is shown. */
+  const PIN = '<svg class="pin" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+  const api = { PIN, PREFERENCE, isShared, duplicateGroups, regulatorStatus, regulatorMessage, monthsSince, monthLabel, REG_HISTORY_MAX, KINDS, kindOf, byKind, durText, placeStats, pinsAndMissing, DEVICES, deviceOf, uniqueDives, duplicateMap, sameDive, diveNumbers, niceAxis, timeTicks, daysUntil, latestCert, danStatus, danText, monthKey, groupByMonth, bulkTargets, asksByMonth, REG_ORANGE, REG_RED, regulatorCount, regulatorLevel, regulatorReset, dateKey, normalizeLocation, knownLocations, groupByDate, dateLocation, locationAsks, hoursText, daysBetween, agoText, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DiveUtils = api;
 })(typeof self !== "undefined" ? self : this);
