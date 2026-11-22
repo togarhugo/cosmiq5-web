@@ -19,6 +19,13 @@ const server = http.createServer((req, res) => {
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
 
+// Dive computers are shown only when they have dives or were added: open one (click its tab, or add it first).
+const openSource = async (page, name) => {
+  const tab = page.locator("#devTabs button", { hasText: name });
+  if (await tab.count()) { await tab.click(); return; }
+  if (await page.locator("#srcEmpty").isVisible()) await page.locator("#srcEmptyList button", { hasText: name }).click();
+  else { await page.click("#srcAdd"); await page.locator("#srcAddList button", { hasText: name }).click(); }
+};
 // ---- fake device, injected before the page loads ----
 const fakeBle = () => {
   window.__tx = [];
@@ -583,9 +590,9 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.click("#connectBtn"); await page.waitForFunction(() => /Dive sync done: 2 on device, 2 new/.test(document.getElementById("diveProgress").textContent), null, { timeout: 15000 });
     await page.click("#locLater").catch(() => {});
     assert.ok(await page.locator("#devTabs").isVisible(), "computer selector in the dive log");
-    assert.equal(await page.locator("#devTabs button").count(), 3, "Cosmiq+, Peregrine, Garmin"); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
+    assert.equal(await page.locator("#devTabs button").count(), 1, "only the Cosmiq+ has dives: one tab"); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/); assert.ok(await page.locator("#srcAddRow").isVisible(), "a way to add another dive computer");
     assert.ok(await page.locator("#syncCard").isVisible() && !(await page.locator("#importCard").isVisible()), "Cosmiq shows the sync card");
-    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#importCard", { state: "visible" });
+    await openSource(page, "Peregrine"); await page.waitForSelector("#importCard", { state: "visible" });
     assert.ok(await page.locator("#importCard").isVisible() && !(await page.locator("#syncCard").isVisible()), "Peregrine shows the import card, not the Bluetooth sync");
     assert.match(await page.locator("#diveList").innerText(), /No Shearwater Peregrine dives yet/);
     const bad = { name: "log.uddf", mimeType: "application/xml", buffer: Buffer.from("<html><body>hello</body></html>") };
@@ -600,10 +607,10 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // separate logs: Peregrine tab lists only its 3 dives, the Cosmiq tab still only its 2
     assert.equal(await page.locator("details.dive").count(), 3); assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/);
     assert.match(await page.locator("#diveList > p").first().innerText(), /^3 dives$/);
-    await page.locator("#devTabs button", { hasText: "Cosmiq" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 2, null, { timeout: 5000 });
+    await openSource(page, "Cosmiq"); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 2, null, { timeout: 5000 });
     assert.match(await page.locator("#navLog").innerText(), /Dive log \(5\)/, "the nav counts every dive");
     // the choice is remembered
-    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 3, null, { timeout: 5000 });
+    await openSource(page, "Peregrine"); await page.waitForFunction(() => document.querySelectorAll("details.dive").length === 3, null, { timeout: 5000 });
     // dive numbers: bold, boxed, no '#'
     const num = page.locator("details.dive .dive-num").first();
     assert.equal(await num.innerText(), "43"); const st = await num.evaluate((e) => { const c = getComputedStyle(e); return { w: c.fontWeight, br: c.borderTopWidth, bg: c.backgroundColor, rad: c.borderTopLeftRadius }; });
@@ -672,7 +679,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
   });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
+    await page.click("#navLog"); await openSource(page, "Peregrine"); assert.ok(!(await page.locator("#pgBtn").isVisible()), "Bluetooth is tucked away (experimental)"); await page.locator("#importCard details summary").click(); await page.waitForSelector("#pgBtn", { state: "visible" });
     assert.match(await page.locator("#pgMsg").innerText(), /Bluetooth menu/);
     // a device that is not a Shearwater, and a cancelled chooser: clear messages, nothing saved
     await page.evaluate(() => { window.__pgMode = "wrong"; }); await page.click("#pgBtn");
@@ -715,7 +722,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.click("#navLog"); await openSource(page, "Peregrine"); await page.waitForSelector("#impFile", { state: "attached" });
     await page.waitForSelector("#dropZone", { state: "visible" }); assert.ok(await page.locator("#dropZone").isVisible(), "a visible drop box"); assert.match(await page.locator("#dropZone").innerText(), /Drop your Shearwater Cloud file here/);
     assert.equal(await page.locator("#impFile").getAttribute("accept"), null, "no file-type filter: macOS greys out files the filter does not know (.db)");
     await page.locator("#importCard").screenshot({ path: process.env.SHOT_IMPORT || "/tmp/shot-import.png" });
@@ -760,7 +767,7 @@ if (process.env.REAL_DB) {
   await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: [] } }); const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
   await page.goto(base);
   try {
-    await page.click("#navLog"); await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForSelector("#impFile", { state: "attached" });
+    await page.click("#navLog"); await openSource(page, "Peregrine"); await page.waitForSelector("#impFile", { state: "attached" });
     await page.setInputFiles("#impFile", process.env.REAL_DB);
     await page.waitForFunction(() => /dives? imported/.test(document.getElementById("impMsg").textContent), null, { timeout: 120000 });
     console.log("  real file:", await page.locator("#impMsg").innerText());
@@ -1018,6 +1025,7 @@ if (process.env.REAL_DB) {
   await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Me", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
   const mk = (when, n) => ({ fingerprint: (0x777000000000 + n).toString(16).padStart(12, "0"), device: "peregrine", startedAt: when, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: "", profileHex: "", location: "Komodo", deviceMac: null, extra: JSON.stringify({ n, t: 28, iv: 10, s: [[10, 5, 28], [20, 18, 28]] }) });
   await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [mk("2025-03-14T09:00:00", 1), mk("2025-03-15T09:00:00", 2)] } }));
+  await ctx.addInitScript(() => { try { localStorage.setItem("sources", '["cosmiq"]'); } catch (e) {} });   // these test dives are Peregrine ones: add the Cosmiq+ so its Device tab is there
   await page.goto(base);
   try {
     await page.waitForFunction(() => /Dive log \(2\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
@@ -1181,8 +1189,9 @@ if (process.env.REAL_DB) {
     const b = JSON.parse(r.request().postData()); uploaded.push(...b.dives); return r.fulfill({ json: { stored: b.dives.length } }); });
   await page.goto(base);
   try {
-    await page.click("#navLog"); const tabs = await page.locator("#devTabs button").allInnerTexts(); assert.equal(tabs.length, 3); assert.match(tabs[2], /Garmin Descent/);
-    await page.locator("#devTabs button", { hasText: "Garmin" }).click(); await page.waitForSelector("#dropZone", { state: "visible" });
+    await page.click("#navLog"); assert.ok(await page.locator("#srcEmpty").isVisible(), "no dives yet: asked which dive computer"); assert.equal(await page.locator("#devTabs button").count(), 0, "no tabs for computers without data");
+    assert.deepEqual(await page.locator("#srcEmptyList button b").allInnerTexts(), ["Cosmiq+ Gen 5", "Shearwater Peregrine", "Shearwater Perdix", "Garmin Descent"]);
+    await openSource(page, "Garmin"); await page.waitForSelector("#dropZone", { state: "visible" }); assert.equal(await page.locator("#devTabs button").count(), 1); assert.match(await page.locator("#devTabs button").innerText(), /Garmin Descent/); assert.ok(!(await page.locator("#srcEmpty").isVisible()));
     assert.match(await page.locator("#impTitle").innerText(), /garmin descent/i); assert.match(await page.locator("#dropZone").innerText(), /Drop your Garmin dive files here/); assert.match(await page.locator("#dropZone").innerText(), /\.fit/);
     const card = await page.locator("#importCard").innerText(); assert.match(card, /Export Original/); assert.match(card, /Export Your Data/); assert.match(card, /Garmin\/Activity/); assert.ok(!/Shearwater Cloud/.test(card), "no Peregrine instructions on the Garmin tab");
     assert.ok(!(await page.locator("#impBt").isVisible()), "the Bluetooth download belongs to the Peregrine only"); assert.match(card, /Beta/, "honest about not being tried on every watch");
@@ -1210,13 +1219,71 @@ if (process.env.REAL_DB) {
     await page.setInputFiles("#impFile", { name: "notes.fit", mimeType: "application/octet-stream", buffer: Buffer.from("this is not a dive file ".repeat(10)) });
     await page.waitForFunction(() => /not a FIT file or a ZIP/.test(document.getElementById("impMsg").textContent), null, { timeout: 8000 }); assert.equal(uploaded.length, 3);
     // the Peregrine tab is unchanged, and the Cosmiq+ one still shows its Sync card
-    await page.locator("#devTabs button", { hasText: "Peregrine" }).click(); await page.waitForFunction(() => /peregrine/i.test(document.getElementById("impTitle").textContent), null, { timeout: 5000 }); assert.match(await page.locator("#impTitle").innerText(), /shearwater peregrine/i); assert.ok(await page.locator("#impBt").isVisible()); assert.match(await page.locator("#dropZone").innerText(), /Shearwater Cloud/);
-    await page.locator("#devTabs button", { hasText: "Cosmiq" }).click(); await page.waitForFunction(() => document.getElementById("syncCard").style.display !== "none", null, { timeout: 5000 }); assert.ok(await page.locator("#syncCard").isVisible()); assert.ok(!(await page.locator("#importCard").isVisible()));
+    await openSource(page, "Peregrine"); await page.waitForFunction(() => /peregrine/i.test(document.getElementById("impTitle").textContent), null, { timeout: 5000 }); assert.match(await page.locator("#impTitle").innerText(), /shearwater peregrine/i); assert.ok(await page.locator("#impBt").isVisible()); assert.match(await page.locator("#dropZone").innerText(), /Shearwater Cloud/);
+    await openSource(page, "Cosmiq"); await page.waitForFunction(() => document.getElementById("syncCard").style.display !== "none", null, { timeout: 5000 }); assert.ok(await page.locator("#syncCard").isVisible()); assert.ok(!(await page.locator("#importCard").isVisible()));
     // Summary counts all three Garmin dives
     await page.click("#navSummary"); await page.waitForFunction(() => /across 3 dives/.test(document.getElementById("sumCount").textContent), null, { timeout: 5000 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
     console.log("PASS garmin import");
   } catch (e) { failed++; console.log("FAIL garmin import\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-garmin.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: each person sees only their own dive computers (Togar: Cosmiq+ and Peregrine; Sharon: Garmin and Perdix) ----
+{
+  const hex = (a) => a.map((x) => x.toString(16).padStart(2, "0")).join("");
+  const cosmiqRow = (n, iso) => { const [d, tm] = iso.split("T"), [y, mo, da] = d.split("-").map(Number), [h, mi] = tm.split(":").map(Number); const b = new Array(36).fill(0);
+    b[0] = n; b[3] = 32; b[4] = 0xf5; b[5] = 0xa3; b[6] = y & 255; b[7] = y >> 8; b[8] = da; b[9] = mo; b[10] = mi; b[11] = h; b[12] = 3000 & 255; b[13] = 3000 >> 8; b[22] = 200; b[24] = 26; b[26] = 10;
+    return { fingerprint: (0xc05000000000 + n).toString(16).padStart(12, "0"), device: "cosmiq", startedAt: iso, mode: "scuba", durationSec: 3000, maxDepthM: 20, o2Percent: 32, headerHex: hex(b), profileHex: "" }; };
+  const imported = (device, n, iso) => ({ fingerprint: (0xd00000000000 + n + { peregrine: 0x100, garmin: 0x200, perdix: 0x300 }[device]).toString(16).padStart(12, "0"), device, startedAt: iso, mode: "scuba", durationSec: 2400, maxDepthM: 18, o2Percent: 32, headerHex: "", profileHex: "", extra: JSON.stringify({ n, t: 27, iv: 10, s: [[0, 0, 28], [1200, 18, 27], [2400, 0, 27]] }) });
+  const people = { "togar@example.com": [cosmiqRow(1, "2025-03-14T09:00:00"), cosmiqRow(2, "2025-03-15T09:00:00"), imported("peregrine", 1, "2025-03-20T09:00:00")],
+    "sharon@example.com": [imported("garmin", 1, "2025-04-02T09:00:00"), imported("garmin", 2, "2025-04-03T09:00:00"), imported("perdix", 1, "2025-04-09T09:00:00")] };
+  let who = "togar@example.com"; const posted = [];
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block", acceptDownloads: true }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: who, name: who.split("@")[0], version: "0.0.0" } }));
+  await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: who.split("@")[0], latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
+  await page.route("**/api/dives/location", (r) => r.fulfill({ json: { updated: 1 } }));
+  await page.route("**/api/dives", (r) => { if (r.request().method() === "GET") return r.fulfill({ json: { dives: people[who] } }); posted.push(...JSON.parse(r.request().postData()).dives); return r.fulfill({ json: { stored: 0 } }); });
+  const names = () => page.locator("#devTabs button").allInnerTexts().then((a) => a.map((x) => x.replace(/\s+/g, " ").trim()));
+  const settle = async (n) => { await page.waitForFunction((k) => document.querySelectorAll("#devTabs button").length === k, n, { timeout: 10000 }); };
+  try {
+    // Togar: Cosmiq+ and Peregrine only; Connect & Sync and the Device tab are there; Perdix and Garmin can be added
+    await page.goto(base); await page.click("#navLog"); await settle(2);
+    assert.deepEqual(await names(), ["Cosmiq+ Gen 5 \u00b7 2", "Shearwater Peregrine \u00b7 1"], "only the computers with dives");
+    assert.ok(await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "a Cosmiq+ owner keeps Connect & Sync and the Device tab");
+    await page.click("#srcAdd"); assert.deepEqual(await page.locator("#srcAddList button b").allInnerTexts(), ["Shearwater Perdix", "Garmin Descent"], "only the others are offered");
+    assert.ok(!(await page.locator("#srcHideRow").isVisible()), "nothing to hide while every shown computer has dives");
+    await page.evaluate(() => { localStorage.setItem("diver", JSON.stringify({ fullName: "Togar" })); });
+    // Sharon signs in on the same browser: Togar's dives and settings are gone from this device, her own are shown
+    who = "sharon@example.com"; await page.evaluate(() => window.__keepAlive = 1);
+    const dl = page.waitForEvent("download", { timeout: 3000 }).catch(() => null);
+    await page.reload(); await page.click("#navLog"); await settle(2);
+    assert.deepEqual(await names(), ["Shearwater Perdix \u00b7 1", "Garmin Descent \u00b7 2"], "Sharon: only Garmin and Perdix, none of Togar's computers");
+    assert.equal(await page.evaluate(() => localStorage.getItem("owner")), "sharon@example.com"); assert.ok(!/Togar/.test(await page.evaluate(() => localStorage.getItem("diver")) || ""), "Togar's cached profile is gone (the cache now holds Sharon's)");
+    assert.equal(await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("cosmiq", 1); r.onsuccess = () => { const q = r.result.transaction("dives").objectStore("dives").getAll(); q.onsuccess = () => res(q.result.map((d) => d.device).sort().join(",")); }; })), "garmin,garmin,perdix", "the cache holds only Sharon's dives");
+    assert.ok(!(await dl), "nothing was waiting to upload, so no backup file");
+    assert.equal(posted.length, 0, "nothing of Togar's was ever sent to Sharon's account");
+    // Sharon has no Cosmiq+: its Connect & Sync, status and Device tab are out of the way; the phone still has three tabs
+    assert.ok(!(await page.locator("#connectBtn").isVisible()) && !(await page.locator("#navDevice").isVisible()) && !(await page.locator("#status").isVisible()), "no Cosmiq+ controls for Sharon");
+    assert.equal(await page.locator(".nav button:visible").count(), 3, "Summary, Dive log, Certificates");
+    // she can still add a Cosmiq+ (or hide it again when it has no dives)
+    await page.click("#srcAdd"); await page.locator("#srcAddList button", { hasText: "Cosmiq+" }).click(); await settle(3);
+    assert.ok(await page.locator("#syncCard").isVisible() && await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "adding the Cosmiq+ brings its controls back");
+    assert.ok(await page.locator("#srcHideRow").isVisible(), "a computer without dives can be hidden again"); await page.click("#srcHide"); await settle(2);
+    assert.ok(!(await page.locator("#connectBtn").isVisible()), "hidden again"); assert.deepEqual((await names()).length, 2);
+    // the choice of added computers survives a reload; a new person with no dives is asked which computer they use and sees everything until then
+    who = "new@example.com"; people["new@example.com"] = [];
+    await page.reload(); await page.waitForFunction(() => document.getElementById("srcEmpty") && getComputedStyle(document.getElementById("srcEmpty")).display !== "none" || true, null, { timeout: 5000 }); await page.click("#navLog");
+    await page.waitForSelector("#srcEmpty", { state: "visible", timeout: 10000 }); assert.equal(await page.locator("#srcEmptyList button").count(), 4); assert.ok(await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "with no dives at all nothing is hidden: a new Cosmiq+ owner can connect");
+    // dives that were never uploaded are not lost when someone else signs in: they are saved to a backup file, and never sent to the other account
+    who = "togar@example.com"; await page.reload(); await page.waitForFunction(() => localStorage.getItem("owner") === "togar@example.com"); await page.waitForTimeout(1200);       // the switch from the previous person reloads the page once
+    await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("cosmiq", 1); r.onsuccess = () => { const tx = r.result.transaction("dives", "readwrite"); tx.objectStore("dives").put({ fingerprint: "feedfacecafe", device: "peregrine", startedAt: "2025-05-01T09:00:00", mode: "scuba", durationSec: 1800, maxDepthM: 15, o2Percent: 32, number: 9, minTempC: 27, intervalSec: 10, samples: [[0, 0, 28], [900, 15, 27]], headerHex: "", profileHex: "", uploaded: false }); tx.oncomplete = res; }; }));
+    who = "sharon@example.com"; const dl2 = page.waitForEvent("download", { timeout: 8000 }); await page.reload(); const file = await dl2;
+    assert.match(file.suggestedFilename(), /^cosmiq-dives-.*\.json$/); const saved = JSON.parse(fs.readFileSync(await file.path(), "utf8")); assert.ok(saved.dives.some((d) => d.fingerprint === "feedfacecafe"), "the not-yet-uploaded dive is in the backup");
+    await page.click("#navLog"); await settle(2); assert.ok(!posted.some((d) => d.fingerprint === "feedfacecafe"), "and was not given to Sharon's account");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS dive computers per person");
+  } catch (e) { failed++; console.log("FAIL dive computers per person\n ", e.message.split("\n").slice(0, 8).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-sources.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

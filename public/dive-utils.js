@@ -59,7 +59,7 @@
   }
 
   // ---- several dive computers ----
-  const DEVICES = [{ id: "cosmiq", name: "Cosmiq+ Gen 5", short: "Cosmiq+" }, { id: "peregrine", name: "Shearwater Peregrine", short: "Peregrine" }, { id: "garmin", name: "Garmin Descent", short: "Garmin" }];
+  const DEVICES = [{ id: "cosmiq", name: "Cosmiq+ Gen 5", short: "Cosmiq+" }, { id: "peregrine", name: "Shearwater Peregrine", short: "Peregrine" }, { id: "perdix", name: "Shearwater Perdix", short: "Perdix" }, { id: "garmin", name: "Garmin Descent", short: "Garmin" }];
   const deviceOf = (rec) => rec.device || "cosmiq";
   const startMs = (r) => Date.parse(r.startedAt + "Z"), HOUR = 3600000;
   /** Do the two dives overlap on the clock (the other computer started a few minutes early or late)? */

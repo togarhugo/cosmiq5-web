@@ -95,7 +95,13 @@ Good to know:
 
 ## 5. Dive log
 
-At the top, choose the dive computer: **Cosmiq+ Gen 5** or **Shearwater Peregrine**. Each has its **own log**; the app remembers your choice.
+At the top, choose the dive computer. Each has its **own log**. Only **your** dive computers are listed: the ones that already have dives in your account, plus the ones you add yourself. The choices are **Cosmiq+ Gen 5**, **Shearwater Peregrine**, **Shearwater Perdix** and **Garmin Descent**.
+* **Nothing listed yet?** The app asks *Which dive computer do you use?*: tap yours and its sync or import box appears.
+* **Another computer later:** tap **+ Add a dive computer** under the tabs.
+* **Added by mistake?** While a computer has no dives, **Hide this dive computer** removes its tab.
+* **No Cosmiq+?** If your dive computers do not include a Cosmiq+, its **Connect & Sync** button, connection status and the **Device** tab are hidden, because they only make sense with one. Add the Cosmiq+ and they come back.
+* **Shearwater Perdix:** works exactly like the Peregrine import below (Shearwater Cloud export, drag the file into the box).
+Each person only ever sees their own dives: every account has its own log, and if someone else signs in on the same browser, the dives and settings stored there for the previous person are cleared first (dives that were never uploaded are saved to a backup file, never given to the other account).
 
 Your dives are grouped **by year** (newest year open), then by **month** and **date**. Each row shows the dive number (bold, in a small box), time, mode (scuba / freedive / gauge), maximum depth and duration.
 

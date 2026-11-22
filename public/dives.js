@@ -454,27 +454,67 @@ const Dives = (() => {
   // ---------- one dive log per dive computer ----------
   const DEV_KEY = "logDevice";
   let selDevice = (() => { try { return localStorage.getItem(DEV_KEY); } catch (e) { return null; } })();
-  /** Draws the computer selector, shows the matching sync / import card, and returns the computer being shown. */
+  // ---- which dive computers are shown: the ones that have dives, plus the ones this person added by hand ----
+  const SRC_KEY = "sources", OWNER_KEY = "owner", USER_KEYS = ["lastSync", "diver", "regulator", SRC_KEY, "logDevice", "yearsOpen"];
+  const HOW = { cosmiq: "Sync over Bluetooth", peregrine: "From a Shearwater Cloud export", perdix: "From a Shearwater Cloud export", garmin: "From FIT files (Garmin Connect)" };
+  const loadSrc = () => { try { const a = JSON.parse(localStorage.getItem(SRC_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => U.DEVICES.some((v) => v.id === x)) : []; } catch (e) { return []; } };
+  const saveSrc = (a) => { try { localStorage.setItem(SRC_KEY, JSON.stringify(a)); } catch (e) {} };
+  const visibleSources = (recs) => { const added = loadSrc(); return U.DEVICES.filter((x) => added.includes(x.id) || recs.some((r) => U.deviceOf(r) === x.id)); };
+  const srcButtons = (list) => list.map((x) => `<button type="button" class="srcbtn" data-add="${x.id}"><b>${esc(x.name)}</b><span class="muted">${esc(HOW[x.id])}</span></button>`).join("");
+  /** Things that only make sense with a Cosmiq+ (Connect & Sync, its settings tab) are hidden for someone who uses other computers only. */
+  function cosmiqChrome(vis) {
+    const none = vis.length > 0 && !vis.some((x) => x.id === "cosmiq");
+    document.body.classList.toggle("no-cosmiq", none);
+    if (none && typeof window.showView === "function" && document.getElementById("deviceView") && document.getElementById("deviceView").style.display !== "none") window.showView("summary");
+  }
+  /** Draws the computer selector, shows the matching sync / import card, and returns the computer being shown ("" = none chosen yet). */
   let curDevice = "cosmiq";                                                                           // the log being shown (picked by you, or your newest dive's computer)
   function renderDeviceTabs(recs) {
-    const ids = U.DEVICES.map((x) => x.id);
-    const shown = ids.includes(selDevice) ? selDevice : recs.length ? U.deviceOf(recs[0]) : "cosmiq";    // until you pick one: the computer of your newest dive (not remembered, so it follows the data as it arrives)
-    const box = $("devTabs");
-    if (box) box.innerHTML = U.DEVICES.map((x) => { const n = recs.filter((r) => U.deviceOf(r) === x.id).length;
+    const vis = visibleSources(recs), ids = vis.map((x) => x.id);
+    cosmiqChrome(vis);
+    const shown = !vis.length ? "" : ids.includes(selDevice) ? selDevice : recs.length && ids.includes(U.deviceOf(recs[0])) ? U.deviceOf(recs[0]) : ids[0];    // until you pick one: the computer of your newest dive (not remembered, so it follows the data as it arrives)
+    const box = $("devTabs"), show = (id, on) => { const el = $(id); if (el) el.style.display = on ? "" : "none"; };
+    if (box) box.innerHTML = vis.map((x) => { const n = recs.filter((r) => U.deviceOf(r) === x.id).length;
       return `<button type="button" role="tab" aria-selected="${x.id === shown}" class="${x.id === shown ? "active" : ""}" data-dev="${x.id}">${esc(x.name)}<span class="muted"> \u00b7 ${n}</span></button>`; }).join("");
+    show("devTabs", !!vis.length);
+    const more = U.DEVICES.filter((x) => !ids.includes(x.id));
+    show("srcEmpty", !vis.length); if ($("srcEmptyList")) $("srcEmptyList").innerHTML = srcButtons(U.DEVICES);
+    show("srcAddRow", !!vis.length && !!more.length); if ($("srcAddList")) $("srcAddList").innerHTML = srcButtons(more); if (!more.length) show("srcAddList", false);
     const sync = $("syncCard"), imp = $("importCard");
     if (sync) sync.style.display = shown === "cosmiq" ? "" : "none";
     if (imp) {
-      imp.style.display = shown === "cosmiq" ? "none" : "";
-      const garmin = shown === "garmin", show = (id, on) => { const el = $(id); if (el) el.style.display = on ? "" : "none"; };
-      show("impPeregrine", !garmin); show("impNotePeregrine", !garmin); show("impBt", !garmin); show("impGarmin", garmin); show("impNoteGarmin", garmin);
+      imp.style.display = shown && shown !== "cosmiq" ? "" : "none";
+      const garmin = shown === "garmin", shearwater = shown === "peregrine" || shown === "perdix", model = (U.DEVICES.find((x) => x.id === shown) || { short: "" }).short;
+      show("impPeregrine", shearwater); show("impNotePeregrine", shearwater); show("impBt", shown === "peregrine"); show("impGarmin", garmin); show("impNoteGarmin", garmin);
       const set = (id, t) => { const el = $(id); if (el) el.textContent = t; };
-      set("impTitle", garmin ? "Garmin Descent" : "Shearwater Peregrine");
+      set("impTitle", (U.DEVICES.find((x) => x.id === shown) || { name: "" }).name);
+      document.querySelectorAll(".impModel").forEach((el) => { el.textContent = model; });
       set("dropTitle", garmin ? "Drop your Garmin dive files here" : "Drop your Shearwater Cloud file here");
       const kinds = $("dropKinds"); if (kinds) kinds.innerHTML = garmin ? "or tap to choose them &middot; <code>.fit</code> or <code>.zip</code>" : "or tap to choose it &middot; <code>.db</code>, <code>.zip</code> or UDDF";
       const zone = $("dropZone"); if (zone) zone.setAttribute("aria-label", garmin ? "Drop Garmin dive files here, or tap to choose them" : "Drop a Shearwater Cloud file here, or tap to choose one");
     }
+    show("srcHideRow", !!shown && !recs.some((r) => U.deviceOf(r) === shown));                   // a computer added by mistake can be hidden again while it has no dives
     curDevice = shown; return shown;
+  }
+  function addSource(id) { saveSrc([...new Set([...loadSrc(), id])]); selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; const l = $("srcAddList"); if (l) l.style.display = "none"; render(); }
+  function hideSource() { if (curDevice) saveSrc(loadSrc().filter((x) => x !== curDevice)); selDevice = null; try { localStorage.removeItem(DEV_KEY); } catch (e) {} render(); }
+  /**
+   * The dives cached on this device belong to one person. When someone else signs in on the same browser, the cache and the per-person
+   * settings are cleared first (dives not yet uploaded are saved to a backup file, never given to the other account). Returns true when it cleared.
+   */
+  async function claimDevice() {
+    try {
+      const r = await fetch("/api/me", { credentials: "same-origin", redirect: "error" }); if (!r.ok) return false;
+      const email = String((await r.json()).email || "").toLowerCase(); if (!email) return false;
+      const prev = localStorage.getItem(OWNER_KEY);
+      if (prev && prev !== email) {
+        const recs = await all(); if (recs.some((x) => x.uploaded === false)) { try { await exportBackup(); } catch (e) {} }
+        await tx("readwrite", (s) => s.clear()); for (const k of USER_KEYS) { try { localStorage.removeItem(k); } catch (e) {} }
+        localStorage.setItem(OWNER_KEY, email); return true;
+      }
+      if (!prev) localStorage.setItem(OWNER_KEY, email);
+    } catch (e) { /* offline or signed out: keep what is cached for the same person */ }
+    return false;
   }
   function pickDevice(id) { selDevice = id; try { localStorage.setItem(DEV_KEY, id); } catch (e) {} const m = $("impMsg"); if (m) m.textContent = ""; render(); }
 
@@ -482,6 +522,9 @@ const Dives = (() => {
   function wireList(list) {
     if (wired) return; wired = true;
     $("devTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-dev]"); if (b) pickDevice(b.dataset.dev); });
+    for (const id of ["srcEmptyList", "srcAddList"]) $(id).addEventListener("click", (e) => { const b = e.target.closest("button[data-add]"); if (b) addSource(b.dataset.add); });
+    $("srcAdd").addEventListener("click", () => { const l = $("srcAddList"); l.style.display = l.style.display === "none" ? "" : "none"; });
+    $("srcHide").addEventListener("click", hideSource);
     $("pgBtn").addEventListener("click", syncPeregrine); $("pgCancel").addEventListener("click", () => { pgCancel = true; $("pgMsg").textContent = "Cancelling\u2026"; });
     const card = $("importCard");                                                                  // drop a file from Finder / Spotlight / Files onto the card
     if (card) {
@@ -549,7 +592,7 @@ const Dives = (() => {
     if (ls) { ls.textContent = last ? `Last sync ${new Date(last.at).toLocaleString()}: ${last.msg}` : "No sync yet on this phone."; ls.style.color = last && !last.ok ? "var(--tx-c92a2a)" : ""; }
     const cloudTxt = { ok: "\u2601 synced to cloud", unavailable: "\u2601 cloud unavailable", offline: "offline", signedout: "\ud83d\udd12 signed out: reload the page to sign in again", unknown: "" }[cloudState];
     $("cloudState").textContent = cloudTxt;
-    if (!recs.length) { list.innerHTML = dev === "cosmiq" ? "<p class='muted'>No Cosmiq+ dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>" : `<p class='muted'>No ${esc(deviceName(dev))} dives yet. Export your log from its app as UDDF and choose the file above.</p>`; return; }
+    if (!recs.length) { list.innerHTML = dev === "cosmiq" ? "<p class='muted'>No Cosmiq+ dives yet. Tap <b>Sync dives</b> with your dive computer on.</p>" : `<p class='muted'>No ${esc(deviceName(dev))} dives yet. ${dev === "garmin" ? "Drop your FIT files or a Garmin Connect ZIP into the box above." : "Export your log from Shearwater Cloud and choose the file above."}</p>`; return; }
     const ae = document.activeElement;                                              // never rebuild the list under someone who is typing
     if (ae && ae.tagName === "INPUT" && (list.contains(ae) || ($("locPrompt") && $("locPrompt").contains(ae)))) { renderPending = true; return; }
 
@@ -628,5 +671,5 @@ const Dives = (() => {
     a.download = `cosmiq-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { syncFromDevice, syncPeregrine, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
+  return { claimDevice, syncFromDevice, syncPeregrine, importFiles, render, revealPrompt, setLocations, cloudPull, cloudPush, exportBackup, all, copyDiagnostics, downloadDiagnostics };
 })();

@@ -515,6 +515,9 @@
             .wcard.cert { padding: 0; border: 0; margin-bottom: 0; }
             .wallet-hint { text-align: center; margin: 10px 0 0; font-size: 13px; }
             @media (prefers-reduced-motion: reduce) { .wimg, .wfoot, .wshade, .wtitle, .wclose { transition: none; } }
+            .no-cosmiq #connectBtn, .no-cosmiq #disconnectBtn, .no-cosmiq #status, .no-cosmiq #btBanner, .no-cosmiq #clockStatus, .no-cosmiq #navDevice, .no-cosmiq #deviceView { display: none !important; }
+            .srclist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; } .srcbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; background: var(--bg-f1f3f5); color: var(--tx-212529); border-radius: 10px; font-size: 15px; } .srcbtn span { font-size: 12px; }
+            .linkbtn { background: none; color: var(--tx-1864ab); font-size: 13px; font-weight: 600; padding: 8px 4px; min-height: 36px; } #srcAddRow { margin: -2px 0 10px; }
             /* ---------- laptop / desktop layout: a left sidebar and a wide content area. Below 1024px nothing changes (phone layout). ---------- */
             #shell, #side, #main { display: contents; } .acct-label { display: none; }
             @media (min-width: 1024px) {
@@ -974,13 +977,19 @@
             <div id="placeBanner" class="card" style="display:none"><span aria-hidden="true">&#128506;</span> <span id="placeBannerText"></span>
                 <button id="placeBannerBtn" class="btn-set" type="button" style="margin-left:8px">Place on map</button></div>
             <datalist id="locList"></datalist>
+            <div id="srcEmpty" class="card" style="display:none">
+                <h3>Which dive computer do you use?</h3>
+                <p class="muted" style="margin:0 0 10px">Only the dive computers that have dives, or that you add here, are shown. Pick yours to get started; you can add more later.</p>
+                <div id="srcEmptyList" class="srclist"></div>
+            </div>
             <div id="devTabs" role="tablist" aria-label="Dive computer"></div>
+            <div id="srcAddRow" style="display:none"><button id="srcAdd" class="linkbtn" type="button">+ Add a dive computer</button><div id="srcAddList" class="srclist" style="display:none"></div></div>
             <div id="importCard" class="card" style="display:none">
                 <h3 id="impTitle">Shearwater Peregrine</h3>
                 <div id="impPeregrine">
-                    <p class="muted" style="margin:0 0 10px">The Peregrine hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
+                    <p class="muted" style="margin:0 0 10px">The <span class="impModel">Peregrine</span> hands its dives to the <b>Shearwater Cloud</b> app. Export them from there and choose the file here:</p>
                     <ol class="help" style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--tx-495057)">
-                    <li>Download your dives from the Peregrine into <b>Shearwater Cloud</b>, as you normally do.</li>
+                    <li>Download your dives from the <span class="impModel">Peregrine</span> into <b>Shearwater Cloud</b>, as you normally do.</li>
                     <li>In Shearwater Cloud, <b>export the database</b>: on a phone open <b>Profile</b> and tap <b>Export</b> (the database <code>.db</code> or the account export, a <code>.zip</code>); on a computer use <b>File &rsaquo; Export &rsaquo; Export Whole Database</b>. Save it to your phone or to Files / Downloads. The menu names differ between app versions.</li>
                     <li>Drag the file into the box below (or tap the box to choose it). A <b>UDDF</b> export works too.</li>
                     </ol>
@@ -1002,7 +1011,7 @@
                 <input id="impFile" type="file" multiple style="position:absolute;left:-9999px" />
                 <div id="impMsg" class="msg" role="status" style="margin-top:8px"></div>
                 <div id="impNotePeregrine">
-                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Peregrine keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
+                <p class="muted" style="margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The <span class="impModel">Peregrine</span> keeps its own log: its dives are listed separately from the Cosmiq+. A dive that both computers recorded is counted once in the Summary and the regulator counter, using the Cosmiq+ record; it is marked &ldquo;also on Cosmiq+&rdquo; here.</p>
                 </div>
                 <p id="impNoteGarmin" class="muted" style="display:none;margin:8px 0 0">Dives you have already imported are skipped, so you can import a newer export again and again. The Garmin keeps its own log, listed separately. A dive that the Cosmiq+ (or Peregrine) also recorded is counted once in the Summary and the regulator counter, using the first computer's record. <b>Beta:</b> this reads Garmin's published file format and has not yet been tried on every watch, so check the first import against your watch (depth, time, duration).</p>
                 <div id="impBt">
@@ -1015,6 +1024,7 @@
                 </details>
                 </div>
             </div>
+            <div id="srcHideRow" style="display:none;margin:-4px 0 12px"><button id="srcHide" class="linkbtn" type="button">Hide this dive computer (it has no dives yet)</button></div>
             <div id="syncCard" class="card">
                 <h3>Sync</h3>
                 <button id="diveSyncBtn" class="btn-main" onclick="syncDivesNow()">Sync dives from dive computer</button>
@@ -2036,7 +2046,8 @@
                       : "<b>This browser can't use Bluetooth.</b> Use Chrome or Edge (Android, Windows, Mac, Linux). Your saved dive log is still viewable here.";
                 b.classList.add("show");
             }
-            window.addEventListener("load", () => {
+            window.addEventListener("load", async () => {
+                if (await Dives.claimDevice()) { location.reload(); return; }                 // someone else signed in on this browser: start clean (see dives.js)
                 AccountArea.init();                                                          // picture, versions, certifications, regulator
                 PlacesUI.init();                                                             // map pins of the places you have dived
                 ApiKeys.init();                                                              // Account > API access

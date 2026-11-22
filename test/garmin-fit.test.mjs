@@ -88,9 +88,14 @@ test("long dives are thinned to 1000 samples keeping the deepest point", async (
 });
 
 test("Garmin dives sit in the list of dive computers, ranked after the Cosmiq+ and the Peregrine for duplicates", () => {
-  assert.deepEqual(U.DEVICES.map((d) => d.id), ["cosmiq", "peregrine", "garmin"]);
+  assert.deepEqual(U.DEVICES.map((d) => d.id), ["cosmiq", "peregrine", "perdix", "garmin"]);
   const dive = (device, startedAt, fingerprint) => ({ fingerprint, device, startedAt, durationSec: 1800, maxDepthM: 20 });
   const recs = [dive("garmin", "2025-03-01T09:02:00", "g1"), dive("cosmiq", "2025-03-01T09:00:00", "c1"), dive("peregrine", "2025-03-01T09:01:00", "p1")];
   assert.deepEqual([...U.duplicateMap(recs)].sort(), [["g1", "c1"], ["p1", "c1"]], "one dive on three wrists counts once, the Cosmiq+ record");
   assert.deepEqual(U.uniqueDives(recs).map((r) => r.fingerprint), ["c1"]);
+});
+
+test("the device list of the page and of the Worker are the same", async () => {
+  const { DEVICE_IDS, IMPORTED_DEVICES } = await import("../src/devices.js");
+  assert.deepEqual(DEVICE_IDS, U.DEVICES.map((d) => d.id)); assert.deepEqual(IMPORTED_DEVICES, DEVICE_IDS.slice(1));
 });
