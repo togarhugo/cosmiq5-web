@@ -8,7 +8,7 @@
 3. [Overview](#3-overview)
 4. [Connecting and syncing](#4-connecting-and-syncing)
 5. [Dive log and Import](#5-dive-log-and-import)
-6. [Dive locations](#6-dive-locations)
+6. [Dive locations](#6-dive-locations) and [Dive trips](#6c-dive-trips)
 7. [Device settings](#7-device-settings)
 8. [Account](#8-account) (including [API access](#api-access-let-other-tools-read-your-dive-log))
 9. [Understanding your dive data](#9-understanding-your-dive-data)
@@ -50,14 +50,14 @@ In Chrome use *Add to Home screen* / *Install app*. In Bluefy use its bookmark/h
 ## 2. Finding your way around
 
 * **Your profile icon** opens **Account** (picture, password, DAN, regulator, API keys, help). On a phone it is at the top right; on a laptop it is **Account** at the bottom of the left sidebar.
-* **Five tabs**: **Overview**, **Dive log** (with your dive count), **Import**, **Certificates** and **Device** (settings). On a phone they sit in a row under the title. On a laptop (window 1024 px or wider) they are a **sidebar on the left** with Connect & Sync, the connection status, the light/dark switch and Account; the content is wider (two columns on Overview, Device and Account).
+* **Six tabs**: **Overview**, **Dive log** (with your dive count), **Import**, **Certificates**, **Trips** and **Device** (settings; only if you use a Cosmiq+). On a phone they are in a **menu**: tap the **3-line button** at the top left, pick a tab, and the menu closes (tap outside it or press Esc to close it without choosing). The light / dark switch is at the bottom of that menu. On a laptop (window 1024 px or wider) they are a **sidebar on the left** with Connect & Sync, the connection status, the light/dark switch and Account; the content is wider (two columns on Overview, Device and Account).
 * The big blue **Connect & Sync** button is always at the top.
 * While syncing, a **progress banner with Cancel** appears on every tab.
 * A small green/amber/red **message at the bottom** confirms what just happened.
 
-* **Tab icons:** each tab has an icon above its name (a dashboard for Overview, a book for Dive log, a tray with an arrow for Import, an ID card for Certificates, a watch for Device). They take the colour of the tab text, so they follow the light / dark theme.
+* **Tab icons:** each tab has an icon beside its name (a dashboard for Overview, a book for Dive log, a tray with an arrow for Import, an ID card for Certificates, a suitcase for Trips, a watch for Device). They take the colour of the tab text, so they follow the light / dark theme.
 * **Fonts:** the app uses **Geist** for text and **Geist Mono** for numbers such as dive numbers, depths and times. Both fonts are part of the app (nothing is loaded from another website) and are under the SIL Open Font License.
-* **Light / dark switch** at the top left of every page (also on the sign-in pages): **left = light, right = dark**. Until you use it, the app follows your phone's own light or dark setting; once you choose, your choice is remembered on that device. The map background and the dive charts follow the theme too.
+* **Light / dark switch** at the top left of every page on a laptop and at the bottom of the menu on a phone (also on the sign-in pages): **left = light, right = dark**. Until you use it, the app follows your phone's own light or dark setting; once you choose, your choice is remembered on that device. The map background and the dive charts follow the theme too.
 
 ---
 
@@ -123,7 +123,7 @@ Tap a dive to open it:
 * **Depth chart** with a **grid**: horizontal lines at round depths (in metres, down the left) and vertical lines at round minutes (along the bottom), so you can read depth and time off the line.
 * **Max depth, duration, minimum temperature, O₂ %, dive number, average depth, time since your last dive, surface pressure.**
 * **Location** field for that dive.
-* **Delete this dive…** at the bottom. It asks first (*Delete dive* / *Keep it*). Deleting removes the dive and the copies other computers recorded of it, from this phone and from your account, and it **cannot be undone**: the dive does not come back when you sync the dive computer or import a file again. Copies that were shared with other people stay on their accounts.
+* the small red **bin** on the right of the dive row. It asks first (*Delete dive* / *Keep it*). Deleting removes the dive and the copies other computers recorded of it, from this phone and from your account, and it **cannot be undone**: the dive does not come back when you sync the dive computer or import a file again. Copies that were shared with other people stay on their accounts.
 * **Technical details**: the raw header bytes, for the curious.
 
 A badge may appear on a dive:
@@ -224,6 +224,19 @@ Every dive location you type (for example *Tulamben*) is a **place**. A place ge
 The name you typed stays as it is: the map only adds a position to it. Places with different capitalisation (*Tulamben* / *tulamben*) are one place. If you change a dive's location to a new name, that new place appears in the list to be put on the map.
 
 **Privacy and limits.** The map pictures and the place search come from **OpenStreetMap** (free). When you open a map or tap Search, OpenStreetMap sees the map area you look at, the text you search for, and that the request comes from this app; it never sees your dives, your account or the other places. The map search by button (Nominatim) runs only when you tap it, because their usage rules ask for that; the suggestions while typing come from Photon (see above). Without internet the pins and lists still show, but the map background and the search do not. Positions are saved in your account, up to 500 places.
+
+---
+
+## 6c. Dive trips
+
+The **Trips** tab plans a trip and what you pack for it. Trips are kept in your account (private to you) and saved a moment after you stop typing.
+
+* **New trip** starts with a title, a destination and the two standard packing lists. Fill in the **start and end date**: a big number counts the **days to go**, then shows the **day of the trip** ("3 of 8") while you are away, and **Ended n days ago** afterwards.
+* **Packing lists:** *Core scuba kit* (regulator, BCD, dive computer, mask and fins, exposure suit 3 mm, SMB and reel, spare O-rings and straps) and *Underwater camera kit* (camera, housing and port, strobes and arms, batteries and cards, spares and tools). Tap the box to tick an item as packed. **Tap the name** to change the name or the **weight in kg**, to switch its bag, or to delete it. **+ Add to …** adds your own item with its weight; **+ New list** adds a list of your own (for example a snorkel kit); **Rename or remove list** and **Reset to the standard lists** ask before they do anything.
+* **Bags:** every item goes in the **Dive bag** (check-in) or the **Camera carry-on**: tap the small *Dive bag* / *Carry-on* label on an item to move it. The weights of all items add up per bag.
+* **Baggage weight:** type your airline's allowance for the **dive bag**, the **carry-on** and, if the airline counts a combined weight, **all bags** (standard 23 kg and 7 kg; leave a box empty for no limit). Each bar shows how much is left, turns **orange** within 10 % of the limit and **red** when you are over it.
+* **Overview:** the trip that is on now, or the next one to start, shows as a card at the top of the Overview with its countdown and packing status. When there is no trip coming, the card is not there. Tap it to open the trip.
+* **Delete this trip** (bottom of the trip) asks first.
 
 ---
 

@@ -180,6 +180,7 @@ npx wrangler d1 execute cosmiq --remote --file=migrations/0008_regulator_service
 npx wrangler d1 execute cosmiq --remote --file=migrations/0009_bt_reports.sql                  # Bluetooth reports / download logs people send to their own account (idempotent)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0010_shared_dives.sql                # dives.shared_from: dives one person copies into another's account (run once)
 npx wrangler d1 execute cosmiq --remote --file=migrations/0011_deleted_dives.sql               # deleted_dives: fingerprints of dives deleted from a log, so they are not stored again (idempotent)
+npx wrangler d1 execute cosmiq --remote --file=migrations/0012_trips.sql                        # trips: dive trips with their packing lists (idempotent)
 ```
 
 ### What the dive computer actually stores (decoded from a real Cosmiq+ Gen 5 with 106 dives)

@@ -91,6 +91,19 @@ const fakeBle = () => {
 };
 
 const browser = await chromium.launch();
+// On a phone the tabs are in a menu behind the 3-line button: open it before touching a tab (on a laptop the sidebar is always there).
+const NAV = /^#nav[A-Z]/;
+async function openMenu(page) { const b = page.locator("#menuBtn"); if (await b.isVisible() && (await b.getAttribute("aria-expanded")) !== "true") { await b.click(); await page.waitForFunction(() => document.getElementById("mainNav").classList.contains("open")); await page.waitForTimeout(280); } }
+const themeSwitch = async (page) => { await openMenu(page); return page.locator(".theme-switch:visible").first(); };
+async function viaMenu(page, fn) { for (let k = 0; ; k++) { await openMenu(page); try { return await fn(k < 3 ? 6000 : undefined); } catch (e) { if (k >= 3) throw e; await page.waitForTimeout(400); } } }   // a page reload while the menu is open closes it: open it again and retry
+function patchPage(page) {
+  const click = page.click.bind(page), locator = page.locator.bind(page);
+  page.click = (sel, o = {}, ...a) => (typeof sel === "string" && NAV.test(sel) ? viaMenu(page, (timeout) => click(sel, { ...o, ...(timeout ? { timeout } : {}) }, ...a)) : click(sel, o, ...a));
+  page.openMenu = () => openMenu(page);
+  page.locator = (sel, ...a) => { const l = locator(sel, ...a); if (typeof sel === "string" && NAV.test(sel)) for (const m of ["click", "tap"]) { const f = l[m].bind(l); l[m] = (o = {}) => viaMenu(page, (timeout) => f({ ...o, ...(timeout ? { timeout } : {}) })); } return l; };
+  return page;
+}
+{ const newContext = browser.newContext.bind(browser); browser.newContext = async (...a) => { const ctx = await newContext(...a), newPage = ctx.newPage.bind(ctx); ctx.newPage = async (...b) => { const p = patchPage(await newPage(...b)); await p.route("**/api/trips", (r) => r.fulfill({ json: { trips: [] } })); return p; }; return ctx; }; }  // no trips unless a scenario says otherwise
 // The map opens by itself after a new location is saved (a user setting, on by default). Older scenarios are about other things and do not mock the map: switch it off for them.
 { const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(() => { try { localStorage.setItem("mapAsk", "0"); } catch (e) {} }); return c; }; }
 let failed = 0;
@@ -124,7 +137,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.match(await page.locator("#clockStatus").innerText(), /clock set/i);
       // the result is shown automatically (no hunting for the tab) and the count is in the nav
       assert.ok(await page.locator("#logView").isVisible(), "switched to the Dive log after a sync that saved dives");
-      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+      assert.match(await page.locator("#navLog").textContent(), /Dive log \(2\)/);
       assert.match(await page.locator("#lastSync").innerText(), /Last sync .*Dive sync done: 2 on device, 2 new/);
       await page.waitForFunction(() => getComputedStyle(document.getElementById("syncBanner")).display === "none", null, { timeout: 5000 });   // progress banner hidden when finished
       assert.equal(await page.locator("details.dive").count(), 2);
@@ -134,7 +147,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
       assert.ok(await page.locator("details.year").evaluate((e) => e.open), "newest year starts open");
       assert.match(await page.locator("details.dive").first().innerText(), /^2\n/, "number without #"); assert.match(await page.locator("details.dive").last().innerText(), /^1\n/);
       assert.ok(!/#/.test(await page.locator("details.dive").first().locator("summary").innerText()), "no # in the dive row");
-      assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);      await page.locator("details.dive").last().locator("summary").click();
+      assert.match(await page.locator("#navLog").textContent(), /Dive log \(2\)/);      await page.locator("details.dive").last().locator("summary").click();
       await page.waitForSelector("details.dive[open] svg polyline");
       // technical details expose the raw header with undecoded bytes highlighted (to spot e.g. a location field)
       const tech = page.locator("details.dive[open] details.tech"); await tech.locator("summary").click();
@@ -177,7 +190,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     await page.waitForFunction(() => /Downloading dive 2 of 2/.test(document.getElementById("bannerText").textContent), null, { timeout: 15000 });
     assert.ok(await page.locator("#syncBanner").isVisible(), "banner visible while syncing, on every tab");
     assert.ok(await page.locator("#summaryView").isVisible() && !(await page.locator("#logView").isVisible()), "still on the tab you were on (Summary)");
-    assert.match(await page.locator("#navLog").innerText(), /\(1\)/, "dive 1 already counted while dive 2 is still downloading");
+    assert.match(await page.locator("#navLog").textContent(), /\(1\)/, "dive 1 already counted while dive 2 is still downloading");
     await page.click("#cancelSync");
     await page.waitForFunction(() => /Cancelled by you/.test(document.getElementById("diveProgress").textContent), null, { timeout: 10000 });
     assert.match(await page.locator("#diveProgress").innerText(), /1 dive\(s\) were saved/);
@@ -213,7 +226,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.equal(await row(3).locator(".numtile").innerText(), "3", "number tile without #"); assert.match(await row(3).innerText(), /dive number/);
     await row(1).locator("summary").click();
     assert.match(await row(1).locator(".note").innerText(), /no longer exists on the device/);
-    assert.equal(await row(1).locator("svg:not(.pin)").count(), 0, "no chart is drawn from another dive's bytes");
+    assert.equal(await row(1).locator("svg:not(.pin):not(.trash)").count(), 0, "no chart is drawn from another dive's bytes");
     console.log("PASS wrapped profile memory");
   } catch (e) {
     failed++; console.log("FAIL wrapped\n ", e.message.split("\n").slice(0, 4).join(" | "));
@@ -371,7 +384,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     // 1. new title, avatar at the top right, no Account tab, no version in the header or footer
     assert.equal(await page.title(), "Dive Manager"); assert.equal(await page.locator("h1 img:visible").getAttribute("alt"), "Dive Manager", "the heading is the logo, named Dive Manager");
     const box = await page.locator("#acctBtn").boundingBox(), vw = page.viewportSize().width;
-    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav button").count(), 5, "Summary, Dive log, Import, Certificates, Device");
+    assert.ok(box.x > vw / 2 && box.y < 80, "avatar sits at the top right"); assert.equal(await page.locator(".nav > button").count(), 6, "Overview, Dive log, Import, Certificates, Trips, Device"); //y, Dive log, Import, Certificates, Device");
     assert.equal(await page.locator("#verTop, #appFooter, #navAccount").count(), 0, "no version badge in the header/footer, no Account tab");
     assert.ok(!/v\d+\.\d+\.\d+/.test(await page.locator("header").innerText()), "no version text in the header");
     // 2. sync: the question has a 'whole month' input; a date's own entry wins over it
@@ -615,7 +628,7 @@ for (const [name, devName, extra] of [["Pixel 7", "Pixel 7"], ["iPhone 13 (WebKi
     assert.match(await page.locator("#devTabs button.active").innerText(), /Peregrine.*3/, "per-computer counts stay in the Import tab"); await openSource(page, "Cosmiq"); await page.waitForFunction(() => /Cosmiq\+ Gen 5/.test(document.querySelector("#devTabs button.active")?.textContent || ""), null, { timeout: 5000 }); assert.match(await page.locator("#devTabs button.active").innerText(), /Cosmiq\+ Gen 5.*2/);
     // ONE dive log: every dive once. 5 records, 1 of them the same dive as another -> 4 rows; the Peregrine record is the one shown (it is preferred over the Cosmiq+)
     await openSource(page, "Peregrine"); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 4, null, { timeout: 5000 });
-    assert.match(await page.locator("#navLog").innerText(), /Dive log \(4\)/, "the nav counts every dive once"); assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
+    assert.match(await page.locator("#navLog").textContent(), /Dive log \(4\)/, "the nav counts every dive once"); assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list");
     const rows = await diveRows(page);
     assert.equal(rows[0].num, "4"); assert.deepEqual(rows.map((r) => r.chips[0]).sort(), ["Cosmiq+", "Peregrine", "Peregrine", "Peregrine"], "three Peregrine rows and the Cosmiq+ dive that only it recorded: " + JSON.stringify(rows)); assert.equal(rows.filter((r) => r.chips[0] === "Cosmiq+").length, 1); assert.equal(rows.filter((r) => r.also).length, 1, "only the dive recorded twice says so");
     const merged = page.locator("#diveList details.dive", { has: page.locator(".badge.also") }); assert.equal(await merged.count(), 1, "one dive was recorded twice"); assert.match(await merged.locator("summary").innerText(), /Peregrine/); assert.match(await merged.locator(".badge.also").innerText(), /also on Cosmiq\+/); assert.equal(await merged.locator(".dive-num").innerText(), "1", "logbook number: your oldest dive is 1");
@@ -1013,11 +1026,11 @@ if (process.env.REAL_DB) {
     await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } }));
     await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Togar Hugo", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } }));
     await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [] } }));
-    await page.goto(base); await page.waitForSelector("header .theme-switch"); return { ctx, page, errs };
+    await page.goto(base); await page.waitForSelector(".theme-switch", { state: "attached" }); return { ctx, page, errs };
   };
   const look = (page) => page.evaluate(() => { const cs = (s) => getComputedStyle(document.querySelector(s)); const lum = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05); const sw = document.querySelector(".theme-switch");
-    return { theme: document.documentElement.dataset.theme, page: cs("body").backgroundColor, card: cs("#sumDiver").backgroundColor, nameRatio: ratio(cs("#sumName").color, cs("#sumDiver").backgroundColor), checked: sw.getAttribute("aria-checked"), knobX: document.querySelector(".ts-knob").getBoundingClientRect().x - sw.getBoundingClientRect().x, scheme: cs("html").colorScheme, meta: document.querySelector('meta[name="theme-color"]').content }; });
+    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05); const sw = document.querySelector(getComputedStyle(document.getElementById("menuBtn")).display !== "none" ? "#mainNav .theme-switch" : "header .theme-switch");
+    return { theme: document.documentElement.dataset.theme, page: cs("body").backgroundColor, card: cs("#sumDiver").backgroundColor, nameRatio: ratio(cs("#sumName").color, cs("#sumDiver").backgroundColor), checked: sw.getAttribute("aria-checked"), knobX: sw.querySelector(".ts-knob").getBoundingClientRect().x - sw.getBoundingClientRect().x, scheme: cs("html").colorScheme, meta: document.querySelector('meta[name="theme-color"]').content }; });
   try {
     // 1. nothing chosen yet: the phone's own setting decides
     let { ctx, page, errs } = await mkPage({ colorScheme: "dark" }); let d = await look(page);
@@ -1026,10 +1039,10 @@ if (process.env.REAL_DB) {
     await ctx.close();
     ({ ctx, page, errs } = await mkPage({ colorScheme: "light" })); d = await look(page); assert.equal(d.theme, "light"); assert.equal(d.checked, "false"); assert.equal(d.page, "rgb(248, 249, 250)"); assert.equal(d.card, "rgb(255, 255, 255)"); assert.equal(d.meta, "#007bff"); assert.ok(d.nameRatio > 7);
     // 2. the switch: at the top of the page, a real switch, light on the left and dark on the right
-    const sw = page.locator("header .theme-switch"); assert.equal(await sw.getAttribute("role"), "switch"); assert.equal(await sw.getAttribute("aria-label"), "Dark mode");
-    const box = await sw.boundingBox(), hb = await page.locator("header h1").boundingBox(); assert.ok(box.x + box.width / 2 < 150 && Math.abs(box.y + box.height / 2 - (hb.y + hb.height / 2)) < 30, "at the top left, level with the title: " + JSON.stringify([box, hb])); assert.equal(Math.round(box.height), 32, "a compact switch, not a tall button");
+    const sw = (await themeSwitch(page)); assert.equal(await sw.getAttribute("role"), "switch"); assert.equal(await sw.getAttribute("aria-label"), "Dark mode");
+    const box = await sw.boundingBox(); assert.ok(box.x >= 0 && box.x < 120 && box.y > 300, "inside the menu, at the bottom left: " + JSON.stringify(box)); assert.equal(Math.round(box.height), 32, "a compact switch, not a tall button");
     assert.ok(box.width >= 56 && box.height >= 28, "big enough to tap"); const lightKnob = d.knobX; assert.ok(lightKnob < 8, "light: the knob is on the left (" + lightKnob + ")");
-    assert.ok((await page.locator(".theme-switch .ts-sun").boundingBox()).x < (await page.locator(".theme-switch .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
+    assert.ok((await page.locator(".theme-switch:visible .ts-sun").boundingBox()).x < (await page.locator(".theme-switch:visible .ts-moon").boundingBox()).x, "sun icon left of the moon icon");
     await sw.click(); await page.waitForTimeout(450); d = await look(page); assert.equal(d.theme, "dark"); assert.equal(d.checked, "true"); assert.ok(d.knobX > 24, "dark: the knob moved to the right (" + d.knobX + ")"); assert.equal(d.page, "rgb(13, 17, 23)"); assert.ok(d.nameRatio > 7);
     assert.equal(await page.evaluate(() => localStorage.getItem("theme")), "dark");
     // the logo replaces the title text: the one for the current theme is shown, it loads, it has the title as its name, and it fits between the switch and the avatar
@@ -1037,16 +1050,16 @@ if (process.env.REAL_DB) {
       return { shown: vis.map((i) => i.className), ok: !!vis[0] && vis[0].complete && vis[0].naturalWidth > 300, alt: vis[0] && vis[0].alt, left: r && r.left - s.right, right: r && a.left - r.right, w: r && r.width }; });
     let lg = await logo(); assert.deepEqual(lg.shown, ["logo logo-dark"], "dark theme: the cream logo"); assert.ok(lg.ok, "logo loads"); assert.equal(lg.alt, "Dive Manager"); assert.ok(lg.left >= 0 && lg.right >= 0, "does not touch the switch or the avatar: " + JSON.stringify(lg));
     assert.ok(await page.getByRole("heading", { name: "Dive Manager" }).isVisible(), "the heading still reads Dive Manager for screen readers");
-    await page.locator("header .theme-switch").click(); await page.waitForTimeout(450); lg = await logo(); assert.deepEqual(lg.shown, ["logo logo-light"], "light theme: the dark logo"); assert.ok(lg.ok); await page.locator("header .theme-switch").click(); await page.waitForTimeout(450);
+    await (await themeSwitch(page)).click(); await page.waitForTimeout(450); lg = await logo(); assert.deepEqual(lg.shown, ["logo logo-light"], "light theme: the dark logo"); assert.ok(lg.ok); await (await themeSwitch(page)).click(); await page.waitForTimeout(450);
     // 3. remembered after a reload, no flash (the script runs in <head> before the page is painted)
     assert.equal(await page.evaluate(() => { const s = document.querySelector('head script[src="/auth/theme.js"]'); return !!s && !s.async && !s.defer; }), true, "theme.js blocks painting so there is no light flash");
-    await page.reload(); await page.waitForSelector("header .theme-switch"); d = await look(page); assert.equal(d.theme, "dark", "still dark after a reload");
+    await page.reload(); await page.waitForSelector(".theme-switch", { state: "attached" }); d = await look(page); assert.equal(d.theme, "dark", "still dark after a reload");
     // 4. keyboard works, and a chosen light beats a dark phone
-    await page.locator("header .theme-switch").focus(); await page.keyboard.press("Enter"); assert.equal((await look(page)).theme, "light"); await page.keyboard.press("Space"); assert.equal((await look(page)).theme, "dark"); await page.keyboard.press("Enter");
+    await (await themeSwitch(page)).focus(); await page.keyboard.press("Enter"); assert.equal((await look(page)).theme, "light"); await page.keyboard.press("Space"); assert.equal((await look(page)).theme, "dark"); await page.keyboard.press("Enter");
     await ctx.close();
     ({ ctx, page } = await mkPage({ colorScheme: "dark" }, () => { try { localStorage.setItem("theme", "light"); } catch (e) {} })); d = await look(page); assert.equal(d.theme, "light", "your choice wins over the phone's setting"); assert.equal(d.checked, "false");
     // 5. every screen is readable in dark: no text with a contrast below 3:1 (Summary, Dive log, Device, Account)
-    await page.locator("header .theme-switch").click();
+    await (await themeSwitch(page)).click();
     const lowContrast = () => page.evaluate(() => { const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(",").map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
       const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
       const bgOf = (el) => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0) { layers.push(c); if (c.a >= 0.99) break; } } let out = layers.length && layers[layers.length - 1].a >= 0.99 ? layers.pop() : { r: 13, g: 17, b: 23 }; while (layers.length) { const l = layers.pop(); out = { r: l.r * l.a + out.r * (1 - l.a), g: l.g * l.a + out.g * (1 - l.a), b: l.b * l.a + out.b * (1 - l.a) }; } return out; };
@@ -1071,19 +1084,25 @@ if (process.env.REAL_DB) {
   await page.goto(base);
   try {
     await page.waitForFunction(() => /Dive log \(2\)/.test(document.getElementById("navLog").textContent), null, { timeout: 8000 });
-    // 1. every tab has its icon above its label, painted in the label's colour (a one-colour mask), at the same size
-    const tabs = await page.evaluate(() => ["navSummary", "navLog", "navImport", "navCerts", "navDevice"].map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
-      return { id, icon: (ci.webkitMaskImage || ci.maskImage), w: Math.round(r.width), h: Math.round(r.height), above: r.bottom <= s.top + 1, same: ci.backgroundColor === cb.color, text: b.innerText.trim(), aria: i.getAttribute("aria-hidden") }; }));
-    assert.deepEqual(tabs.map((t) => t.id), ["navSummary", "navLog", "navImport", "navCerts", "navDevice"]); assert.match(tabs[0].icon, /icon-summary\.png/); assert.match(tabs[1].icon, /icon-log\.png/); assert.match(tabs[2].icon, /icon-import\.png/); assert.match(tabs[3].icon, /icon-cert\.png/); assert.match(tabs[4].icon, /icon-device\.png/);
-    for (const t of tabs) { assert.equal(t.w, 28); assert.equal(t.h, 28); assert.ok(t.above, t.id + ": icon above the label"); assert.ok(t.same, t.id + ": icon has the label colour"); assert.equal(t.aria, "true", "decorative icon"); }
-    assert.deepEqual(tabs.map((t) => t.text), ["Overview", "Dive log (2)", "Import", "Certificates", "Device"], "the first tab is called Overview, the count is still there");
-    await page.click("#navLog"); await page.waitForFunction(() => document.getElementById("navLog").classList.contains("active")); const active = await page.evaluate(() => { const b = document.getElementById("navLog"); return getComputedStyle(b.querySelector(".ti")).backgroundColor === getComputedStyle(b).color && getComputedStyle(b).color === "rgb(255, 255, 255)"; }); assert.ok(active, "the active tab's icon is white like its label");
-    // 2. the icon files load (not a broken mask), and the tab row still fits five tabs on a phone
-    for (const f of ["icon-summary", "icon-log", "icon-import", "icon-cert", "icon-device"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
-    const row = await page.evaluate(() => ({ nav: document.querySelector(".nav").scrollWidth <= document.querySelector(".nav").clientWidth + 1, h: Math.round(document.getElementById("navSummary").getBoundingClientRect().height) })); assert.ok(row.nav, "no sideways scrolling in the tab row"); assert.ok(row.h >= 60 && row.h <= 76, "tab height " + row.h);
-    for (const w of [390, 360]) { await page.setViewportSize({ width: w, height: 800 }); await page.evaluate(() => { document.getElementById("diveCount").textContent = "(244)"; }); await page.waitForTimeout(150);
-      const fit = await page.evaluate(() => { const nav = document.querySelector(".nav"); return { scroll: nav.scrollWidth <= nav.clientWidth + 1, clipped: [...nav.querySelectorAll("button")].filter((b) => b.querySelector("span").scrollWidth > b.clientWidth - 2).map((b) => b.id), n: nav.querySelectorAll("button").length }; });
-      assert.equal(fit.n, 5, "Summary, Dive log, Import, Certificates, Device"); assert.ok(fit.scroll, "five tabs fit on a " + w + " px phone without sideways scrolling"); assert.deepEqual(fit.clipped, [], "no tab label is cut off at " + w + " px (even with a three digit dive count)"); }
+    // 1. on a phone the tabs are in a menu behind the 3-line button; every item has its icon beside the label, painted in the label's colour (a one-colour mask), at the same size
+    assert.ok(await page.locator("#menuBtn").isVisible(), "the 3-line button is shown on a phone"); assert.ok(!(await page.locator("#mainNav").isVisible()), "the menu starts closed"); assert.equal(await page.locator("#menuBtn").getAttribute("aria-expanded"), "false");
+    await page.click("#menuBtn"); await page.waitForFunction(() => document.getElementById("mainNav").classList.contains("open")); await page.waitForTimeout(300); assert.equal(await page.locator("#menuBtn").getAttribute("aria-expanded"), "true");
+    const ids = ["navSummary", "navLog", "navImport", "navCerts", "navTrips", "navDevice"];
+    const tabs = await page.evaluate((ids) => ids.map((id) => { const b = document.getElementById(id), i = b.querySelector(".ti"), ci = getComputedStyle(i), cb = getComputedStyle(b), r = i.getBoundingClientRect(), s = b.querySelector("span").getBoundingClientRect();
+      return { id, icon: (ci.webkitMaskImage || ci.maskImage), w: Math.round(r.width), h: Math.round(r.height), beside: r.right <= s.left + 1, same: ci.backgroundColor === cb.color, text: b.innerText.trim(), aria: i.getAttribute("aria-hidden") }; }), ids);
+    for (const [k, f] of ["summary", "log", "import", "cert", "trips", "device"].entries()) assert.match(tabs[k].icon, new RegExp("icon-" + f + "\\.png"));
+    for (const t of tabs) { assert.equal(t.w, 26); assert.equal(t.h, 26); assert.ok(t.beside, t.id + ": icon beside the label"); assert.ok(t.same, t.id + ": icon has the label colour"); assert.equal(t.aria, "true", "decorative icon"); }
+    assert.deepEqual(tabs.map((t) => t.text), ["Overview", "Dive log (2)", "Import", "Certificates", "Trips", "Device"], "the first tab is called Overview, the count is still there");
+    assert.ok(await page.locator("#mainNav .theme-switch").isVisible(), "the light / dark switch is in the menu"); assert.ok(!(await page.locator("header .theme-switch").isVisible()), "and not in the header");
+    await page.click("#navLog"); await page.waitForFunction(() => !document.getElementById("mainNav").classList.contains("open")); await page.waitForTimeout(350); assert.ok(!(await page.locator("#mainNav").isVisible()), "choosing a tab closes the menu"); assert.ok(await page.locator("#logView").isVisible());
+    await page.click("#menuBtn"); await page.waitForTimeout(300); await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.getElementById("mainNav").classList.contains("open")); assert.equal(await page.locator("#menuBtn").getAttribute("aria-expanded"), "false", "Escape closes the menu");
+    await page.click("#menuBtn"); await page.waitForTimeout(300); await page.locator("#navBackdrop").click({ position: { x: 370, y: 400 } }); await page.waitForFunction(() => !document.getElementById("mainNav").classList.contains("open")); assert.ok(await page.locator("#logView").isVisible(), "tapping outside closes the menu and stays where you were");
+    const active = await page.evaluate(() => { const b = document.getElementById("navLog"); return getComputedStyle(b.querySelector(".ti")).backgroundColor === getComputedStyle(b).color && getComputedStyle(b).backgroundColor !== getComputedStyle(document.getElementById("navImport")).backgroundColor; }); assert.ok(active, "the current tab is marked in the menu");
+    // 2. the icon files load (not a broken mask), and every menu label fits on a small phone
+    for (const f of ["icon-summary", "icon-log", "icon-import", "icon-cert", "icon-device", "icon-trips"]) assert.ok(await page.evaluate(async (u) => { const r = await fetch(u); return r.ok && /png/.test(r.headers.get("content-type")); }, `/auth/${f}.png`), f + " loads");
+    for (const w of [390, 360]) { await page.setViewportSize({ width: w, height: 800 }); await page.evaluate(() => { document.getElementById("diveCount").textContent = "(244)"; }); await page.click("#menuBtn"); await page.waitForTimeout(300);
+      const fit = await page.evaluate(() => { const nav = document.getElementById("mainNav"); return { scroll: nav.scrollWidth <= nav.clientWidth + 1, clipped: [...nav.querySelectorAll(":scope > button")].filter((b) => b.querySelector("span").scrollWidth > b.clientWidth - 2).map((b) => b.id), n: nav.querySelectorAll(":scope > button").length, within: nav.getBoundingClientRect().right <= window.innerWidth }; });
+      assert.equal(fit.n, 6, "Overview, Dive log, Import, Certificates, Trips, Device"); assert.ok(fit.scroll && fit.within, "the menu fits a " + w + " px phone"); assert.deepEqual(fit.clipped, [], "no menu label is cut off at " + w + " px (even with a three digit dive count)"); await page.keyboard.press("Escape"); await page.waitForTimeout(250); }
     await page.setViewportSize({ width: 412, height: 915 });
     // 3. the fonts: Geist for text (buttons and inputs too), Geist Mono for numbers; loaded from this app
     await page.locator("details.dive").first().locator("summary").click().catch(() => {}); await page.waitForTimeout(300);
@@ -1204,9 +1223,9 @@ if (process.env.REAL_DB) {
   try {
     await page.goto(base); await page.waitForTimeout(500);
     const box = (sel) => page.locator(sel).first().boundingBox();
-    const side = await box("#side"), nav = await page.locator(".nav button").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; }));
+    const side = await box("#side"), nav = await page.locator(".nav > button").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; }));
     assert.ok(side.x === 0 && side.width > 220 && side.width < 320 && side.height >= 799, "a full-height sidebar on the left");
-    assert.ok(nav.every((n) => n[0] < side.width && n[2] > 150) && nav[1][1] > nav[0][1] + 30 && nav[2][1] > nav[1][1] + 30, "the three tabs stack vertically inside the sidebar: " + JSON.stringify(nav));
+    assert.ok(nav.every((n) => n[0] < side.width && n[2] > 150) && nav[1][1] > nav[0][1] + 30 && nav[2][1] > nav[1][1] + 30, "the tabs stack vertically inside the sidebar: " + JSON.stringify(nav));
     const main = await box("#main"); assert.ok(main.x >= side.width - 1 && main.width > 900, "the content sits to the right and is wide");
     assert.ok((await box("#connectBtn")).x < side.width && (await box("#acctBtn")).x < side.width && (await box(".theme-slot")).x < side.width, "connect, account and the theme switch live in the sidebar");
     assert.match(await page.locator("#acctBtn").innerText(), /Account/, "the account button is labelled on the laptop layout");
@@ -1214,10 +1233,10 @@ if (process.env.REAL_DB) {
     await page.click("#acctBtn"); assert.ok(await page.locator("#accountView").isVisible()); assert.ok((await box("details.acc[data-sec=profile]")).x > side.width, "account sections are in the content area");
     const two = await page.locator("details.acc").evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().x))).size); assert.equal(two, 2, "account sections use two columns");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll on a laptop");
-    // below 1024px it is the phone layout again: tabs in a row on top, no sidebar box
-    await page.setViewportSize({ width: 820, height: 900 }); await page.waitForTimeout(200);
-    const row = await page.locator(".nav button").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().y)));
-    assert.ok(new Set(row).size === 1, "tabs in one row below 1024px"); assert.equal(await page.locator("#side").evaluate((e) => getComputedStyle(e).display), "contents"); assert.ok(!(await page.locator("#acctBtn .acct-label").isVisible()), "no text label on the round avatar");
+    assert.ok(!(await page.locator("#menuBtn").isVisible()), "no 3-line button next to the sidebar");
+    // below 1024px it is the phone layout again: the tabs go behind the 3-line button, no sidebar box
+    await page.setViewportSize({ width: 820, height: 900 }); await page.waitForTimeout(600);
+    assert.ok(await page.locator("#menuBtn").isVisible() && !(await page.locator("#mainNav").isVisible()), "the 3-line button, and the menu closed"); assert.equal(await page.locator("#side").evaluate((e) => getComputedStyle(e).display), "contents"); assert.ok(!(await page.locator("#acctBtn .acct-label").isVisible()), "no text label on the round avatar");
     assert.deepEqual(errs, []);
     console.log("PASS laptop layout");
   } catch (e) { failed++; console.log("FAIL laptop layout\n ", e.message.split("\n").slice(0, 4).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-laptop.png" }); }
@@ -1297,7 +1316,7 @@ if (process.env.REAL_DB) {
     // Togar: Cosmiq+ and Peregrine only; Connect & Sync and the Device tab are there; Perdix and Garmin can be added
     await page.goto(base); await page.click("#navImport"); await settle(2);
     assert.deepEqual(await names(), ["Cosmiq+ Gen 5 \u00b7 2", "Shearwater Peregrine \u00b7 1"], "only the computers with dives");
-    assert.ok(await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "a Cosmiq+ owner keeps Connect & Sync and the Device tab");
+    await page.openMenu(); assert.ok(await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "a Cosmiq+ owner keeps Connect & Sync and the Device tab"); await page.keyboard.press("Escape"); await page.waitForTimeout(250);
     await page.click("#srcAdd"); assert.deepEqual(await page.locator("#srcAddList button b").allInnerTexts(), ["Shearwater Perdix", "Garmin Descent"], "only the others are offered");
     assert.ok(!(await page.locator("#srcHideRow").isVisible()), "nothing to hide while every shown computer has dives");
     await page.evaluate(() => { localStorage.setItem("diver", JSON.stringify({ fullName: "Togar" })); });
@@ -1311,11 +1330,11 @@ if (process.env.REAL_DB) {
     assert.ok(!(await dl), "nothing was waiting to upload, so no backup file");
     assert.equal(posted.length, 0, "nothing of Togar's was ever sent to Sharon's account");
     // Sharon has no Cosmiq+: its Connect & Sync, status and Device tab are out of the way; the phone still has three tabs
-    assert.ok(!(await page.locator("#connectBtn").isVisible()) && !(await page.locator("#navDevice").isVisible()) && !(await page.locator("#status").isVisible()), "no Cosmiq+ controls for Sharon");
-    assert.equal(await page.locator(".nav button:visible").count(), 4, "Summary, Dive log, Import, Certificates");
+    await page.openMenu(); assert.ok(!(await page.locator("#connectBtn").isVisible()) && !(await page.locator("#navDevice").isVisible()) && !(await page.locator("#status").isVisible()), "no Cosmiq+ controls for Sharon"); await page.keyboard.press("Escape"); await page.waitForTimeout(250);
+    await page.openMenu(); assert.equal(await page.locator(".nav > button:visible").count(), 5, "Overview, Dive log, Import, Certificates, Trips (no Device without a Cosmiq+)"); await page.keyboard.press("Escape");
     // she can still add a Cosmiq+ (or hide it again when it has no dives)
     await page.click("#srcAdd"); await page.locator("#srcAddList button", { hasText: "Cosmiq+" }).click(); await settle(3);
-    assert.ok(await page.locator("#syncCard").isVisible() && await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "adding the Cosmiq+ brings its controls back");
+    await page.openMenu(); assert.ok(await page.locator("#syncCard").isVisible() && await page.locator("#connectBtn").isVisible() && await page.locator("#navDevice").isVisible(), "adding the Cosmiq+ brings its controls back"); await page.keyboard.press("Escape"); await page.waitForTimeout(250);
     assert.ok(await page.locator("#srcHideRow").isVisible(), "a computer without dives can be hidden again"); await page.click("#srcHide"); await settle(2);
     assert.ok(!(await page.locator("#connectBtn").isVisible()), "hidden again"); assert.deepEqual((await names()).length, 2);
     // the choice of added computers survives a reload; a new person with no dives is asked which computer they use and sees everything until then
@@ -1419,7 +1438,7 @@ if (process.env.REAL_DB) {
     // her own Perdix is the record shown for the dive Togar also recorded (his Peregrine copy and her Garmin hide behind it); the dive only he has stays, marked as from him
     const rows = await diveRows(page);
     assert.deepEqual(rows[1].chips, ["Perdix"]); assert.equal(rows[1].also, "also on Garmin, Peregrine", "the dive on three computers: one row, hers shown"); assert.deepEqual(rows[0].chips, ["Peregrine", "from Togar"], "the dive only he has stays, marked as from him");
-    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(2\)/);
+    assert.equal(await page.locator("#diveList > p").count(), 0, "no summary line above the list"); assert.match(await page.locator("#navLog").textContent(), /Dive log \(2\)/);
     // the Import tab lists only HER computers: his Peregrine, which only exists as copies, is not one of them
     await page.click("#navImport"); assert.deepEqual((await page.locator("#devTabs button").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Shearwater Perdix \u00b7 1", "Garmin Descent \u00b7 1"], "shared dives do not add dive computers");
     await page.click("#navSummary"); await page.waitForFunction(() => /across 2 dives/.test(document.getElementById("sumCount").textContent), null, { timeout: 5000 });
@@ -1456,13 +1475,13 @@ if (process.env.REAL_DB) {
   try {
     await page.goto(base); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 2, null, { timeout: 8000 });
     const first = page.locator("#diveList details.dive").nth(1);                              // the older dive: her Perdix dive with Togar's Peregrine copy behind it
-    await first.locator("summary").click(); await page.waitForSelector(".del-ask"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap delete");
-    await page.locator(".del-ask").tap(); await page.waitForSelector(".del-confirm");
+    assert.equal(await page.locator(".del-trash").count(), 2, "every dive row has a small bin"); assert.equal(await page.locator(".del-confirm").count(), 0, "nothing is asked until you tap it"); assert.ok(!(await first.evaluate((e) => e.open)), "the row is closed");
+    await first.locator(".del-trash").tap(); await page.waitForSelector(".del-confirm"); assert.ok(await first.evaluate((e) => e.open), "tapping the bin opens the row to ask there");
     const txt = await page.locator(".del-confirm").innerText(); assert.match(txt, /Delete dive 1\?/); assert.match(txt, /cannot be undone/); assert.match(txt, /Peregrine/, "says that the copy from another computer goes too"); assert.match(txt, /not come back when you sync or import/);
-    await page.locator(".del-no").tap(); await page.waitForSelector(".del-ask"); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
+    await page.locator(".del-no").tap(); await page.waitForFunction(() => document.querySelectorAll(".del-confirm").length === 0); assert.equal(calls.length, 0, "Keep it: nothing deleted"); assert.equal(await page.locator("#diveList details.dive").count(), 2);
     // delete: the connection fails first, so the dive is gone from this phone at once and the cloud is told later
-    await page.locator(".del-ask").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
-    assert.deepEqual(calls[0].sort(), [all0[0].fingerprint, all0[1].fingerprint].sort(), "the dive and its hidden copy are deleted together"); assert.match(await page.locator("#navLog").innerText(), /Dive log \(1\)/);
+    await first.locator(".del-trash").tap(); await page.locator(".del-yes").tap(); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 5000 });
+    assert.deepEqual(calls[0].sort(), [all0[0].fingerprint, all0[1].fingerprint].sort(), "the dive and its hidden copy are deleted together"); assert.match(await page.locator("#navLog").textContent(), /Dive log \(1\)/);
     await page.reload(); await page.click("#navLog"); await page.waitForFunction(() => document.querySelectorAll("#diveList details.dive").length === 1, null, { timeout: 8000 });
     await page.waitForFunction(() => true); await page.waitForTimeout(500); assert.equal(calls.length, 2, "the failed deletion is sent again the next time"); assert.deepEqual(deleted.sort(), [all0[0].fingerprint, all0[1].fingerprint].sort());
     // the cloud answers with a stale list that still holds the dive: it stays deleted on this phone
@@ -1472,6 +1491,64 @@ if (process.env.REAL_DB) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
     console.log("PASS delete a dive");
   } catch (e) { failed++; console.log("FAIL delete a dive\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-delete.png", fullPage: true }); }
+  await ctx.close();
+}
+// ---- scenario: dive trips: plan a trip, countdown, packing lists with weights against bag limits, the next trip on the Overview ----
+{
+  const key = (add) => { const d = new Date(); d.setDate(d.getDate() + add); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  let store = []; const puts = [], dels = [];
+  const ctx = await browser.newContext({ ...devices["Pixel 7"], serviceWorkers: "block" }); const page = await ctx.newPage(); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { email: "you@example.com", name: "Me", version: "0.0.0" } })); await page.route("**/api/regulator", (r) => r.fulfill({ json: { regulator: null } }));
+  await page.route("**/api/profile", (r) => r.fulfill({ json: { avatar: null, fullName: "Togar", latestCertId: "", dan: { number: "", plan: "", validUntil: "" } } })); await page.route("**/api/certs", (r) => r.fulfill({ json: { certs: [] } })); await page.route("**/api/places", (r) => r.fulfill({ json: { places: [] } })); await page.route("**/api/keys", (r) => r.fulfill({ json: { keys: [], max: 10 } }));
+  await page.route("**/api/dives", (r) => r.fulfill({ json: { dives: [], deleted: [] } }));
+  await page.route("**/api/trips", (r) => r.fulfill({ json: { trips: store } }));
+  await page.route("**/api/trips/*", (r) => { const id = r.request().url().split("/").pop(), m = r.request().method(); if (m === "PUT") { const b = JSON.parse(r.request().postData()); puts.push(b); store = [...store.filter((x) => x.id !== id), { ...b, id }]; return r.fulfill({ json: { saved: true, trip: b } }); } dels.push(id); store = store.filter((x) => x.id !== id); return r.fulfill({ json: { deleted: 1 } }); });
+  const saved = async () => { await page.waitForFunction(() => /Saved/.test(document.getElementById("tripSaved")?.textContent || ""), null, { timeout: 6000 }); };
+  const bars = () => page.locator("#trBars").innerText().then((s) => s.replace(/\s+/g, " "));
+  const itemRow = (name) => page.locator(".tp-item", { hasText: name });
+  try {
+    await page.goto(base); await page.waitForTimeout(600);
+    assert.ok(!(await page.locator("#sumTrip").isVisible()), "no trip: no trip card on the Overview");
+    await page.click("#navTrips"); await page.waitForSelector("#tripsView .tp-bar"); assert.match(await page.locator("#tripsView").innerText(), /No trips yet/); assert.ok(await page.locator("#tripsView").isVisible());
+    // a new trip starts with the standard lists and the default limits
+    await page.locator('[data-a="new"]').tap(); await page.waitForSelector("#trTitle"); assert.equal(puts.length >= 1, true, "the new trip is saved at once"); assert.equal(await page.locator("#trTitle").inputValue(), "New trip");
+    assert.deepEqual(await page.locator(".tp-ghead b").allInnerTexts(), ["Core scuba kit", "Underwater camera kit"]); assert.equal(await page.locator("#trLDive").inputValue(), "23"); assert.equal(await page.locator("#trLCarry").inputValue(), "7"); assert.equal(await page.locator("#trLTotal").inputValue(), "");
+    assert.equal(await page.locator(".tp-item").count(), 12, "7 scuba items and 5 camera items"); for (const n of ["Regulator", "BCD", "Dive computer", "Mask & fins", "Exposure suit (3 mm)", "SMB & reel", "Spare O-rings & straps", "Camera body", "Housing + port"]) assert.ok(await itemRow(n).count() >= 1, n);
+    // title, destination, dates and the countdown
+    await page.fill("#trTitle", "Banggai / Luwuk Dive Trip"); await page.fill("#trDest", "Luwuk, Central Sulawesi"); await page.fill("#trStart", key(23)); await page.fill("#trEnd", key(30));
+    assert.match(await page.locator("#trCount").innerText(), /23\s+days to go/); await saved(); const p1 = puts.at(-1); assert.deepEqual([p1.title, p1.destination, p1.start, p1.end], ["Banggai / Luwuk Dive Trip", "Luwuk, Central Sulawesi", key(23), key(30)]);
+    await page.fill("#trEnd", key(10)); assert.match(await page.locator("#trErr").innerText(), /ends before it starts/); const n0 = puts.length; await page.waitForTimeout(1200); assert.equal(puts.length, n0, "an impossible date is not sent"); await page.fill("#trEnd", key(30)); await saved();
+    // weights: standard lists add up per bag; the limits can be changed (the airline's own allowance)
+    assert.match(await bars(), /Dive bag 9\.7 kg \/ 23 kg 13\.3 kg left/); assert.match(await bars(), /Camera carry-on 5\.8 kg \/ 7 kg 1\.2 kg left/); assert.match(await bars(), /All bags together 15\.5 kg/);
+    await page.fill("#trLDive", "9"); assert.match(await bars(), /Dive bag 9\.7 kg \/ 9 kg 0\.7 kg over the limit/); assert.equal(await page.locator("#trBars .tp-wbar i.over").count(), 1, "over the limit is red");
+    await page.fill("#trLTotal", "16"); assert.match(await bars(), /All bags together 15\.5 kg \/ 16 kg 0\.5 kg left/); assert.equal(await page.locator("#trBars .tp-wbar i.warn").count(), 1, "the total is at 97 % of its limit: orange; the carry-on at 83 % is still green");
+    await page.fill("#trLDive", "23"); await page.fill("#trLTotal", ""); await saved(); assert.deepEqual(puts.at(-1).limits, { dive: 23, carry: 7, total: null });
+    // packing: tick, change the bag, edit an item, delete an item, add an item
+    await itemRow("Regulator").locator(".tp-ck").tap(); assert.match(await page.locator('.tp-group[data-g] [data-sub]').first().innerText(), /^1 of 7 packed \u00b7 9\.9 kg$/);
+    await itemRow("Dive computer").locator(".tp-bagbtn").tap(); assert.match(await bars(), /Dive bag 9\.9 kg/); assert.match(await bars(), /Camera carry-on 5\.6 kg/);
+    await itemRow("BCD").locator(".tp-name").tap(); await page.fill('.tp-edit [data-f="name"]', "BCD jacket"); await page.fill('.tp-edit [data-f="kg"]', "3.5"); assert.match(await bars(), /Dive bag 10\.2 kg/); await page.locator('[data-a="item-done"]').tap(); assert.equal(await itemRow("BCD jacket").locator(".tp-kg").innerText(), "3.5 kg");
+    await itemRow("Spare O-rings & straps").locator(".tp-name").tap(); await page.locator('[data-a="item-del"]').tap(); assert.equal(await itemRow("Spare O-rings & straps").count(), 0, "deleted"); assert.equal(await itemRow("Spare O-rings, grease & tools").count(), 1, "the camera kit one is untouched"); assert.match(await bars(), /Dive bag 10\.1 kg/);
+    await page.locator('.tp-group', { hasText: "Underwater camera kit" }).locator('[data-a="add"]').tap(); await page.fill('[data-f="anew"]', "Red filter"); await page.fill('[data-f="akg"]', "0,15"); await page.locator('[data-a="add-ok"]').tap();
+    assert.equal(await itemRow("Red filter").locator(".tp-bagbtn").innerText(), "Carry-on", "a camera item goes to the carry-on by default"); assert.equal(await itemRow("Red filter").locator(".tp-kg").innerText(), "0.15 kg"); assert.match(await bars(), /Camera carry-on 5\.75 kg/);
+    await page.locator('[data-a="add-cancel"]').tap();
+    await page.locator('[data-a="list-new"]').tap(); await page.fill('[data-f="lname"]', "Snorkel kit"); await page.locator('[data-a="list-ok"]').tap(); assert.deepEqual(await page.locator(".tp-ghead b").allInnerTexts(), ["Core scuba kit", "Underwater camera kit", "Snorkel kit"]);
+    await page.locator(".tp-group", { hasText: "Snorkel kit" }).locator('[data-a="gedit"]').tap(); await page.locator('[data-a="gdel"]').tap(); assert.equal((await page.locator(".tp-ghead b").allInnerTexts()).length, 3, "asks first"); await page.locator('[data-a="gdel-ok"]').tap(); assert.equal((await page.locator(".tp-ghead b").allInnerTexts()).length, 2);
+    await saved(); const last = puts.at(-1); assert.ok(last.groups[0].items.find((i) => i.name === "Regulator").packed, "the tick is saved"); assert.equal(last.groups[0].items.find((i) => i.name === "BCD jacket").kg, 3.5); assert.equal(last.groups[1].items.find((i) => i.name === "Red filter").bag, "carry");
+    // a reload brings the trip back from the account
+    await page.reload(); await page.click("#navTrips"); await page.waitForSelector("#tripsView .tp-hero"); assert.match(await page.locator("#tripsView .tp-hero").innerText(), /Banggai \/ Luwuk Dive Trip/); assert.match(await page.locator("#tripsView .tp-hero").innerText(), /23\s+days to go/);
+    // the Overview shows the next trip
+    await page.click("#navSummary"); await page.waitForSelector("#sumTrip", { state: "visible" }); const ov = (await page.locator("#sumTrip").innerText()).replace(/\s+/g, " "); assert.match(ov, /next trip Banggai \/ Luwuk Dive Trip/i); assert.match(ov, /23 days to go/); assert.match(ov, /Packed 1 \/ 12/); assert.match(ov, /Dive bag 10\.1 kg \/ 23 kg/); assert.match(ov, /Carry-on 5\.75 kg \/ 7 kg/);
+    await page.locator("#sumTrip").tap(); await page.waitForSelector("#trTitle"); assert.equal(await page.locator("#trTitle").inputValue(), "Banggai / Luwuk Dive Trip", "tapping the card opens the trip");
+    // on the trip now, then past: the card says so, then goes away
+    await page.fill("#trStart", key(-2)); await page.fill("#trEnd", key(5)); assert.match(await page.locator("#trCount").innerText(), /3\s+of 8/); await saved(); await page.click("#navSummary"); await page.waitForSelector("#sumTrip", { state: "visible" }); assert.match(await page.locator("#sumTrip").innerText(), /on a trip now/i);
+    await page.click("#navTrips"); await page.fill("#trStart", key(-10)); await page.fill("#trEnd", key(-5)); assert.match(await page.locator("#trCount").innerText(), /Ended 5 days ago/); await saved(); await page.click("#navSummary"); await page.waitForTimeout(300); assert.ok(!(await page.locator("#sumTrip").isVisible()), "a trip that is over is not on the Overview");
+    await page.click("#navTrips"); await page.locator('[data-a="back"]').tap(); assert.match(await page.locator("#tripsView .card h3").first().innerText(), /past trips/i);
+    // delete the trip: asks first
+    await page.locator('.tp-row[data-a="open"]').first().tap(); await page.locator('[data-a="trip-del"]').tap(); assert.equal(dels.length, 0, "asks first"); await page.locator('[data-a="ask-no"]').tap(); assert.equal(dels.length, 0); await page.locator('[data-a="trip-del"]').tap(); await page.locator('[data-a="trip-del-ok"]').tap();
+    await page.waitForSelector("#tripsView .tp-bar"); assert.equal(dels.length, 1); assert.match(await page.locator("#tripsView").innerText(), /No trips yet/);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no horizontal scroll"); assert.deepEqual(errs, [], "page errors");
+    console.log("PASS dive trips");
+  } catch (e) { failed++; console.log("FAIL dive trips\n ", e.message.split("\n").slice(0, 6).join(" | "), "\n  ", (e.stack || "").split("\n").find((l) => l.includes("e2e.mjs"))); await page.screenshot({ path: "/tmp/fail-trips.png", fullPage: true }); }
   await ctx.close();
 }
 await browser.close(); server.close(); process.exit(failed ? 1 : 0);

@@ -359,6 +359,7 @@ const Dives = (() => {
     overwritten: () => "This dive's depth profile no longer exists on the device. Its profile memory is a ring that keeps roughly the last 128 dives, and newer dives overwrote this one. The summary (depth, time, temperature) is intact.",
     empty: () => "The device returned no depth data for this dive.",
   };
+  const TRASH = '<svg class="trash" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
   const BADGE = { truncated: "partial profile", overwritten: "summary only", empty: "no profile" };
 
   function techDetails(rec, res) {
@@ -618,15 +619,15 @@ const Dives = (() => {
         span.innerHTML = `<input list="locList" maxlength="60" autocomplete="off" placeholder="e.g. Komodo" value="${esc(cur)}" aria-label="Location for ${esc(date)}"><button class="btn-set dh-save" type="button" data-date="${esc(date)}">Save</button><button class="btn-set dh-cancel" type="button" style="background:var(--bg-6c757d)" aria-label="Cancel">\u2715</button>`;
         head.replaceWith(span); span.querySelector("input").focus(); return;
       }
-      const dask = e.target.closest(".del-ask");
-      if (dask) {                                                                // ask before deleting: the dive is gone for good
-        const row = dask.closest(".del-row"), n = row.dataset.fps.split(",").length - 1;
+      const dtrash = e.target.closest(".del-trash");
+      if (dtrash) {                                                              // the small red bin on a dive: asks before deleting, the dive is gone for good
+        e.preventDefault(); const det = dtrash.closest("details.dive"), row = det.querySelector(".del-row"), n = row.dataset.fps.split(",").length - 1; det.open = true;
         row.innerHTML = `<div class="del-confirm" role="alertdialog" aria-label="Confirm delete"><b>Delete dive${row.dataset.num ? " " + esc(row.dataset.num) : ""}?</b>` +
-          `<p>${esc(row.dataset.what)}</p><p>${n ? `The copy${n === 1 ? "" : "ies"} of this dive from another computer (${esc(row.dataset.copies)}) ${n === 1 ? "is" : "are"} deleted too. ` : ""}This cannot be undone, and the dive will not come back when you sync or import again. Copies on other people's accounts are not touched.</p>` +
+          `<p>${esc(row.dataset.what)}</p><p>${n ? `The cop${n === 1 ? "y" : "ies"} of this dive from another computer (${esc(row.dataset.copies)}) ${n === 1 ? "is" : "are"} deleted too. ` : ""}This cannot be undone, and the dive will not come back when you sync or import again. Copies on other people's accounts are not touched.</p>` +
           `<div class="row" style="margin:0"><button class="btn-set del-yes" type="button">Delete dive</button><button class="btn-set del-no" type="button" style="background:var(--bg-6c757d)">Keep it</button></div></div>`;
-        row.querySelector(".del-no").focus(); return;
+        row.scrollIntoView({ block: "nearest" }); row.querySelector(".del-no").focus(); return;
       }
-      if (e.target.closest(".del-no")) { const row = e.target.closest(".del-row"); row.innerHTML = `<button class="del-ask" type="button">Delete this dive\u2026</button>`; return; }
+      if (e.target.closest(".del-no")) { e.target.closest(".del-row").innerHTML = ""; return; }
       const dyes = e.target.closest(".del-yes");
       if (dyes) {
         const row = dyes.closest(".del-row"), fps = row.dataset.fps.split(","); dyes.disabled = true;
@@ -707,8 +708,8 @@ const Dives = (() => {
       return `<details class="dive" data-fp="${esc(r.fingerprint)}"><summary>
         ${numBox(num)}<span class="dive-date">${esc(fmtDate(r.startedAt).slice(11))}</span>
         <span class="dive-mode m-${esc(r.mode)}">${esc(r.mode)}</span>${chip(r)}${BADGE[st] ? `<span class="badge">${BADGE[st]}</span>` : ""}${alsoOn(r)}
-        <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span></summary>
-        <div class="dive-body"></div></details>`;
+        <span class="dive-meta">${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}${r.uploaded ? "" : " \u00b7 \u23f3"}</span><button class="del-trash" type="button" aria-label="Delete this dive" title="Delete this dive">${TRASH}</button></summary>
+        <div class="dive-body"></div><div class="del-row" data-fps="${esc([r.fingerprint, ...(extras.get(r.fingerprint) || []).map((x) => x.fingerprint)].join(","))}" data-what="${esc(`${fmtDate(r.startedAt)} \u00b7 ${r.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(r.durationSec)}`)}" data-num="${esc(num == null ? "" : num)}" data-copies="${esc([...new Set((extras.get(r.fingerprint) || []).map((x) => (U.DEVICES.find((d) => d.id === U.deviceOf(x)) || { short: U.deviceOf(x) }).short))].join(", "))}"></div></details>`;
     };
     let html = "";    for (const y of years) {
       const g = byYear.get(y), secs = g.reduce((a, r) => a + r.durationSec, 0), deepest = Math.max(...g.map((r) => r.maxDepthM));
@@ -736,9 +737,6 @@ const Dives = (() => {
       const rec = recs.find((r) => r.fingerprint === el.dataset.fp);
       try { el.querySelector(".dive-body").innerHTML = detail(rec, resolved[rec.fingerprint], gapBefore.get(rec.fingerprint) ?? null, numbers.get(rec.fingerprint)); el.dataset.done = 1; }
       catch (e) { el.querySelector(".dive-body").textContent = "Cannot parse this dive: " + e.message; }
-      const copies = (extras.get(rec.fingerprint) || []).map((x) => x.fingerprint), names = (extras.get(rec.fingerprint) || []).map((x) => (U.DEVICES.find((d) => d.id === U.deviceOf(x)) || { short: U.deviceOf(x) }).short);
-      const row = document.createElement("div"); row.className = "del-row"; row.dataset.fps = [rec.fingerprint, ...copies].join(","); row.dataset.what = `${fmtDate(rec.startedAt)} \u00b7 ${rec.maxDepthM.toFixed(1)} m \u00b7 ${fmtDur(rec.durationSec)}`; row.dataset.num = numbers.get(rec.fingerprint) || ""; row.dataset.copies = [...new Set(names)].join(", ");
-      row.innerHTML = `<button class="del-ask" type="button">Delete this dive\u2026</button>`; el.querySelector(".dive-body").appendChild(row);
     }));
     list.querySelectorAll("details.dive").forEach((el) => { if (openDives.has(el.dataset.fp)) el.open = true; });     // keep what you had open
   }
